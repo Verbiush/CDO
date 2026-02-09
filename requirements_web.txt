@@ -1,0 +1,17 @@
+streamlit
+pandas
+openpyxl
+PyMuPDF
+pdf2docx
+selenium
+webdriver-manager
+streamlit-elements==0.1.0
+python-docx
+Pillow
+Send2Trash
+lxml
+reportlab
+pypandoc
+docx2pdf
+pywin32
+google-generativeai

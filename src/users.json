@@ -1,0 +1,96 @@
+{
+    "admin": {
+        "password": "admin",
+        "role": "admin",
+        "permissions": {
+            "bot_zeus": "full",
+            "allowed_tabs": [
+                "*"
+            ]
+        },
+        "last_path": "G:\\HAMILTON\\ENERO",
+        "favorites": [
+            "D:\\"
+        ],
+        "config": {
+            "search_by": "extensi\u00f3n",
+            "item_type": "archivos",
+            "pattern": "",
+            "exclusion_pattern": "cuv,xml,xlsx",
+            "subfolders": true,
+            "action_radio": "Copiar a carpeta",
+            "app_config": {
+                "default_pdf_name": "Unificado",
+                "default_img_pdf_name": "Imagenes_Unificadas",
+                "default_docx_name": "CRC",
+                "split_pdf_prefix": "",
+                "image_resolution": 300.0,
+                "pdf_compression": 19,
+                "pdf_dpi": 600,
+                "default_exclusion_patterns": "cuv,xml,xlsx",
+                "gemini_api_key": "AIzaSyAvnswqCLSWzrUctGKdZ2Un_AKYB8Gfc1w",
+                "gemini_model": "models/gemini-2.0-flash"
+            }
+        }
+    },
+    "aux": {
+        "password": "Opv24680",
+        "role": "user",
+        "permissions": {
+            "bot_zeus": "edit",
+            "allowed_tabs": [
+                "\ud83d\udd0e B\u00fasqueda y Acciones Principales",
+                "\u2699\ufe0f Acciones Automatizadas y por Lotes",
+                "\ud83d\udd04 Conversi\u00f3n de Archivos",
+                "\ud83d\udcc4 Visor y Editor de Datos (JSON/XML)",
+                "RIPS"
+            ]
+        },
+        "last_path": "D:\\",
+        "favorites": []
+    },
+    "aux2": {
+        "password": "Opv24680",
+        "role": "user",
+        "permissions": {
+            "bot_zeus": "edit",
+            "allowed_tabs": [
+                "\ud83d\udd0e B\u00fasqueda y Acciones Principales",
+                "\u2699\ufe0f Acciones Automatizadas y por Lotes",
+                "\ud83d\udd04 Conversi\u00f3n de Archivos",
+                "\ud83d\udcc4 Visor y Editor de Datos (JSON/XML)",
+                "RIPS"
+            ]
+        },
+        "last_path": "D:\\",
+        "favorites": []
+    },
+    "aux3": {
+        "password": "Opv24680",
+        "role": "user",
+        "permissions": {
+            "bot_zeus": "edit",
+            "allowed_tabs": [
+                "\ud83d\udd0e B\u00fasqueda y Acciones Principales",
+                "\u2699\ufe0f Acciones Automatizadas y por Lotes",
+                "\ud83d\udd04 Conversi\u00f3n de Archivos",
+                "\ud83d\udcc4 Visor y Editor de Datos (JSON/XML)",
+                "RIPS"
+            ]
+        },
+        "last_path": "D:\\",
+        "favorites": []
+    },
+    "lpantoja": {
+        "password": "Opv24680",
+        "last_path": "D:\\",
+        "favorites": [],
+        "role": "user",
+        "permissions": {
+            "bot_zeus": "execute",
+            "allowed_tabs": [
+                "\ud83e\udd16 Bot Zeus Salud"
+            ]
+        }
+    }
+}

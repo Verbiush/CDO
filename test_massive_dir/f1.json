@@ -1,0 +1,1 @@
+{"numDocumentoIdObligado": "123", "numFactura": "FAC001", "tipoNota": null, "numNota": null, "usuarios": [{"tipoDocumentoIdentificacion": "CC", "numDocumentoIdentificacion": "111", "consecutivo": 1, "servicios": {"consultas": [{"codConsulta": "C01", "valor": 100}]}}]}

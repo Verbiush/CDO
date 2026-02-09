@@ -1,0 +1,23 @@
+pip install pyinstaller
+pip install selenium webdriver-manager
+pip install docx2pdf
+
+pip install pyinstaller pandas python-docx send2trash pymupdf pillow pdf2docx docx2pdf openpyxl natsort ttkthemes pywin32
+
+python -m PyInstaller OrganizadorArchivos_con_icono.spec
+
+pip install pyinstaller pandas python-docx send2trash PyMuPDF Pillow pdf2docx docx2pdf openpyxl requests pywin32 selenium webdriver-manager pyperclip
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries, # <-- Añadir
+    a.zipfiles, # <-- Añadir
+    a.datas,    # <-- Añadir
+    exclude_binaries=False, # <-- Cambiar a False
+    name='OrganizadorDeArchivos',
+    # ... resto de las opciones ...
+    icon='app_icon.ico',
+)
+# coll = COLLECT(...) <-- Eliminar o comentar esta sección
+

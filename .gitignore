@@ -1,0 +1,30 @@
+# Python / Virtual Envs
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+
+# Distribution / Builds
+build/
+dist/
+*.spec
+build_release_output/
+*.exe
+*.zip
+*.msi
+
+# Project Specific
+temp_sessions/
+temp_uploads/
+agent.log
+debug_log.txt
+*.log
+
+# IDEs
+.vscode/
+.idea/
+
+# Streamlit
+.streamlit/secrets.toml
