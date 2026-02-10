@@ -151,24 +151,30 @@ if __name__ == '__main__':
         config_toml_path = os.path.join(streamlit_config_dir, "config.toml")
         credentials_toml_path = os.path.join(streamlit_config_dir, "credentials.toml")
         
-        # Always write/overwrite to ensure it's disabled
+        # Crear config.toml si no existe
+        if not os.path.exists(config_toml_path):
+            try:
+                with open(config_toml_path, "w") as f:
+                    f.write('[browser]\ngatherUsageStats = false\n\n')
+                    f.write('[server]\nfileWatcherType = "none"\nrunOnSave = false\nheadless = true\n')
+                    # No forzamos el tema para que el usuario pueda elegirlo
+                    # f.write('[theme]\nbase = "dark"\n')
+                log_debug(f"Created config.toml at {config_toml_path}")
+            except Exception as e:
+                log_debug(f"Failed to create config.toml: {e}")
+        else:
+            log_debug(f"config.toml already exists at {config_toml_path}")
+
+        # Create credentials.toml ONLY if it doesn't exist to respect installer settings
         try:
-            with open(config_toml_path, "w") as f:
-                f.write('[browser]\ngatherUsageStats = false\n\n')
-                f.write('[server]\nfileWatcherType = "none"\nrunOnSave = false\nheadless = true\n')
-                f.write('[theme]\nbase = "dark"\n')
-            log_debug(f"Created config.toml at {config_toml_path}")
-            
-            # Create credentials.toml ONLY if it doesn't exist to respect installer settings
             if not os.path.exists(credentials_toml_path):
                 with open(credentials_toml_path, "w") as f:
                     f.write('[general]\nemail = ""\n')
                 log_debug(f"Created credentials.toml at {credentials_toml_path}")
             else:
                 log_debug(f"credentials.toml exists at {credentials_toml_path}, skipping overwrite.")
-            
         except Exception as e:
-            log_debug(f"Error creating config/credentials: {e}")
+            log_debug(f"Error creating credentials: {e}")
 
         # --- FIX: Set Environment Variables as backup ---
         os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
