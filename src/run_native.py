@@ -110,9 +110,46 @@ def deploy_to_appdata(src_dir):
         # Fallback to running in place if copy fails
         return src_dir
 
+def cleanup_temp_folders():
+    """
+    Cleans up orphaned _MEI folders from previous runs.
+    These folders are created by PyInstaller in the temp directory.
+    """
+    try:
+        import tempfile
+        temp_dir = tempfile.gettempdir()
+        mei_folders = [f for f in os.listdir(temp_dir) if f.startswith("_MEI")]
+        
+        count = 0
+        current_mei = getattr(sys, '_MEIPASS', None)
+
+        for folder in mei_folders:
+            folder_path = os.path.join(temp_dir, folder)
+            try:
+                # We skip the current process's _MEI folder if we are running frozen
+                if current_mei and os.path.abspath(current_mei) == os.path.abspath(folder_path):
+                    continue
+                
+                shutil.rmtree(folder_path)
+                count += 1
+            except PermissionError:
+                # Folder is in use by another running instance
+                pass
+            except Exception:
+                # Other errors (ignore to avoid spamming logs)
+                pass
+                
+        if count > 0:
+            log_debug(f"Cleaned up {count} orphaned _MEI folders.")
+    except Exception as e:
+        log_debug(f"Error during temp cleanup: {e}")
+
 if __name__ == '__main__':
     try:
         log_debug("Starting CDO Client (Persistent Mode)...")
+        
+        # Cleanup orphaned temp folders from previous crashes
+        cleanup_temp_folders()
         
         # Determine source directory (where the code is NOW)
         if getattr(sys, 'frozen', False):

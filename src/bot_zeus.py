@@ -13,6 +13,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.microsoft import EdgeChromiumDriverManager
 import sys
 import threading
+import atexit
 
 # Intentar importar Streamlit para gestión de estado por sesión
 try:
@@ -23,6 +24,17 @@ except ImportError:
 # Variable global para mantener la instancia del navegador (LEGACY / FALLBACK)
 _DRIVER_INSTANCE_GLOBAL = None
 DRIVER_LOCK = threading.Lock()
+
+def _cleanup_driver_atexit():
+    """Cierra el navegador si el proceso termina abruptamente."""
+    global _DRIVER_INSTANCE_GLOBAL
+    if _DRIVER_INSTANCE_GLOBAL:
+        try:
+            _DRIVER_INSTANCE_GLOBAL.quit()
+        except:
+            pass
+
+atexit.register(_cleanup_driver_atexit)
 
 def _get_driver_instance():
     """Helper para obtener la instancia del driver (Session State o Global)."""
