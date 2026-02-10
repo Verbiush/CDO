@@ -14,34 +14,104 @@ from webdriver_manager.microsoft import EdgeChromiumDriverManager
 import sys
 import threading
 
-# Variable global para mantener la instancia del navegador
-DRIVER_INSTANCE = None
+# Intentar importar Streamlit para gestión de estado por sesión
+try:
+    import streamlit as st
+except ImportError:
+    st = None
+
+# Variable global para mantener la instancia del navegador (LEGACY / FALLBACK)
+_DRIVER_INSTANCE_GLOBAL = None
 DRIVER_LOCK = threading.Lock()
 
-# Lista de pasos memorizados
-# Estructura de cada paso:
-# {
-#   "accion": "escribir" | "click" | "tecla" | "espera",
-#   "xpath": "...", (solo para escribir/click)
-#   "columna": "...", (solo para escribir)
-#   "tecla": "...", (solo para tecla: ENTER, TAB, etc.)
-#   "tiempo": 1.0 (solo para espera)
-#   "descripcion": "Texto legible"
-# }
-PASOS_MEMORIZADOS = []
-PASOS_ALTERNATIVOS = [] # Legacy, mantenido por compatibilidad pero se prefiere FLUJOS_CONDICIONALES
+def _get_driver_instance():
+    """Helper para obtener la instancia del driver (Session State o Global)."""
+    if st is not None and hasattr(st, 'session_state'):
+        if 'bot_driver' not in st.session_state:
+            st.session_state.bot_driver = None
+        return st.session_state.bot_driver
+    return _DRIVER_INSTANCE_GLOBAL
+
+def _set_driver_instance(driver):
+    """Helper para setear la instancia del driver."""
+    global _DRIVER_INSTANCE_GLOBAL
+    if st is not None and hasattr(st, 'session_state'):
+        st.session_state.bot_driver = driver
+    else:
+        _DRIVER_INSTANCE_GLOBAL = driver
+
+# Lista de pasos memorizados (LEGACY / FALLBACK)
+_PASOS_MEMORIZADOS_GLOBAL = []
+PASOS_ALTERNATIVOS = [] # Legacy
 CONDICION_EJECUCION = None # Legacy
-FLUJOS_CONDICIONALES = {} # Diccionario {indice: {pasos, condicion, nombre}}
+_FLUJOS_CONDICIONALES_GLOBAL = {} # Diccionario {indice: {pasos, condicion, nombre}}
+
+def get_pasos():
+    """Retorna la lista de pasos (Session State o Global)."""
+    if st is not None and hasattr(st, 'session_state'):
+        if 'bot_pasos' not in st.session_state:
+            st.session_state.bot_pasos = []
+        return st.session_state.bot_pasos
+    return _PASOS_MEMORIZADOS_GLOBAL
+
+def set_pasos(pasos):
+    global _PASOS_MEMORIZADOS_GLOBAL
+    if st is not None and hasattr(st, 'session_state'):
+        st.session_state.bot_pasos = pasos
+    else:
+        _PASOS_MEMORIZADOS_GLOBAL = pasos
+
+def get_flujos():
+    """Retorna el dict de flujos (Session State o Global)."""
+    if st is not None and hasattr(st, 'session_state'):
+        if 'bot_flujos' not in st.session_state:
+            st.session_state.bot_flujos = {}
+        return st.session_state.bot_flujos
+    return _FLUJOS_CONDICIONALES_GLOBAL
+
+def set_flujos(flujos):
+    global _FLUJOS_CONDICIONALES_GLOBAL
+    if st is not None and hasattr(st, 'session_state'):
+        st.session_state.bot_flujos = flujos
+    else:
+        _FLUJOS_CONDICIONALES_GLOBAL = flujos
+
+# Compatibilidad para scripts que importan PASOS_MEMORIZADOS (solo lectura inicial, no actualizaciones dinámicas)
+PASOS_MEMORIZADOS = _PASOS_MEMORIZADOS_GLOBAL
+FLUJOS_CONDICIONALES = _FLUJOS_CONDICIONALES_GLOBAL
 
 # Control de Ejecución
-EJECUCION_ACTIVA = False
+_EJECUCION_ACTIVA_GLOBAL = False
 EJECUCION_LOCK = threading.Lock()
 ULTIMO_ERROR = None
 
+def get_ultimo_error():
+    if st is not None and hasattr(st, 'session_state'):
+        return st.session_state.get('bot_ultimo_error', None)
+    return ULTIMO_ERROR
+
+def set_ultimo_error(error):
+    global ULTIMO_ERROR
+    if st is not None and hasattr(st, 'session_state'):
+        st.session_state.bot_ultimo_error = error
+    else:
+        ULTIMO_ERROR = error
+
+def get_ejecucion_activa():
+    if st is not None and hasattr(st, 'session_state'):
+        return st.session_state.get('bot_ejecucion_activa', False)
+    return _EJECUCION_ACTIVA_GLOBAL
+
+def set_ejecucion_activa(valor):
+    global _EJECUCION_ACTIVA_GLOBAL
+    if st is not None and hasattr(st, 'session_state'):
+        st.session_state.bot_ejecucion_activa = valor
+    else:
+        _EJECUCION_ACTIVA_GLOBAL = valor
+
 def detener_ejecucion():
-    global EJECUCION_ACTIVA
     with EJECUCION_LOCK:
-        EJECUCION_ACTIVA = False
+        set_ejecucion_activa(False)
     return True, "Solicitud de detención enviada."
 
 def cargar_pasos_alternativos(nuevos_pasos):
@@ -49,9 +119,10 @@ def cargar_pasos_alternativos(nuevos_pasos):
     return set_flujo_condicional(0, nuevos_pasos, CONDICION_EJECUCION, "Alternativo 1")
 
 def set_flujo_condicional(index, pasos, condicion, nombre="Alternativo"):
-    global FLUJOS_CONDICIONALES, PASOS_ALTERNATIVOS, CONDICION_EJECUCION
+    global PASOS_ALTERNATIVOS, CONDICION_EJECUCION
+    flujos = get_flujos()
     if isinstance(pasos, list):
-        FLUJOS_CONDICIONALES[index] = {
+        flujos[index] = {
             "pasos": pasos,
             "condicion": condicion,
             "nombre": nombre
@@ -66,44 +137,44 @@ def set_flujo_condicional(index, pasos, condicion, nombre="Alternativo"):
     return False, "Formato de pasos inválido."
 
 def update_flujo_condicional(index, pasos=None, condicion=None, nombre=None):
-    global FLUJOS_CONDICIONALES
-    if index not in FLUJOS_CONDICIONALES:
+    flujos = get_flujos()
+    if index not in flujos:
         if pasos is None: return False, "Debe cargar pasos primero."
-        FLUJOS_CONDICIONALES[index] = {"pasos": [], "condicion": None, "nombre": f"Alternativo {index+1}"}
+        flujos[index] = {"pasos": [], "condicion": None, "nombre": f"Alternativo {index+1}"}
     
     if pasos is not None:
-        FLUJOS_CONDICIONALES[index]["pasos"] = pasos
+        flujos[index]["pasos"] = pasos
         if index == 0: 
             global PASOS_ALTERNATIVOS
             PASOS_ALTERNATIVOS = pasos
             
     if condicion is not None:
-        FLUJOS_CONDICIONALES[index]["condicion"] = condicion
+        flujos[index]["condicion"] = condicion
         if index == 0:
             global CONDICION_EJECUCION
             CONDICION_EJECUCION = condicion
             
     if nombre is not None:
-        FLUJOS_CONDICIONALES[index]["nombre"] = nombre
+        flujos[index]["nombre"] = nombre
         
     guardar_sesion()
     return True, "Actualizado."
 
 def get_flujo_condicional(index):
-    return FLUJOS_CONDICIONALES.get(index)
+    return get_flujos().get(index)
 
 
 def limpiar_pasos_alternativos():
-    global PASOS_ALTERNATIVOS, CONDICION_EJECUCION, FLUJOS_CONDICIONALES
+    global PASOS_ALTERNATIVOS, CONDICION_EJECUCION
     PASOS_ALTERNATIVOS = []
     CONDICION_EJECUCION = None
-    FLUJOS_CONDICIONALES = {}
+    set_flujos({})
     guardar_sesion()
     return True, "Todos los flujos alternativos limpiados."
 
 def set_condicion_ejecucion(tipo, valor, columna=None):
     # Legacy wrapper para slot 0
-    global CONDICION_EJECUCION, FLUJOS_CONDICIONALES
+    global CONDICION_EJECUCION
     
     cond = None
     if valor:
@@ -112,23 +183,23 @@ def set_condicion_ejecucion(tipo, valor, columna=None):
     CONDICION_EJECUCION = cond
     
     # Actualizar slot 0 si existe
-    if 0 in FLUJOS_CONDICIONALES:
-        FLUJOS_CONDICIONALES[0]["condicion"] = cond
+    flujos = get_flujos()
+    if 0 in flujos:
+        flujos[0]["condicion"] = cond
 
 def obtener_driver(create_if_missing=True):
-    global DRIVER_INSTANCE
     with DRIVER_LOCK:
-        if DRIVER_INSTANCE is not None:
+        driver = _get_driver_instance()
+        if driver is not None:
             try:
                 # Verificar si sigue vivo
-                DRIVER_INSTANCE.title
-                return DRIVER_INSTANCE
+                driver.title
+                return driver
             except UnexpectedAlertPresentException:
                 # Si hay una alerta, el navegador está vivo pero bloqueado.
-                # Retornamos la instancia para poder manejar la alerta.
-                return DRIVER_INSTANCE
+                return driver
             except:
-                DRIVER_INSTANCE = None
+                _set_driver_instance(None)
         
         if not create_if_missing:
             return None
@@ -136,22 +207,33 @@ def obtener_driver(create_if_missing=True):
         # Iniciar nuevo si no existe
         print("Iniciando nuevo driver...")
         try:
-            service = Service(ChromeDriverManager().install())
+            # Optimización: Cache válido por 7 días para evitar check online constante
+            try:
+                driver_path = ChromeDriverManager().install()
+            except Exception:
+                # Fallback offline: intentar usar chromedriver del PATH o cache
+                driver_path = "chromedriver"
+            
+            service = Service(driver_path)
             options = webdriver.ChromeOptions()
             options.add_argument("--start-maximized")
             # options.add_argument("--detach=true") 
-            DRIVER_INSTANCE = webdriver.Chrome(service=service, options=options)
+            new_driver = webdriver.Chrome(service=service, options=options)
+            _set_driver_instance(new_driver)
+            return new_driver
         except Exception as e_chrome:
             print(f"Chrome no encontrado o error: {e_chrome}. Intentando Edge...")
             try:
                 service = Service(EdgeChromiumDriverManager().install())
                 options = webdriver.EdgeOptions()
                 options.add_argument("--start-maximized")
-                DRIVER_INSTANCE = webdriver.Edge(service=service, options=options)
+                new_driver = webdriver.Edge(service=service, options=options)
+                _set_driver_instance(new_driver)
+                return new_driver
             except Exception as e_edge:
                 print(f"Error iniciando Edge: {e_edge}")
                 return None
-        return DRIVER_INSTANCE
+        return _get_driver_instance()
 
 def abrir_navegador_inicial():
     """Solo abre el navegador y va al login. No bloquea."""
@@ -167,44 +249,43 @@ def abrir_navegador_inicial():
         return False, f"Error al navegar: {e}"
 
 def limpiar_pasos():
-    global PASOS_MEMORIZADOS
-    PASOS_MEMORIZADOS = []
+    set_pasos([])
     guardar_sesion()
     return True, "Pasos limpiados."
 
 def eliminar_ultimo_paso():
-    global PASOS_MEMORIZADOS
-    if PASOS_MEMORIZADOS:
-        eliminado = PASOS_MEMORIZADOS.pop()
+    pasos = get_pasos()
+    if pasos:
+        eliminado = pasos.pop()
         guardar_sesion()
         return True, f"Eliminado paso: {eliminado['descripcion']}"
     return False, "No hay pasos para eliminar."
 
 def eliminar_paso_indice(indice):
-    global PASOS_MEMORIZADOS
-    if 0 <= indice < len(PASOS_MEMORIZADOS):
-        eliminado = PASOS_MEMORIZADOS.pop(indice)
+    pasos = get_pasos()
+    if 0 <= indice < len(pasos):
+        eliminado = pasos.pop(indice)
         guardar_sesion()
         return True, f"Paso {indice+1} eliminado."
     return False, "Índice fuera de rango."
 
 def mover_paso(indice_origen, direccion):
     """direccion: -1 (arriba), 1 (abajo)"""
-    global PASOS_MEMORIZADOS
-    if not PASOS_MEMORIZADOS: return False, "No hay pasos."
+    pasos = get_pasos()
+    if not pasos: return False, "No hay pasos."
     
     nuevo_indice = indice_origen + direccion
-    if 0 <= nuevo_indice < len(PASOS_MEMORIZADOS):
-        PASOS_MEMORIZADOS[indice_origen], PASOS_MEMORIZADOS[nuevo_indice] = PASOS_MEMORIZADOS[nuevo_indice], PASOS_MEMORIZADOS[indice_origen]
+    if 0 <= nuevo_indice < len(pasos):
+        pasos[indice_origen], pasos[nuevo_indice] = pasos[nuevo_indice], pasos[indice_origen]
         guardar_sesion()
         return True, "Paso movido."
     return False, "No se puede mover más allá de los límites."
 
 def alternar_opcional_paso(indice):
     """Alterna el estado 'opcional' de un paso."""
-    global PASOS_MEMORIZADOS
-    if 0 <= indice < len(PASOS_MEMORIZADOS):
-        paso = PASOS_MEMORIZADOS[indice]
+    pasos = get_pasos()
+    if 0 <= indice < len(pasos):
+        paso = pasos[indice]
         nuevo_estado = not paso.get("opcional", False)
         paso["opcional"] = nuevo_estado
         estado_str = "Opcional (Si falla, continúa)" if nuevo_estado else "Obligatorio (Si falla, se detiene)"
@@ -213,18 +294,18 @@ def alternar_opcional_paso(indice):
     return False, "Índice fuera de rango."
 
 def _insertar_paso(paso, indice=None):
-    global PASOS_MEMORIZADOS
-    if indice is not None and 0 <= indice <= len(PASOS_MEMORIZADOS):
-        PASOS_MEMORIZADOS.insert(indice, paso)
+    pasos = get_pasos()
+    if indice is not None and 0 <= indice <= len(pasos):
+        pasos.insert(indice, paso)
         guardar_sesion()
         return True
     else:
-        PASOS_MEMORIZADOS.append(paso)
+        pasos.append(paso)
         guardar_sesion()
         return True
 
 def obtener_pasos():
-    return PASOS_MEMORIZADOS
+    return get_pasos()
 
 # Script JS para generar XPath (reutilizable)
 # MEJORADO: Evita usar IDs que contengan números (probablemente dinámicos/generados)
@@ -302,7 +383,6 @@ def agregar_paso_foco(accion, columna=None, formato=None, indice_insercion=None,
     Agrega un paso basado en el elemento que tiene el foco actual.
     Soporta iframes anidados.
     """
-    global PASOS_MEMORIZADOS
     driver = obtener_driver(create_if_missing=False)
     if not driver:
         return False, "Navegador no conectado. Por favor inicie el navegador primero."
@@ -360,7 +440,6 @@ def agregar_paso_foco(accion, columna=None, formato=None, indice_insercion=None,
 
 def agregar_paso_tecla(tecla, indice_insercion=None, saltar_al_final=False):
     """Agrega un paso de pulsar tecla especial."""
-    global PASOS_MEMORIZADOS
     paso = {
         "accion": "tecla",
         "tecla": tecla,
@@ -375,7 +454,6 @@ def agregar_paso_tecla(tecla, indice_insercion=None, saltar_al_final=False):
 
 def agregar_paso_espera(segundos, indice_insercion=None, saltar_al_final=False):
     """Agrega un paso de espera."""
-    global PASOS_MEMORIZADOS
     paso = {
         "accion": "espera",
         "tiempo": segundos,
@@ -390,7 +468,6 @@ def agregar_paso_espera(segundos, indice_insercion=None, saltar_al_final=False):
 
 def agregar_paso_alerta(accion="aceptar", indice_insercion=None, saltar_al_final=False):
     """Agrega un paso para manejar alertas nativas (popups JS)."""
-    global PASOS_MEMORIZADOS
     
     desc = "Aceptar Alerta (OK)" if accion == "aceptar" else "Cancelar Alerta"
     paso = {
@@ -411,7 +488,6 @@ def agregar_paso_scroll(direccion, cantidad=0, indice_insercion=None, saltar_al_
     direccion: "arriba", "abajo", "inicio", "fin"
     cantidad: pixels (solo para arriba/abajo)
     """
-    global PASOS_MEMORIZADOS
     
     desc = ""
     if direccion == "inicio":
@@ -437,16 +513,14 @@ def agregar_paso_scroll(direccion, cantidad=0, indice_insercion=None, saltar_al_
     return True, f"Paso agregado: {desc}"
 
 def cargar_pasos_externos(lista_pasos):
-    global PASOS_MEMORIZADOS
     if isinstance(lista_pasos, list):
-        PASOS_MEMORIZADOS = lista_pasos
+        set_pasos(lista_pasos)
         guardar_sesion()
         return True, f"Cargados {len(lista_pasos)} pasos."
     return False, "Formato inválido."
 
 def agregar_paso_cambiar_ventana(indice=-1, indice_insercion=None):
     """Agrega un paso para cambiar de ventana/pestaña y CAMBIA EL FOCO ACTUAL."""
-    global PASOS_MEMORIZADOS
     driver = obtener_driver(create_if_missing=False)
     
     desc = "Cambiar a la última ventana abierta" if indice == -1 else f"Cambiar a ventana índice {indice}"
@@ -730,7 +804,6 @@ def agregar_paso_click_texto(texto, exacto=False, es_dinamico=False, tag="*", ti
     xpath_contenedor: (Opcional) XPath de un elemento padre para restringir la búsqueda.
     usar_indice_contenedor: (Opcional) Si es True, el valor (Excel/Fijo) se usa como índice (1,2,3) para elegir cual contenedor clickear.
     """
-    global PASOS_MEMORIZADOS
     
     # Base del paso
     paso = {
@@ -912,12 +985,10 @@ def ejecutar_secuencia(df, delay_pasos=0.5):
     Ejecuta la secuencia de pasos memorizados para cada fila del DataFrame.
     Retorna un generador de logs.
     """
-    global PASOS_MEMORIZADOS, EJECUCION_ACTIVA, ULTIMO_ERROR
-    
     # Reset flags
     with EJECUCION_LOCK:
-        EJECUCION_ACTIVA = True
-    ULTIMO_ERROR = None
+        set_ejecucion_activa(True)
+    set_ultimo_error(None)
 
     driver = obtener_driver()
     
@@ -925,11 +996,12 @@ def ejecutar_secuencia(df, delay_pasos=0.5):
         yield "❌ Error: El navegador no está abierto."
         return
     
-    if not PASOS_MEMORIZADOS:
+    pasos = get_pasos()
+    if not pasos:
         yield "❌ Error: No hay pasos memorizados."
         return
     
-    yield f"🚀 Iniciando secuencia con {len(df)} registros y {len(PASOS_MEMORIZADOS)} pasos por registro..."
+    yield f"🚀 Iniciando secuencia con {len(df)} registros y {len(pasos)} pasos por registro..."
     
     count_ok = 0
     count_err = 0
@@ -951,17 +1023,18 @@ def ejecutar_secuencia(df, delay_pasos=0.5):
         
             # --- LÓGICA CONDICIONAL DE FLUJO (WATERFALL) ---
             # 1. Por defecto: Principal
-            pasos_actuales = PASOS_MEMORIZADOS
+            pasos_actuales = get_pasos()
             nombre_flujo = "PRINCIPAL"
             
             # 2. Evaluar Flujos Condicionales en orden de índice (0, 1, 2...)
             # Si FLUJOS_CONDICIONALES tiene datos, evaluamos.
-            if FLUJOS_CONDICIONALES:
+            flujos = get_flujos()
+            if flujos:
                 flujo_seleccionado = None
                 
                 # Ordenar por índice para asegurar precedencia (0 -> 1 -> 2)
-                for idx in sorted(FLUJOS_CONDICIONALES.keys()):
-                    flujo_info = FLUJOS_CONDICIONALES[idx]
+                for idx in sorted(flujos.keys()):
+                    flujo_info = flujos[idx]
                     cond = flujo_info.get("condicion")
                     
                     if not cond:
@@ -1051,7 +1124,7 @@ def ejecutar_secuencia(df, delay_pasos=0.5):
             try:
                 for i, paso in enumerate(pasos_actuales):
                     # Check Stop Flag per Step
-                    if not EJECUCION_ACTIVA:
+                    if not get_ejecucion_activa():
                         raise Exception("Ejecución detenida por usuario.")
 
                     # Bloque TRY/EXCEPT por paso para manejar "Opcional"
@@ -1443,13 +1516,13 @@ def _ejecutar_logica_paso(driver, paso, row, df, i, delay_pasos):
 SESSION_FILE = "bot_session.json"
 
 def guardar_sesion():
-    global PASOS_MEMORIZADOS, FLUJOS_CONDICIONALES
     try:
         # Convertir claves int a str para JSON
-        flujos_export = {str(k): v for k, v in FLUJOS_CONDICIONALES.items()}
+        flujos = get_flujos()
+        flujos_export = {str(k): v for k, v in flujos.items()}
         
         state = {
-            "pasos_principales": PASOS_MEMORIZADOS,
+            "pasos_principales": get_pasos(),
             "flujos_condicionales": flujos_export
         }
         with open(SESSION_FILE, "w", encoding="utf-8") as f:
@@ -1460,7 +1533,7 @@ def guardar_sesion():
         return False, f"Error guardando sesión: {e}"
 
 def cargar_sesion():
-    global PASOS_MEMORIZADOS, FLUJOS_CONDICIONALES, PASOS_ALTERNATIVOS, CONDICION_EJECUCION
+    global PASOS_ALTERNATIVOS, CONDICION_EJECUCION
     try:
         if not os.path.exists(SESSION_FILE):
             return False, "No existe archivo de sesión anterior."
@@ -1468,22 +1541,23 @@ def cargar_sesion():
         with open(SESSION_FILE, "r", encoding="utf-8") as f:
             state = json.load(f)
             
-        PASOS_MEMORIZADOS = state.get("pasos_principales", [])
+        set_pasos(state.get("pasos_principales", []))
         
         # Cargar flujos condicionales
         raw_flows = state.get("flujos_condicionales", {})
         # Convertir claves back to int
-        FLUJOS_CONDICIONALES = {int(k): v for k, v in raw_flows.items()}
+        flujos_dict = {int(k): v for k, v in raw_flows.items()}
+        set_flujos(flujos_dict)
         
         # Sync Legacy (Slot 0)
-        if 0 in FLUJOS_CONDICIONALES:
-            PASOS_ALTERNATIVOS = FLUJOS_CONDICIONALES[0].get("pasos", [])
-            CONDICION_EJECUCION = FLUJOS_CONDICIONALES[0].get("condicion")
+        if 0 in flujos_dict:
+            PASOS_ALTERNATIVOS = flujos_dict[0].get("pasos", [])
+            CONDICION_EJECUCION = flujos_dict[0].get("condicion")
         else:
             PASOS_ALTERNATIVOS = []
             CONDICION_EJECUCION = None
             
-        return True, f"Sesión restaurada ({len(PASOS_MEMORIZADOS)} pasos, {len(FLUJOS_CONDICIONALES)} flujos)."
+        return True, f"Sesión restaurada ({len(get_pasos())} pasos, {len(flujos_dict)} flujos)."
     except Exception as e:
         return False, f"Error cargando sesión: {e}"
 

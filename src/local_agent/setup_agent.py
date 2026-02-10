@@ -4,87 +4,129 @@ import shutil
 import winreg
 import subprocess
 import time
-from pathlib import Path
+import tkinter as tk
+from tkinter import messagebox, ttk
+import threading
 
-def install_agent():
-    print("Iniciando instalación del Agente Local CDO...")
-    
-    # 1. Definir rutas
-    # El ejecutable del agente debe estar en la misma carpeta que este instalador o empaquetado (MEIPASS)
-    if getattr(sys, 'frozen', False):
-        # Si corre como EXE (PyInstaller)
-        current_dir = sys._MEIPASS
-    else:
-        # Si corre como script
-        current_dir = os.path.dirname(os.path.abspath(__file__))
+class AgentInstaller(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Instalador Agente Local CDO")
+        self.geometry("400x300")
+        self.resizable(False, False)
         
-    agent_exe_name = "CDO_Agente.exe"
-    agent_source = os.path.join(current_dir, agent_exe_name)
-    
-    # Fallback: Check local folder if not in MEIPASS (for dev/mixed scenarios)
-    if not os.path.exists(agent_source):
-        local_dir = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
-        local_source = os.path.join(local_dir, agent_exe_name)
-        if os.path.exists(local_source):
-            agent_source = local_source
-    
-    if not os.path.exists(agent_source):
-        print(f"Error: No se encontró {agent_exe_name} en {current_dir}")
-        input("Presione ENTER para salir...")
-        return
-
-    # Ruta de destino: %APPDATA%\CDO_Agente
-    appdata = os.environ.get("APPDATA")
-    dest_dir = os.path.join(appdata, "CDO_Agente")
-    dest_exe = os.path.join(dest_dir, agent_exe_name)
-    
-    print(f"Instalando en: {dest_dir}")
-    
-    try:
-        os.makedirs(dest_dir, exist_ok=True)
+        # Center window
+        self.eval('tk::PlaceWindow . center')
         
-        # Detener si ya está corriendo
-        subprocess.run(f'taskkill /F /IM "{agent_exe_name}"', shell=True, stderr=subprocess.DEVNULL)
-        time.sleep(1)
+        self.label = tk.Label(self, text="Instalador Agente Local CDO", font=("Arial", 14, "bold"))
+        self.label.pack(pady=10)
         
-        # Copiar archivo
-        shutil.copy2(agent_source, dest_exe)
-        print("Archivos copiados.")
+        self.info_label = tk.Label(self, text="Este asistente instalará el Agente Local\nnecesario para la conexión con archivos.", justify="center")
+        self.info_label.pack(pady=5)
         
-        # 2. Configurar inicio automático (Registry)
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-        print("Configurando inicio automático...")
+        self.progress = ttk.Progressbar(self, orient="horizontal", length=300, mode="determinate")
+        self.progress.pack(pady=20)
         
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
-            winreg.SetValueEx(key, "CDO_Agente_Local", 0, winreg.REG_SZ, f'"{dest_exe}"')
-            
-        print("Registro actualizado.")
+        self.status_label = tk.Label(self, text="Listo para instalar...", fg="gray")
+        self.status_label.pack(pady=5)
         
-        # 3. Iniciar agente
-        print("Iniciando agente...")
-        subprocess.Popen([dest_exe], cwd=dest_dir, shell=False)
+        self.btn_frame = tk.Frame(self)
+        self.btn_frame.pack(pady=20)
         
-        # 4. Verificar inicio
-        print("Verificando conexión...")
-        time.sleep(2)
-        import urllib.request
+        self.install_btn = tk.Button(self.btn_frame, text="Instalar", command=self.start_install, bg="#007bff", fg="white", width=15)
+        self.install_btn.pack(side="left", padx=5)
+        
+        self.exit_btn = tk.Button(self.btn_frame, text="Salir", command=self.quit, width=10)
+        self.exit_btn.pack(side="right", padx=5)
+        
+    def log(self, message):
+        self.status_label.config(text=message)
+        self.update_idletasks()
+        
+    def start_install(self):
+        self.install_btn.config(state="disabled")
+        self.exit_btn.config(state="disabled")
+        threading.Thread(target=self.run_installation, daemon=True).start()
+        
+    def run_installation(self):
         try:
-            with urllib.request.urlopen("http://localhost:8989/health", timeout=2) as response:
-                if response.status == 200:
-                    print("✅ AGENTE INICIADO Y RESPONDIENDO CORRECTAMENTE.")
-                else:
-                    print("⚠️ El agente inició pero respondió con código inesperado.")
-        except Exception as e:
-            print(f"⚠️ El agente se inició pero no responde al ping (puede tardar unos segundos). Error: {e}")
+            self.progress['value'] = 0
+            self.log("Buscando archivos...")
+            
+            # 1. Definir rutas
+            if getattr(sys, 'frozen', False):
+                current_dir = sys._MEIPASS
+            else:
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                
+            agent_exe_name = "CDO_Agente.exe"
+            agent_source = os.path.join(current_dir, agent_exe_name)
+            
+            # Fallback dev check
+            if not os.path.exists(agent_source):
+                local_dir = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
+                local_source = os.path.join(local_dir, agent_exe_name)
+                if os.path.exists(local_source):
+                    agent_source = local_source
+            
+            if not os.path.exists(agent_source):
+                messagebox.showerror("Error", f"No se encontró el archivo {agent_exe_name}.")
+                self.reset_ui()
+                return
 
-        print("\n¡Instalación completada con éxito!")
-        print("El agente se está ejecutando en segundo plano (Puerto 8989).")
-        print("Ya puede cerrar esta ventana.")
-        
-    except Exception as e:
-        print(f"\n❌ Error durante la instalación: {e}")
-        input("Presione ENTER para salir...")
+            self.progress['value'] = 20
+            
+            # Ruta de destino: %LOCALAPPDATA%\CDO_Organizer (Better than APPDATA/CDO_Agente for consistency)
+            # Using LOCALAPPDATA to match the log fix I just made
+            local_appdata = os.getenv('LOCALAPPDATA', os.path.expanduser("~"))
+            dest_dir = os.path.join(local_appdata, "CDO_Organizer")
+            dest_exe = os.path.join(dest_dir, agent_exe_name)
+            
+            self.log(f"Instalando en {dest_dir}...")
+            os.makedirs(dest_dir, exist_ok=True)
+            
+            self.progress['value'] = 40
+            
+            # Stop existing
+            subprocess.run(f'taskkill /F /IM "{agent_exe_name}"', shell=True, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+            time.sleep(1)
+            
+            self.log("Copiando archivos...")
+            shutil.copy2(agent_source, dest_exe)
+            
+            self.progress['value'] = 60
+            self.log("Configurando inicio automático...")
+            
+            # Registry Auto-Start
+            try:
+                key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+                    winreg.SetValueEx(key, "CDO_Agente_Local", 0, winreg.REG_SZ, f'"{dest_exe}"')
+            except Exception as e:
+                print(f"Registry error: {e}")
+                self.log("Advertencia: No se pudo configurar inicio automático en Registro.")
+            
+            self.progress['value'] = 80
+            self.log("Iniciando agente...")
+            
+            subprocess.Popen([dest_exe], cwd=dest_dir, creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+            
+            self.progress['value'] = 100
+            self.log("¡Instalación Completada!")
+            
+            messagebox.showinfo("Éxito", "El Agente Local se ha instalado y ejecutado correctamente.\n\nYa puede cerrar esta ventana.")
+            self.quit()
+            
+        except Exception as e:
+            messagebox.showerror("Error Crítico", f"Ocurrió un error:\n{str(e)}")
+            self.reset_ui()
+
+    def reset_ui(self):
+        self.install_btn.config(state="normal")
+        self.exit_btn.config(state="normal")
+        self.status_label.config(text="Error en la instalación.")
+        self.progress['value'] = 0
 
 if __name__ == "__main__":
-    install_agent()
-    time.sleep(5)
+    app = AgentInstaller()
+    app.mainloop()

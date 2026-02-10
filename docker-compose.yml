@@ -1,10 +1,31 @@
 version: '3.8'
+
 services:
-  web:
+  frontend:
     build: .
+    container_name: cdo_frontend
     ports:
       - "8501:8501"
     volumes:
       - .:/app
     environment:
       - PYTHONUNBUFFERED=1
+      # En docker interno, el backend es accesible por nombre de servicio 'backend'
+      # Pero el navegador del cliente NO ve 'backend', ve la IP del host.
+      # Para comunicaciones server-side (backend -> frontend), usamos nombre de servicio.
+      # Para el cliente JS, necesitará la IP pública.
+      - API_URL=http://backend:8000
+    command: streamlit run src/app_web.py --server.port=8501 --server.address=0.0.0.0
+    depends_on:
+      - backend
+
+  backend:
+    build: .
+    container_name: cdo_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: uvicorn src.server_api:app --host 0.0.0.0 --port 8000

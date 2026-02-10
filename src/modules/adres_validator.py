@@ -90,7 +90,7 @@ class ValidatorAdres:
             results.append(res)
             
             if progress_callback:
-                progress_callback(i + 1, total)
+                progress_callback(i + 1, total, message=f"Procesando Cédula: {cedula}...")
             
             # Small delay to be polite to the API
             time.sleep(0.5)
@@ -261,7 +261,7 @@ class ValidatorAdresWeb:
                 results.append(res)
                 
                 if progress_callback:
-                    progress_callback(i + 1, total)
+                    progress_callback(i + 1, total, message=f"Procesando Cédula: {cedula} (Resuelva Captcha si es necesario)...")
                     
         finally:
             self.close_driver()

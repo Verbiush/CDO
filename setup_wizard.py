@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 import shutil
+import winreg
 
 # --- CONFIG ---
 # Determine if running as frozen (compiled exe) or script
@@ -89,11 +90,13 @@ class SetupApp:
         self.install_python_var = tk.BooleanVar(value=False)
         self.install_docker_var = tk.BooleanVar(value=False)
         
-        chk_python = tk.Checkbutton(options_frame, text="Instalar Python (Requerido para ejecución manual)", variable=self.install_python_var)
-        chk_python.pack(anchor="w")
-        
-        chk_docker = tk.Checkbutton(options_frame, text="Instalar Docker Desktop (Requerido para FEVRIPS)", variable=self.install_docker_var)
-        chk_docker.pack(anchor="w")
+        # Only show these if NOT running as frozen (standalone) to simplify UI for end users
+        if not getattr(sys, 'frozen', False):
+            chk_python = tk.Checkbutton(options_frame, text="Instalar Python (Requerido para ejecución manual)", variable=self.install_python_var)
+            chk_python.pack(anchor="w")
+            
+            chk_docker = tk.Checkbutton(options_frame, text="Instalar Docker Desktop (Requerido para FEVRIPS)", variable=self.install_docker_var)
+            chk_docker.pack(anchor="w")
         
         # --- PROGRESS ---
         self.progress_var = tk.DoubleVar()
@@ -224,32 +227,24 @@ class SetupApp:
                 if os.path.exists(assets_dest): shutil.rmtree(assets_dest)
                 shutil.copytree(os.path.join(BUNDLE_DIR, "assets"), assets_dest)
                 
-                # Copy Service Installer Script
-                service_script_src = os.path.join(BUNDLE_DIR, "install_service.ps1")
-                service_script_dest = os.path.join(INSTALL_DIR, "install_service.ps1")
-                if os.path.exists(service_script_src):
-                    shutil.copy2(service_script_src, service_script_dest)
-                    self.log("Instalando servicio persistente...")
-                    self.update_progress(90)
-                    
-                    # Execute Service Installation (Hidden PowerShell)
-                    try:
-                        cmd = f'PowerShell -NoProfile -ExecutionPolicy Bypass -File "{service_script_dest}"'
-                        subprocess.run(cmd, shell=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                    except Exception as svc_err:
-                        print(f"Service install warning: {svc_err}") # Non-blocking warning
-                
-                self.update_progress(100)
+                self.update_progress(90)
                 
                 # Create Shortcut
                 self.log("Creando accesos directos...")
                 self.create_shortcuts(target_exe, use_bat=False)
                 
-                # Setup Agent
+                # Setup Agent (Registry - Primary Method)
                 agent_exe = os.path.join(INSTALL_DIR, "CDO_Agente.exe")
                 if os.path.exists(agent_exe):
-                    self.log("Configurando Agente Local...")
+                    self.log("Configurando Agente Local (Registro)...")
                     self.setup_agent_startup(agent_exe)
+                    
+                    # Start Agent Immediately
+                    try:
+                        self.log("Iniciando servicio de Agente...")
+                        subprocess.Popen([agent_exe], cwd=INSTALL_DIR, creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
+                    except Exception as e:
+                        print(f"Error starting agent: {e}")
                 
             else:
                 # Fallback or Error?
@@ -269,14 +264,7 @@ class SetupApp:
                     msg += "\n\nNOTA: Docker requiere cerrar sesión o reiniciar para finalizar su instalación."
                 
                 if messagebox.askyesno("Instalación Exitosa", msg + "\n\n¿Desea iniciar la aplicación ahora?"):
-                    # Launch Agent first
-                    agent_path = os.path.join(INSTALL_DIR, "CDO_Agente.exe")
-                    if os.path.exists(agent_path):
-                        try:
-                            subprocess.Popen([agent_path], cwd=INSTALL_DIR, creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
-                        except: pass
-
-                    # Launch Client
+                    # Launch Client (Agent already started)
                     try:
                         target = os.path.join(INSTALL_DIR, "CDO_Cliente.exe") if use_standalone else os.path.join(INSTALL_DIR, "INICIAR_CDO.bat")
                         subprocess.Popen([target], shell=True, cwd=INSTALL_DIR)
@@ -292,7 +280,19 @@ class SetupApp:
             self.enable_buttons()
 
     def setup_agent_startup(self, agent_path):
-        """Creates a shortcut in the Startup folder for the agent."""
+        """Sets up the agent to run at startup via Registry (HKCU) and Shortcut."""
+        # 1. Registry (Preferred for reliability)
+        try:
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
+                winreg.SetValueEx(key, "CDO_Agente_Local", 0, winreg.REG_SZ, f'"{agent_path}"')
+            print(f"Registry key set for {agent_path}")
+            self.log("Inicio automático configurado (Registro).")
+        except Exception as e:
+            print(f"Error setting registry key: {e}")
+            self.log(f"Advertencia: Falló registro ({e}), intentando acceso directo...")
+
+        # 2. Startup Shortcut (Fallback/Redundant)
         try:
             startup_folder = os.path.join(os.getenv('APPDATA'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
             if not os.path.exists(startup_folder):
@@ -310,6 +310,7 @@ class SetupApp:
             subprocess.run(["powershell", "-Command", ps_script], capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
         except Exception as e:
             print(f"Error creating Agent startup shortcut: {e}")
+            self.log(f"Error: No se pudo crear inicio automático ({e})")
 
     def create_shortcuts(self, target_path, use_bat=False):
         # Create VBS script for silent launch if BAT

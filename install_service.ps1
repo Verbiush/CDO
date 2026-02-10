@@ -2,11 +2,12 @@ $ErrorActionPreference = "Stop"
 
 # Get current directory
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ExePath = Join-Path $ScriptDir "CDO_Cliente.exe"
-$TaskName = "CDO_Organizer_AutoStart"
+# Target the AGENT, not the Client, for background service
+$ExePath = Join-Path $ScriptDir "CDO_Agente.exe"
+$TaskName = "CDO_Agente_AutoStart"
 
 if (-not (Test-Path $ExePath)) {
-    Write-Host "Executable not found at $ExePath"
+    Write-Host "Agent Executable not found at $ExePath"
     exit 1
 }
 
@@ -24,4 +25,4 @@ Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Se
 # Start it now
 Start-ScheduledTask -TaskName $TaskName
 
-Write-Host "Service installed and started successfully."
+Write-Host "Agent Service installed and started successfully."

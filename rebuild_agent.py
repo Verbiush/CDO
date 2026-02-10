@@ -25,6 +25,7 @@ def main():
     # 1. Compile Local Agent (CDO_Agente.exe)
     print("--- 1. Compiling Local Agent (CDO_Agente.exe) ---")
     agent_script = os.path.join(src_dir, "local_agent", "main.py")
+    modules_dir = os.path.join(src_dir, "modules")
     
     agent_cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -38,6 +39,9 @@ def main():
         "--hidden-import", "fastapi",
         "--hidden-import", "uvicorn",
         "--hidden-import", "tkinter",
+        "--hidden-import", "pandas",
+        "--hidden-import", "selenium",
+        "--add-data", f"{modules_dir}{os.pathsep}modules",
         agent_script
     ]
     
@@ -60,7 +64,7 @@ def main():
         sys.executable, "-m", "PyInstaller",
         "--noconfirm",
         "--onefile",
-        "--console", # Console visible for status messages
+        "--noconsole", # GUI mode (Tkinter)
         "--name", "Instalar_Agente",
         "--clean",
         "--workpath", os.path.join(output_dir, "build_agent_setup"),

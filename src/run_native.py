@@ -185,10 +185,16 @@ if __name__ == '__main__':
         headless = "false" if is_frozen else "true"
 
         # Dynamic Port Selection to allow multiple instances
-        # We start at 8501 and look for a free one
-        def find_free_port(start_port, max_port=8520):
+        # We start at a random port in range to minimize collisions
+        def find_free_port(start_port=8501, max_port=8600):
             import socket
-            for p in range(start_port, max_port):
+            import random
+            
+            # Try random ports first to avoid sequential collisions
+            attempts = list(range(start_port, max_port))
+            random.shuffle(attempts)
+            
+            for p in attempts:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     try:
                         s.bind(("localhost", p))

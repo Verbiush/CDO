@@ -11,9 +11,9 @@ import json
 import base64
 import threading
 try:
-    from task_manager import submit_task, render_task_center, show_task_notifications
+    from task_manager import submit_task, render_task_center, show_task_notifications, render_task_items
 except ImportError:
-    from src.task_manager import submit_task, render_task_center, show_task_notifications
+    from src.task_manager import submit_task, render_task_center, show_task_notifications, render_task_items
 
 # --- AGENT HELPERS ---
 def create_standalone_agent_zip():
@@ -98,20 +98,33 @@ def create_lightweight_agent_zip():
     if os.path.exists(agent_script):
         with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as z:
             z.write(agent_script, "main.py")
+            
+            # Include modules folder
+            modules_dir = os.path.join(os.path.dirname(__file__), "modules")
+            if not os.path.exists(modules_dir):
+                 modules_dir = os.path.join("src", "modules")
+            
+            if os.path.exists(modules_dir):
+                for root, dirs, files in os.walk(modules_dir):
+                    for file in files:
+                        abs_path = os.path.join(root, file)
+                        rel_path = os.path.join("modules", os.path.relpath(abs_path, modules_dir))
+                        z.write(abs_path, rel_path)
+
             bat_content = """@echo off
 echo Instalando dependencias...
-pip install fastapi uvicorn python-multipart
+pip install fastapi uvicorn python-multipart requests selenium webdriver-manager pandas openpyxl xlsxwriter
 echo Iniciando agente...
 python main.py
 pause
 """
             z.writestr("iniciar.bat", bat_content)
-            z.writestr("LEEME.txt", "Requiere Python instalado. Ejecute iniciar.bat.")
+            z.writestr("LEEME.txt", "Requiere Python instalado. Ejecute iniciar.bat. Asegúrese de que 'modules' esté en la misma carpeta.")
             
     return output.getvalue()
 
 # --- TASK WRAPPERS ---
-def run_registraduria_massive(df, col_cedula):
+def run_registraduria_massive(df, col_cedula, headless=True, update_progress=None):
     try:
         from modules.registraduria_validator import ValidatorRegistraduria
     except ImportError:
@@ -119,24 +132,21 @@ def run_registraduria_massive(df, col_cedula):
     from io import BytesIO
     import pandas as pd
     
-    # Init validator (headless=False is safer for massive if blocked, but usually headless=True is preferred for background)
-    # User context suggests visible windows might be okay or preferred ("que salga una ventana"). 
-    # But for pure background, headless is better unless CAPTCHA is needed.
-    # Registraduria massive DOES NOT require CAPTCHA, so headless=True is better for background.
-    # However, existing code used headless=False. I'll stick to False if user wants to see it, 
-    # or True for better background performance. Given user asked for "background", I'll use True to avoid popping up windows unless necessary.
-    # Actually, Registraduria often blocks headless. I will use False but minimize if possible, or just let it run.
-    validator = ValidatorRegistraduria(headless=False)
+    # Init validator
+    # headless=True is preferred for background tasks to avoid UI blocking/white screen
+    validator = ValidatorRegistraduria(headless=headless)
     
-    # We pass a dummy progress callback because we can't easily update UI from here
-    df_results = validator.process_massive(df, col_cedula, progress_callback=lambda c, t: None)
+    # Use update_progress if provided, else dummy
+    cb = update_progress if update_progress else lambda c, t, **kwargs: None
+    
+    df_results = validator.process_massive(df, col_cedula, progress_callback=cb)
     
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_results.to_excel(writer, index=False)
     return output.getvalue(), f"Procesados {len(df_results)} registros."
 
-def run_adres_api_massive(df, col_cedula):
+def run_adres_api_massive(df, col_cedula, update_progress=None):
     try:
         from modules.adres_validator import ValidatorAdres
     except ImportError:
@@ -145,14 +155,16 @@ def run_adres_api_massive(df, col_cedula):
     import pandas as pd
     
     validator = ValidatorAdres()
-    df_results = validator.process_massive(df, col_cedula, progress_callback=lambda c, t: None)
+    
+    cb = update_progress if update_progress else lambda c, t, **kwargs: None
+    df_results = validator.process_massive(df, col_cedula, progress_callback=cb)
     
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_results.to_excel(writer, index=False)
     return output.getvalue(), f"Procesados {len(df_results)} registros."
 
-def run_adres_web_massive(df, col_cedula):
+def run_adres_web_massive(df, col_cedula, update_progress=None):
     try:
         from modules.adres_validator import ValidatorAdresWeb
     except ImportError:
@@ -162,7 +174,9 @@ def run_adres_web_massive(df, col_cedula):
     
     # This one MUST be headless=False because user needs to solve CAPTCHA
     validator = ValidatorAdresWeb(headless=False)
-    df_results = validator.process_massive(df, col_cedula, progress_callback=lambda c, t: None)
+    
+    cb = update_progress if update_progress else lambda c, t, **kwargs: None
+    df_results = validator.process_massive(df, col_cedula, progress_callback=cb)
     
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -196,6 +210,31 @@ except ImportError:
 import uuid  # Added for unique session handling
 import compileall
 import bot_zeus # Importar módulo del bot
+import database as db # Database for concurrent user management
+import time
+
+# --- REMOTE TASK HELPERS ---
+def create_remote_task(command, params=None):
+    if params is None: params = {}
+    return db.create_task(st.session_state.username, command, params)
+
+def wait_for_remote_task(task_id, timeout=10):
+    start_time = time.time()
+    placeholder = st.empty()
+    while time.time() - start_time < timeout:
+        task = db.get_task_status(task_id)
+        if task:
+            status = task["status"]
+            if status == "COMPLETED":
+                placeholder.empty()
+                return task["result"]
+            if status == "ERROR":
+                placeholder.error(f"Error en tarea remota: {task.get('result')}")
+                return None
+            placeholder.info(f"⏳ Esperando al Agente Remoto... ({status})")
+        time.sleep(1)
+    placeholder.warning("⚠️ Tiempo de espera agotado. Asegúrese de que el Agente Local esté conectado y consultando tareas.")
+    return None
 try:
     from modules.registraduria_validator import ValidatorRegistraduria
 except ImportError:
@@ -258,8 +297,63 @@ except Exception as e:
         pass
     raise e
 
+# --- NOTIFICATION BELL ---
+# Custom CSS for the bell
+st.markdown("""
+<style>
+.bell-container {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 10px;
+}
+.bell-icon {
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--text-color);
+}
+.bell-badge {
+    background-color: red;
+    color: white;
+    border-radius: 50%;
+    padding: 2px 6px;
+    font-size: 12px;
+    vertical-align: top;
+    margin-left: -10px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Layout for Header with Bell
+col_header_title, col_header_bell = st.columns([0.9, 0.1])
+with col_header_bell:
+    if st.session_state.get("logged_in", False):
+        # Use popover if available (Streamlit 1.33+)
+        try:
+            popover = st.popover("🔔", help="Centro de Notificaciones")
+            popover.markdown("### 🔔 Notificaciones")
+            
+            if "bg_tasks" in st.session_state and st.session_state.bg_tasks:
+                 # Sort by start time desc (newest first)
+                tasks = sorted(st.session_state.bg_tasks.values(), key=lambda x: x["start_time"], reverse=True)
+                if not tasks:
+                    popover.info("No hay notificaciones recientes.")
+                else:
+                    render_task_items(popover, tasks[:10])
+            else:
+                popover.info("No hay notificaciones recientes.")
+        except AttributeError:
+            # Fallback for older Streamlit
+            if st.button("🔔"):
+                st.toast("Revisa el Centro de Tareas en la barra lateral.")
+
 def create_installer_zip():
     """Crea un ZIP con el Instalador EXE (PyInstaller) que contiene el código protegido."""
+    # [WEB-REFACTOR] Deshabilitado en Web SaaS para evitar subprocess/pyinstaller server-side
+    st.error("⚠️ La creación de instaladores nativos no está disponible en la versión Web SaaS.")
+    return None, None
+
+    # try:
     try:
         base_src = os.path.dirname(os.path.abspath(__file__)) # d:\...\src
         project_root = os.path.dirname(base_src) # d:\...\OrganizadorArchivos
@@ -340,9 +434,10 @@ def create_installer_zip():
         
         # 4. Compilar en DOS pasos:
         # Paso A: Compilar la Aplicación Cliente (CDO_Cliente.exe) que contiene Streamlit + Python embebido
-        # Paso B: Compilar el Instalador (setup_wizard.exe) que empaqueta al Cliente
+        # Paso A.2: Compilar el Agente Local (CDO_Agente.exe)
+        # Paso B: Compilar el Instalador (setup_wizard.exe) que empaqueta al Cliente y Agente
         
-        st.info("🔨 Paso 1/2: Compilando Cliente Nativo (esto puede tardar unos minutos)...")
+        st.info("🔨 Paso 1/3: Compilando Cliente Nativo (esto puede tardar unos minutos)...")
         
         client_dist_dir = os.path.join(output_dir, "dist_client")
         client_script = os.path.join(src_dest, "run_native.py")
@@ -411,8 +506,42 @@ def create_installer_zip():
         # FIRMAR CLIENTE
         sign_exe(client_exe_path)
 
+        # Paso A.2: Compilar AGENTE Local
+        st.info("🔨 Paso 2/3: Compilando Agente Local...")
+        agent_dist_dir = os.path.join(output_dir, "dist_agent")
+        agent_script = os.path.join(src_dest, "local_agent", "main.py")
+        
+        if not os.path.exists(agent_script):
+             # Fallback location if src structure is different in build_temp
+             agent_script = os.path.join(src_dest, "local_agent", "main.py")
+        
+        agent_cmd = [
+            sys.executable, "-m", "PyInstaller",
+            "--noconfirm",
+            "--onefile",
+            "--windowed", # Run as windowed (hidden console)
+            "--name", "CDO_Agente",
+            "--clean",
+            "--workpath", os.path.join(output_dir, "build_agent"),
+            "--distpath", agent_dist_dir,
+            "--hidden-import", "fastapi",
+            "--hidden-import", "uvicorn",
+            "--hidden-import", "tkinter",
+            agent_script
+        ]
+        
+        process_agent = subprocess.run(agent_cmd, cwd=build_dir, capture_output=True, text=True)
+        if process_agent.returncode != 0:
+             st.warning(f"Advertencia compilando Agente: {process_agent.stderr}")
+        
+        agent_exe_path = os.path.join(agent_dist_dir, "CDO_Agente.exe")
+        if os.path.exists(agent_exe_path):
+            sign_exe(agent_exe_path)
+            # Copy to build dir for bundling
+            shutil.copy2(agent_exe_path, os.path.join(build_dir, "CDO_Agente.exe"))
+
         # Paso B: Compilar Instalador
-        st.info("🔨 Paso 2/2: Empaquetando Instalador Final...")
+        st.info("🔨 Paso 3/3: Empaquetando Instalador Final...")
         
         # Mover Cliente compilado al directorio de build del instalador para empaquetarlo
         shutil.copy2(client_exe_path, os.path.join(build_dir, "CDO_Cliente.exe"))
@@ -432,6 +561,8 @@ def create_installer_zip():
             "--specpath", build_dir,
             # Bundle the Client EXE inside the Installer
             "--add-data", f"CDO_Cliente.exe{os.pathsep}.",
+            # Bundle the Agent EXE if it exists
+            "--add-data", f"CDO_Agente.exe{os.pathsep}.",
             # Bundle assets for the installer UI itself
             "--add-data", f"assets{os.pathsep}assets",
             "--hidden-import", "tkinter",
@@ -558,98 +689,42 @@ pause
     return buffer.getvalue()
 
 # --- USER MANAGEMENT ---
-USERS_FILE = os.path.join(os.path.dirname(__file__), "users.json")
+# Delegated to database.py for concurrency support
 
 def load_users():
-    if not os.path.exists(USERS_FILE):
-        return {}
-    try:
-        with open(USERS_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {}
+    """Deprecated: Use db.get_all_users() instead. Kept for compatibility."""
+    return db.get_all_users()
 
 def save_users(users):
-    with open(USERS_FILE, "w") as f:
-        json.dump(users, f, indent=4)
+    """Deprecated: No-op. Updates should be done via specific db functions."""
+    pass
 
 def check_login(username, password):
-    users = load_users()
-    if username in users and users[username]["password"] == password:
-        return True
-    return False
+    return db.check_login(username, password)
 
 def get_user_config(username):
-    users = load_users()
-    if username in users:
-        return users[username]
-    return {}
+    return db.get_user_config(username)
 
 def update_user_last_path(username, path):
-    users = load_users()
-    if username in users:
-        users[username]["last_path"] = path
-        save_users(users)
+    db.update_user_last_path(username, path)
 
 def update_user_config(username, config_data):
-    users = load_users()
-    if username in users:
-        current_config = users[username].get("config", {})
-        current_config.update(config_data)
-        users[username]["config"] = current_config
-        save_users(users)
+    db.update_user_config(username, config_data)
 
 def get_user_full_config(username):
-    users = load_users()
-    if username in users:
-        return users[username].get("config", {})
-    return {}
+    return db.get_user_full_config(username)
 
 def add_user_favorite(username, path):
-    users = load_users()
-    if username in users:
-        favs = users[username].get("favorites", [])
-        if path not in favs:
-            favs.append(path)
-            users[username]["favorites"] = favs
-            save_users(users)
-            return True
-    return False
+    return db.add_user_favorite(username, path)
 
 def remove_user_favorite(username, path):
-    users = load_users()
-    if username in users:
-        favs = users[username].get("favorites", [])
-        if path in favs:
-            favs.remove(path)
-            users[username]["favorites"] = favs
-            save_users(users)
-            return True
-    return False
+    return db.remove_user_favorite(username, path)
 
 def create_user(username, password):
-    users = load_users()
-    if username in users:
-        return False, "El usuario ya existe"
-    
-    users[username] = {
-        "password": password,
-        "last_path": "D:\\",
-        "favorites": []
-    }
-    save_users(users)
-    return True, "Usuario creado exitosamente"
+    return db.create_user(username, password)
 
 def delete_user(username):
-    users = load_users()
-    if username not in users:
-        return False, "El usuario no existe"
-    if username == "admin":
-        return False, "No se puede eliminar al administrador principal"
-    
-    del users[username]
-    save_users(users)
-    return True, "Usuario eliminado exitosamente"
+    return db.delete_user(username)
 
 @st.dialog("Panel de Administración de Usuarios")
 def admin_panel_modal():
@@ -658,7 +733,7 @@ def admin_panel_modal():
     tab_list, tab_create, tab_edit = st.tabs(["Listar / Eliminar", "Crear Nuevo", "✏️ Editar Permisos"])
     
     with tab_list:
-        users = load_users()
+        users = db.get_all_users()
         df_data = [{"Usuario": u, "Rol": d.get("role", "user"), "Bot Zeus": d.get("permissions", {}).get("bot_zeus", "full")} for u, d in users.items()]
         st.dataframe(df_data, use_container_width=True)
         
@@ -668,7 +743,7 @@ def admin_panel_modal():
         
         if st.button("Eliminar Usuario Seleccionado", type="primary"):
             if user_to_delete:
-                ok, msg = delete_user(user_to_delete)
+                ok, msg = db.delete_user(user_to_delete)
                 if ok:
                     st.success(msg)
                     st.rerun()
@@ -684,13 +759,8 @@ def admin_panel_modal():
         if st.button("Crear Usuario"):
             if new_user and new_pass:
                 # Create with default permissions
-                ok, msg = create_user(new_user, new_pass)
+                ok, msg = db.create_user(new_user, new_pass, role=new_role)
                 if ok:
-                    # Update role if different from default
-                    if new_role != "user":
-                        users = load_users()
-                        users[new_user]["role"] = new_role
-                        save_users(users)
                     st.success(msg)
                     st.rerun()
                 else:
@@ -700,7 +770,7 @@ def admin_panel_modal():
 
     with tab_edit:
         st.subheader("✏️ Editar Permisos y Roles")
-        users = load_users()
+        users = db.get_all_users()
         user_to_edit = st.selectbox("Seleccionar usuario", list(users.keys()))
         
         if user_to_edit:
@@ -755,22 +825,21 @@ def admin_panel_modal():
             )
             
             if st.button("💾 Guardar Cambios de Permisos"):
-                # Update data
-                users[user_to_edit]["role"] = new_role_edit
+                # Update role
+                db.update_user_role(user_to_edit, new_role_edit)
                 
                 # Update permissions
-                if "permissions" not in users[user_to_edit]:
-                    users[user_to_edit]["permissions"] = {}
-                
-                users[user_to_edit]["permissions"]["bot_zeus"] = new_bot_perm
+                new_perms = current_perms.copy()
+                new_perms["bot_zeus"] = new_bot_perm
                 
                 # Handle tabs
                 if len(new_tabs) == len(all_tabs_available):
-                    users[user_to_edit]["permissions"]["allowed_tabs"] = ["*"]
+                    new_perms["allowed_tabs"] = ["*"]
                 else:
-                    users[user_to_edit]["permissions"]["allowed_tabs"] = new_tabs
+                    new_perms["allowed_tabs"] = new_tabs
                 
-                save_users(users)
+                db.update_user_permissions(user_to_edit, new_perms)
+                
                 st.success(f"Permisos actualizados para {user_to_edit}")
                 time.sleep(1)
                 st.rerun()
@@ -796,33 +865,37 @@ def seleccionar_carpeta_nativa(title="Seleccionar Carpeta", initial_dir=None):
         # Si falla el agente, continuamos con el método nativo (si estamos local)
         print(f"No se pudo contactar al agente local: {e}")
 
-    folder = None
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        
-        # Crear instancia de Tk
-        root = tk.Tk()
-        root.withdraw() # Ocultar ventana principal
-        root.attributes('-topmost', True) # Forzar al frente
-        
-        # Asegurar que initial_dir sea válido si existe
-        if initial_dir and not os.path.isdir(initial_dir):
-            initial_dir = None
-            
-        # Abrir diálogo
-        # En Windows moderno, esto llama a IFileDialog con FOS_PICKFOLDERS
-        folder = filedialog.askdirectory(
-            master=root, 
-            title=title, 
-            initialdir=initial_dir
-        )
-        
-        root.destroy()
-        return folder
-    except Exception as e:
-        st.error(f"Error al abrir diálogo nativo: {e}")
-        return None
+    # [WEB-REFACTOR] Tkinter eliminado para compatibilidad Web SaaS
+    st.warning("⚠️ La selección de carpetas nativa no está disponible en este entorno. Por favor ingrese la ruta manualmente o use el Agente Local.")
+    return None
+
+    # folder = None
+    # try:
+    #     import tkinter as tk
+    #     from tkinter import filedialog
+    #     
+    #     # Crear instancia de Tk
+    #     root = tk.Tk()
+    #     root.withdraw() # Ocultar ventana principal
+    #     root.attributes('-topmost', True) # Forzar al frente
+    #     
+    #     # Asegurar que initial_dir sea válido si existe
+    #     if initial_dir and not os.path.isdir(initial_dir):
+    #         initial_dir = None
+    #         
+    #     # Abrir diálogo
+    #     # En Windows moderno, esto llama a IFileDialog con FOS_PICKFOLDERS
+    #     folder = filedialog.askdirectory(
+    #         master=root, 
+    #         title=title, 
+    #         initialdir=initial_dir
+    #     )
+    #     
+    #     root.destroy()
+    #     return folder
+    # except Exception as e:
+    #     st.error(f"Error al abrir diálogo nativo: {e}")
+    #     return None
 
 def update_path_key(key, title="Seleccionar Carpeta"):
     """Callback para actualizar una ruta en session_state desde un botón."""
@@ -991,6 +1064,87 @@ def render_web_uploader():
             except Exception as e:
                 st.error(f"Error: {e}")
 
+def render_remote_browser():
+    st.markdown("### 📡 Explorador Remoto (Cloud/Intranet)")
+    st.info("Explora las carpetas del equipo donde se ejecuta el Agente Local.")
+
+    # State for current remote path
+    if "remote_path" not in st.session_state:
+        st.session_state.remote_path = "C:\\" # Default for Windows
+
+    col_path, col_go = st.columns([0.8, 0.2])
+    new_path = col_path.text_input("Ruta Remota:", value=st.session_state.remote_path, key="input_remote_path")
+    
+    # Update path if changed
+    if new_path != st.session_state.remote_path:
+        st.session_state.remote_path = new_path
+        # Force refresh by removing hash
+        path_hash = f"files_{st.session_state.remote_path}"
+        if path_hash in st.session_state:
+             del st.session_state[path_hash]
+        st.rerun()
+    
+    if col_go.button("Ir"):
+         st.rerun()
+
+    # List files logic
+    path_hash = f"files_{st.session_state.remote_path}"
+    
+    # Refresh button
+    if st.button("🔄 Actualizar Lista"):
+        if path_hash in st.session_state:
+            del st.session_state[path_hash]
+        st.rerun()
+    
+    if path_hash not in st.session_state:
+        with st.spinner("Consultando agente remoto..."):
+            task_id = create_remote_task("LIST_FILES", {"path": st.session_state.remote_path})
+            if task_id:
+                result = wait_for_remote_task(task_id)
+                if result:
+                     if result.get("success"):
+                         st.session_state[path_hash] = result.get("data")
+                     else:
+                         st.error(f"Error: {result.get('error')}")
+                         st.session_state[path_hash] = []
+                else:
+                     st.error("No se recibió respuesta del agente.")
+    
+    # Render files
+    files = st.session_state.get(path_hash, [])
+    
+    if files:
+        # Show folders first
+        folders = [f for f in files if f['is_dir']]
+        
+        st.write(f"📁 **Carpetas en {st.session_state.remote_path}**")
+        
+        # "Up" button
+        parent = os.path.dirname(st.session_state.remote_path)
+        if st.button("⬆️ Subir Nivel"):
+             st.session_state.remote_path = parent
+             st.rerun()
+
+        # Folders List
+        for f in folders:
+            if st.button(f"📁 {f['name']}", key=f"dir_{f['name']}"):
+                # Join path correctly
+                if st.session_state.remote_path.endswith("\\") or st.session_state.remote_path.endswith("/"):
+                     st.session_state.remote_path += f['name']
+                else:
+                     st.session_state.remote_path = os.path.join(st.session_state.remote_path, f['name'])
+                st.rerun()
+                
+        st.markdown("---")
+        if st.button("✅ Seleccionar Esta Carpeta", type="primary", use_container_width=True):
+             st.session_state.current_path = st.session_state.remote_path
+             st.session_state.path_input = st.session_state.remote_path
+             st.success(f"Seleccionado: {st.session_state.remote_path}")
+             st.rerun()
+             
+    else:
+        st.info("Carpeta vacía o no accesible.")
+
 @st.dialog("Explorador de Archivos", width="large")
 def browse_modal():
     # Detect mode from Environment Variable (Set by Installer)
@@ -1001,7 +1155,10 @@ def browse_modal():
     if st.session_state.get("force_native_mode", False):
         mode = "LOCAL"
     
-    if mode == "LOCAL":
+    # Priority: Remote Mode > Local Mode > Web Mode
+    if st.session_state.get("remote_mode", False):
+        render_remote_browser()
+    elif mode == "LOCAL":
         render_local_browser()
     else:
         render_web_uploader()
@@ -1566,9 +1723,95 @@ with st.sidebar:
             """
         )
 
-        col_ag1, col_ag2 = st.columns(2)
-        
-        with col_ag1:
+        # 2. Estado de Conexión (Prioridad)
+        with st.container(border=True):
+            st.markdown("#### 2. Estado de Conexión")
+            
+            # --- REMOTE MODE TOGGLE ---
+            remote_mode = st.toggle("🌐 Modo Remoto (Cloud/Intranet)", 
+                                                     value=st.session_state.get("remote_mode", False), 
+                                                     help="Activar si el Agente está en otro PC (usa Cola de Comandos).")
+            
+            # Default for config (avoid NameError)
+            agent_url_val = st.session_state.get("agent_url", "http://localhost:8989")
+            
+            if remote_mode != st.session_state.get("remote_mode", False):
+                st.session_state.remote_mode = remote_mode
+                st.rerun()
+
+            if st.session_state.get("remote_mode"):
+                st.info("📡 **Modo Remoto Activo**")
+                st.caption("Las órdenes se enviarán a la cola. El Agente Local debe estar configurado para consultar este servidor.")
+                
+                # Config Generator for Agent
+                st.markdown("##### Configuración del Agente")
+                st.markdown("Descarga este archivo `agent_config.json` y colócalo en la carpeta de instalación del Agente (ej. `%LOCALAPPDATA%/CDO_Organizer`).")
+                
+                # Generate config
+                # Default to localhost:8000
+                server_url_input = st.text_input("URL del Servidor (API)", value="http://localhost:8000")
+                
+                agent_config = {
+                    "server_url": server_url_input,
+                    "username": st.session_state.username,
+                    "password": "YOUR_PASSWORD_HERE" # Security: don't put real password here if possible, or warn user.
+                }
+                
+                # Warn about password
+                st.warning("⚠️ Por seguridad, la contraseña no se incluye automáticamente. Edita el archivo JSON y pon tu contraseña real.")
+                
+                json_str = json.dumps(agent_config, indent=4)
+                st.download_button(
+                    label="⬇️ Descargar agent_config.json",
+                    data=json_str,
+                    file_name="agent_config.json",
+                    mime="application/json"
+                )
+
+                st.success("✅ Sistema de Cola Listo")
+                
+                # Check pending tasks stats
+                # Note: get_pending_tasks modifies status, so we should check count differently or just show text
+                # For now just show active
+                # st.success("✅ Sistema de Cola Listo")
+                
+            else:
+                # El agente corre en el puerto 8989 por defecto
+                # agent_url_val already defined above
+                
+                # Verificar conexión automáticamente si no se ha hecho
+                if "agent_connected" not in st.session_state:
+                     try:
+                        import requests
+                        resp = requests.get(f"{agent_url_val}/ping", timeout=0.5)
+                        st.session_state.agent_connected = (resp.status_code == 200)
+                     except:
+                        st.session_state.agent_connected = False
+
+                status_color = "green" if st.session_state.get("agent_connected") else "red"
+                status_text = "✅ CONECTADO Y ACTIVO" if st.session_state.get("agent_connected") else "❌ DESCONECTADO"
+                
+                st.markdown(f":{status_color}[**{status_text}**]")
+                
+                if not st.session_state.get("agent_connected"):
+                    st.caption("Si ya instaló el agente, asegúrese de que se esté ejecutando.")
+                
+                if st.button("🔄 Verificar Conexión", use_container_width=True):
+                    try:
+                        import requests
+                        resp = requests.get(f"{agent_url_val}/ping", timeout=1)
+                        if resp.status_code == 200:
+                            st.session_state.agent_connected = True
+                            st.rerun()
+                        else:
+                            st.session_state.agent_connected = False
+                            st.error("El agente responde pero con error.")
+                    except:
+                        st.session_state.agent_connected = False
+                        st.error("No se detecta el agente local.")
+
+        # 1. Instalación (Debajo)
+        with st.container(border=True):
             st.markdown("#### 1. Instalación")
             # Buscar instalador/agente
             zip_bytes, found, type_found = create_standalone_agent_zip()
@@ -1604,45 +1847,44 @@ with st.sidebar:
                     use_container_width=True
                  )
 
-        with col_ag2:
-            st.markdown("#### 2. Estado de Conexión")
-            # El agente corre en el puerto 8989 por defecto
-            agent_url_val = st.session_state.get("agent_url", "http://localhost:8989")
-            
-            # Verificar conexión automáticamente si no se ha hecho
-            if "agent_connected" not in st.session_state:
-                 try:
-                    import requests
-                    resp = requests.get(f"{agent_url_val}/ping", timeout=0.5)
-                    st.session_state.agent_connected = (resp.status_code == 200)
-                 except:
-                    st.session_state.agent_connected = False
-
-            status_color = "green" if st.session_state.get("agent_connected") else "red"
-            status_text = "✅ CONECTADO Y ACTIVO" if st.session_state.get("agent_connected") else "❌ DESCONECTADO"
-            
-            st.markdown(f":{status_color}[**{status_text}**]")
-            
-            if not st.session_state.get("agent_connected"):
-                st.caption("Si ya instaló el agente, asegúrese de que se esté ejecutando.")
-            
-            if st.button("🔄 Verificar Conexión", use_container_width=True):
-                try:
-                    import requests
-                    resp = requests.get(f"{agent_url_val}/ping", timeout=1)
-                    if resp.status_code == 200:
-                        st.session_state.agent_connected = True
-                        st.rerun()
-                    else:
-                        st.session_state.agent_connected = False
-                        st.error("El agente responde pero con error.")
-                except:
-                    st.session_state.agent_connected = False
-                    st.error("No se detecta el agente local.")
-
         # Configuración avanzada (oculta)
         with st.expander("Configuración Avanzada Agente"):
-            st.session_state.agent_url = st.text_input("URL Agente", value=agent_url_val)
+            # Detectar IP local para ayudar al usuario
+            try:
+                import socket
+                hostname = socket.gethostname()
+                local_ip = socket.gethostbyname(hostname)
+            except:
+                local_ip = "localhost"
+
+            st.markdown(f"**Tu IP Local:** `{local_ip}`")
+            st.info("ℹ️ Si vas a usar el Agente en OTRA computadora, usa esta IP en la URL del Agente.")
+
+            default_url = f"http://{local_ip}:8000" if local_ip != "localhost" else agent_url_val
+            
+            st.session_state.agent_url = st.text_input(
+                "URL API del Servidor (Para el Agente)", 
+                value=st.session_state.get("agent_url", default_url),
+                help="La dirección donde el Agente buscará tareas. Si el Agente está en otro PC, pon la IP de ESTE servidor."
+            )
+
+            # Generador de Configuración
+            st.markdown("##### Generar Configuración para Agente Remoto")
+            if st.button("Generar agent_config.json"):
+                config_data = {
+                    "api_url": st.session_state.agent_url,
+                    "agent_id": f"agent_{st.session_state.username}",
+                    "computer_name": "REMOTE_PC" 
+                }
+                json_str = json.dumps(config_data, indent=4)
+                st.download_button(
+                    label="📥 Descargar agent_config.json",
+                    data=json_str,
+                    file_name="agent_config.json",
+                    mime="application/json",
+                    help="Pon este archivo en la misma carpeta que el CDO_Agente.exe en el otro PC."
+                )
+
             if st.session_state.get("agent_connected"):
                 test_path = st.text_input("Prueba de Ruta:", value=".")
                 if st.button("Listar Archivos (Test)"):
@@ -5304,19 +5546,21 @@ services:
                             st.error("❌ No se encontró el script 'generar_certificados_auto.ps1'")
                             st.warning(f"Buscado en: {base_dirs}")
                         else:
-                            cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path]
-                            result = subprocess.run(cmd, capture_output=True, text=True)
+                            # [WEB-REFACTOR] Subprocess disabled
+                            st.warning("⚠️ Ejecución de scripts PowerShell deshabilitada en Web SaaS.")
+                            # cmd = ["powershell", "-ExecutionPolicy", "Bypass", "-File", script_path]
+                            # result = subprocess.run(cmd, capture_output=True, text=True)
                             
-                            if result.returncode == 0:
-                                st.success("✅ Certificados generados en C:\\Certificates")
-                                st.code(result.stdout)
-                            else:
-                                st.error("❌ Error generando certificados")
-                                st.text("Salida:")
-                                st.code(result.stdout)
-                                st.text("Error:")
-                                st.code(result.stderr)
-                                st.info("Asegúrese de tener OpenSSL instalado (Git Bash suele incluirlo).")
+                            # if result.returncode == 0:
+                            #     st.success("✅ Certificados generados en C:\\Certificates")
+                            #     st.code(result.stdout)
+                            # else:
+                            #     st.error("❌ Error generando certificados")
+                            #     st.text("Salida:")
+                            #     st.code(result.stdout)
+                            #     st.text("Error:")
+                            #     st.code(result.stderr)
+                            #     st.info("Asegúrese de tener OpenSSL instalado (Git Bash suele incluirlo).")
                     except Exception as e:
                         st.error(f"Error ejecutando script: {e}")
 
@@ -5329,33 +5573,35 @@ docker login -u puller -p v1GLVFn6pWoNrQWgEzmx7MYsf1r7TKJQo+kwadvffq+ACRA3mLxs f
 # 2. Iniciar Servicio
 docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
 
-                if st.button("🚀 Intentar Iniciar Docker Aquí"):
-                    try:
-                        # Intentar V2 primero (docker compose)
-                        cmd_v2 = ["docker", "compose", "-f", "docker-compose-fevrips.yml", "up", "-d"]
-                        try:
-                            res = subprocess.run(cmd_v2, capture_output=True, text=True, check=False)
-                            used_cmd = "docker compose"
-                        except FileNotFoundError:
-                            # Fallback a V1 (docker-compose)
-                            cmd_v1 = ["docker-compose", "-f", "docker-compose-fevrips.yml", "up", "-d"]
-                            res = subprocess.run(cmd_v1, capture_output=True, text=True, check=False)
-                            used_cmd = "docker-compose"
+                # [WEB-REFACTOR] Disabled Docker control
+                st.warning("⚠️ Control de Docker local deshabilitado en Web SaaS.")
+                # if st.button("🚀 Intentar Iniciar Docker Aquí"):
+                #     try:
+                #         # Intentar V2 primero (docker compose)
+                #         cmd_v2 = ["docker", "compose", "-f", "docker-compose-fevrips.yml", "up", "-d"]
+                #         try:
+                #             res = subprocess.run(cmd_v2, capture_output=True, text=True, check=False)
+                #             used_cmd = "docker compose"
+                #         except FileNotFoundError:
+                #             # Fallback a V1 (docker-compose)
+                #             cmd_v1 = ["docker-compose", "-f", "docker-compose-fevrips.yml", "up", "-d"]
+                #             res = subprocess.run(cmd_v1, capture_output=True, text=True, check=False)
+                #             used_cmd = "docker-compose"
 
-                        if res.returncode == 0:
-                            st.success(f"✅ Comando '{used_cmd}' ejecutado correctamente.")
-                            st.text(res.stdout)
-                        else:
-                            st.error(f"❌ Error iniciando Docker ({used_cmd}).")
-                            st.text(res.stderr)
-                            if "FileNotFoundError" in str(res.stderr) or res.returncode == 2 or "The system cannot find the file specified" in str(res.stderr):
-                                st.warning("Asegúrate de que Docker Desktop esté instalado y agregado al PATH del sistema.")
+                #         if res.returncode == 0:
+                #             st.success(f"✅ Comando '{used_cmd}' ejecutado correctamente.")
+                #             st.text(res.stdout)
+                #         else:
+                #             st.error(f"❌ Error iniciando Docker ({used_cmd}).")
+                #             st.text(res.stderr)
+                #             if "FileNotFoundError" in str(res.stderr) or res.returncode == 2 or "The system cannot find the file specified" in str(res.stderr):
+                #                 st.warning("Asegúrate de que Docker Desktop esté instalado y agregado al PATH del sistema.")
                                 
-                    except FileNotFoundError:
-                         st.error("❌ No se encontró el ejecutable de Docker.")
-                         st.warning("Asegúrate de instalar Docker Desktop y que los comandos 'docker' y 'docker-compose' funcionen en tu terminal.")
-                    except Exception as e:
-                        st.error(f"Error inesperado: {e}")
+                #     except FileNotFoundError:
+                #          st.error("❌ No se encontró el ejecutable de Docker.")
+                #          st.warning("Asegúrate de instalar Docker Desktop y que los comandos 'docker' y 'docker-compose' funcionen en tu terminal.")
+                #     except Exception as e:
+                #         st.error(f"Error inesperado: {e}")
 
     # Credenciales de Autenticación SISPRO
     st.write("🔐 Autenticación SISPRO (Opcional)")
@@ -5429,13 +5675,14 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
             docker_ok = False
             with col_d1:
                 # 1. Verificar Docker (Informativo)
-                try:
-                    subprocess.run(["docker", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, shell=True)
-                    st.success("✅ Docker Detectado")
-                    docker_ok = True
-                except:
-                    st.info("⚠️ Docker no detectado")
-                    st.caption("Si usa FEVRIPS nativo, esto es normal.")
+                st.info("⚠️ Docker check disabled in Web SaaS")
+                # try:
+                #     subprocess.run(["docker", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, shell=True)
+                #     st.success("✅ Docker Detectado")
+                #     docker_ok = True
+                # except:
+                #     st.info("⚠️ Docker no detectado")
+                #     st.caption("Si usa FEVRIPS nativo, esto es normal.")
             
             with col_d2:
                 # 2. Verificar Puerto
@@ -5462,110 +5709,28 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
                         tab_native, tab_docker = st.tabs(["🖥️ Opción 1: Ejecutable Nativo (Sin Docker)", "🐳 Opción 2: Docker"])
                         
                         with tab_native:
-                            st.info("Use esta opción si **NO** tiene Docker instalado o si falla al iniciarse.")
-                            st.markdown("""
-                            1. Debe tener la carpeta del validador **FevRips Standalone**.
-                            2. Seleccione el archivo `FevRips.Api.exe` dentro de esa carpeta.
-                            3. Haga clic en **Iniciar Servidor**.
-                            """)
+                            st.warning("⚠️ Esta funcionalidad requiere acceso al sistema de archivos local y no está disponible en la versión Web SaaS.")
+                            st.info("Por favor, asegúrese de que el servidor FEVRIPS esté corriendo en la dirección configurada o contacte al administrador.")
                             
-                            # Persistencia de ruta
+                            # Mantener input solo visual
                             default_exe = st.session_state.app_config.get("fevrips_local_path", "")
-                            fev_exe = st.text_input("Ruta del Ejecutable (FevRips.Api.exe):", value=default_exe, placeholder="C:\\FevRips\\FevRips.Api.exe")
+                            st.text_input("Ruta del Ejecutable (Solo referencia):", value=default_exe, disabled=True)
+
+                            # [WEB-REFACTOR] Disabled for Web SaaS compatibility
+                            # if st.button("📂 Buscar Archivo", key="btn_browse_fev", use_container_width=True):
+                            #     pass 
                             
-                            if fev_exe != default_exe:
-                                st.session_state.app_config["fevrips_local_path"] = fev_exe
-                                update_user_config(st.session_state.username, "app_config", st.session_state.app_config)
-                            
-                            col_l1, col_l2 = st.columns([0.3, 0.7])
-                            with col_l1:
-                                 if st.button("📂 Buscar Archivo", key="btn_browse_fev", use_container_width=True):
-                                     try:
-                                         import tkinter as tk
-                                         from tkinter import filedialog
-                                         root = tk.Tk()
-                                         root.withdraw()
-                                         root.wm_attributes('-topmost', 1)
-                                         file_path = filedialog.askopenfilename(
-                                             title="Seleccionar FevRips.Api.exe",
-                                             filetypes=[("Ejecutables", "*.exe"), ("Todos", "*.*")]
-                                         )
-                                         root.destroy()
-                                         if file_path:
-                                             st.session_state.app_config["fevrips_local_path"] = file_path
-                                             update_user_config(st.session_state.username, "app_config", st.session_state.app_config)
-                                             st.rerun()
-                                     except Exception as e:
-                                         st.error(f"Error explorador: {e}") 
-                            
-                            if st.button("▶️ Iniciar Servidor Nativo", use_container_width=True):
-                                if not fev_exe or not os.path.exists(fev_exe):
-                                    st.error("❌ Ruta inválida. Seleccione 'FevRips.Api.exe'.")
-                                else:
-                                    try:
-                                        working_dir = os.path.dirname(fev_exe)
-                                        # Lanzar proceso en consola nueva para evitar bloqueo
-                                        CREATE_NEW_CONSOLE = 0x00000010
-                                        subprocess.Popen([fev_exe], cwd=working_dir, creationflags=CREATE_NEW_CONSOLE)
-                                        
-                                        # Loop de verificación
-                                        progress_text = "Iniciando servidor... Esperando puerto 9443..."
-                                        my_bar = st.progress(0, text=progress_text)
-                                        
-                                        server_started = False
-                                        for i in range(15): # 15 segundos
-                                            time.sleep(1)
-                                            my_bar.progress((i + 1) / 15, text=f"{progress_text} ({i+1}s)")
-                                            
-                                            try:
-                                                s_check = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                                                s_check.settimeout(0.5)
-                                                result_check = s_check.connect_ex(('localhost', 9443))
-                                                s_check.close()
-                                                if result_check == 0:
-                                                    server_started = True
-                                                    break
-                                            except:
-                                                pass
-                                                
-                                        my_bar.empty()
-                                        
-                                        if server_started:
-                                            st.success("✅ ¡Servidor Iniciado Correctamente!")
-                                            time.sleep(1)
-                                            st.rerun()
-                                        else:
-                                            st.error("❌ El servidor no respondió en el puerto 9443.")
-                                            st.info("Revise la ventana negra que se abrió para ver posibles errores.")
-                                            
-                                    except Exception as e:
-                                        st.error(f"Error al iniciar: {e}")
+                            # if st.button("▶️ Iniciar Servidor Nativo", use_container_width=True):
+                            #    pass
 
                         with tab_docker:
-                             st.caption("Use esta opción solo si tiene Docker Desktop instalado y funcionando.")
-                             if st.button("🚀 Intentar Iniciar Docker"):
-                                try:
-                                    cmd_v2 = ["docker", "compose", "-f", "docker-compose-fevrips.yml", "up", "-d"]
-                                    try:
-                                        res = subprocess.run(cmd_v2, capture_output=True, text=True, check=False)
-                                        used_cmd = "docker compose"
-                                    except FileNotFoundError:
-                                        cmd_v1 = ["docker-compose", "-f", "docker-compose-fevrips.yml", "up", "-d"]
-                                        res = subprocess.run(cmd_v1, capture_output=True, text=True, check=False)
-                                        used_cmd = "docker-compose"
-
-                                    if res.returncode == 0:
-                                        st.success(f"✅ Docker iniciado ({used_cmd}). Espere unos segundos...")
-                                        time.sleep(5)
-                                        st.rerun()
-                                    else:
-                                        st.error(f"❌ Falló Docker ({used_cmd}).")
-                                        st.code(res.stderr)
-                                        if "No se puede ejecutar esta aplicación en el equipo" in str(res.stderr) or res.returncode == 3221225781: # DLL not found etc
-                                            st.error("⛔ Su equipo parece no ser compatible con esta versión de Docker.")
-                                            st.info("👉 Por favor use la pestaña **'Opción 1: Ejecutable Nativo'**.")
-                                except Exception as e:
-                                     st.error(f"Error: {e}")
+                             st.warning("⚠️ El control de Docker local no está disponible en la versión Web SaaS.")
+                             # [WEB-REFACTOR] Disabled for Web SaaS compatibility
+                             # if st.button("🚀 Intentar Iniciar Docker"):
+                             #   pass
+                             #
+                             #   except Exception as e:
+                             #        st.error(f"Error: {e}")
                         
                         st.divider()
                 except:
@@ -5642,7 +5807,7 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
         submit_task("Generar CUV (Masivo)", run_generar_cuv_masivo_task, st.session_state.current_path, api_url, token)
         st.info("✅ Tarea iniciada en segundo plano. Revisa el 'Centro de Tareas' en la barra lateral.")
 
-def worker_descargar_historias_ovida(df, col_map, save_path, silent_mode=False):
+def worker_descargar_historias_ovida(df, col_map, save_path, silent_mode=False, driver=None):
     descargados, errores, conflictos = 0, 0, 0
     total_filas = len(df)
     
@@ -5653,42 +5818,57 @@ def worker_descargar_historias_ovida(df, col_map, save_path, silent_mode=False):
         status_text = st.empty()
     
     try:
-        # Selenium Setup
-        options = webdriver.ChromeOptions()
-        options.add_argument('--kiosk-printing')
-        
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-        
-        driver.get("https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
-        
-        # Esperar a que el usuario inicie sesión (Detectando cambio de URL)
-        # Se asume que al loguear, la URL cambiará y dejará de ser 'iniciando.php'
-        max_wait = 300 # 5 minutos de espera
-        start_time = time.time()
-        logged_in = False
-        
-        while time.time() - start_time < max_wait:
-            try:
-                curr = driver.current_url
-                # Si la URL cambia de iniciando.php a cualquier otra cosa, asumimos login exitoso
-                # O si estamos en iniciando.php pero ya no es la misma URL inicial (redirección interna)
-                # Mejor criterio: Si NO contiene 'iniciando.php' O contiene 'menu', 'index', 'principal'
-                if "iniciando.php" not in curr or any(k in curr for k in ["menu.php", "index.php", "principal.php", "home", "dashboard"]):
-                    logged_in = True
-                    break
-                
-                # Feedback visual
-                if status_text:
-                    elapsed = int(time.time() - start_time)
-                    status_text.text(f"Esperando inicio de sesión... ({elapsed}s)\nPor favor, ingrese sus credenciales en la ventana del navegador.\nURL actual: {curr}")
-            except Exception as e:
-                log(f"Error verificando URL en OVIDA: {e}")
-            time.sleep(1)
+        external_driver = False
+        if driver is None:
+            # Selenium Setup
+            options = webdriver.ChromeOptions()
+            options.add_argument('--kiosk-printing')
             
-        if not logged_in:
-            driver.quit()
-            return "Tiempo de espera agotado. No se detectó inicio de sesión."
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=options)
+            
+            driver.get("https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
+            
+            # Esperar a que el usuario inicie sesión (Detectando cambio de URL)
+            # Se asume que al loguear, la URL cambiará y dejará de ser 'iniciando.php'
+            max_wait = 300 # 5 minutos de espera
+            start_time = time.time()
+            logged_in = False
+            
+            while time.time() - start_time < max_wait:
+                try:
+                    curr = driver.current_url
+                    # Si la URL cambia de iniciando.php a cualquier otra cosa, asumimos login exitoso
+                    # O si estamos en iniciando.php pero ya no es la misma URL inicial (redirección interna)
+                    # Mejor criterio: Si NO contiene 'iniciando.php' O contiene 'menu', 'index', 'principal'
+                    if "iniciando.php" not in curr or any(k in curr for k in ["menu.php", "index.php", "principal.php", "home", "dashboard"]):
+                        logged_in = True
+                        break
+                    
+                    # Feedback visual
+                    if status_text:
+                        elapsed = int(time.time() - start_time)
+                        status_text.text(f"Esperando inicio de sesión... ({elapsed}s)\nPor favor, ingrese sus credenciales en la ventana del navegador.\nURL actual: {curr}")
+                except Exception as e:
+                    log(f"Error verificando URL en OVIDA: {e}")
+                time.sleep(1)
+                
+            if not logged_in:
+                driver.quit()
+                return "Tiempo de espera agotado. No se detectó inicio de sesión."
+        else:
+            external_driver = True
+            if status_text:
+                status_text.text("Usando navegador abierto. Verificando estado...")
+            
+            # Advertencia si parece estar en login
+            try:
+                if "iniciando.php" in driver.current_url:
+                     msg_warn = "⚠️ Parece que aún está en la página de inicio. Intentando continuar..."
+                     if status_text: status_text.warning(msg_warn)
+                     log(msg_warn)
+            except:
+                pass
 
         if status_text:
             status_text.text("Inicio de sesión detectado. Empezando descargas...")
@@ -5749,7 +5929,9 @@ def worker_descargar_historias_ovida(df, col_map, save_path, silent_mode=False):
                 errores += 1
                 log(f"Error descargando {nro_estudio}: {e}")
         
-        driver.quit()
+        if not external_driver:
+            driver.quit()
+
         msg = f"Proceso finalizado.\nDescargados: {descargados}\nErrores: {errores}\nConflictos: {conflictos}"
         if not silent_mode:
             st.success(msg)
@@ -5761,13 +5943,18 @@ def worker_descargar_historias_ovida(df, col_map, save_path, silent_mode=False):
             st.error(msg)
         return msg
 
-def run_descargar_historias_ovida_task(df, col_map, save_path):
-    return {"message": worker_descargar_historias_ovida(df, col_map, save_path, silent_mode=True)}
+def run_descargar_historias_ovida_task(df, col_map, save_path, driver=None):
+    return {"message": worker_descargar_historias_ovida(df, col_map, save_path, silent_mode=True, driver=driver)}
 
 @st.dialog("Descargar Historias (OVIDA)")
 def dialog_descargar_historias_ovida():
     st.write("Automatización de descarga de historias clínicas desde OVIDA.")
     
+    # Check Remote Mode
+    is_remote = st.session_state.get('remote_mode', False)
+    if is_remote:
+        st.info("📡 Modo Remoto Activo: El navegador se abrirá en el servidor/agente remoto.")
+
     uploaded = st.file_uploader("Archivo Excel (.xlsx)", type="xlsx", key="ovida_uploader")
     if not uploaded: return
 
@@ -5793,16 +5980,97 @@ def dialog_descargar_historias_ovida():
         }
         
         st.write("Carpeta Base de Guardado:")
-        col_ov_path, col_ov_btn = st.columns([0.85, 0.15])
-        with col_ov_path:
-            save_path = st.text_input("Carpeta Destino:", value=st.session_state.get("ovida_save_path", st.session_state.current_path), key="ovida_save_path")
-        with col_ov_btn:
-             st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-             st.button("📂", key="btn_ovida_save", help="Seleccionar Ruta", on_click=update_path_key, args=("ovida_save_path", "Seleccionar Ruta"))
+        if is_remote:
+             default_remote = st.session_state.get('remote_path', 'C:\\')
+             save_path = st.text_input("Ruta Remota:", value=default_remote, key="ovida_save_path_remote")
+        else:
+            col_ov_path, col_ov_btn = st.columns([0.85, 0.15])
+            with col_ov_path:
+                save_path = st.text_input("Carpeta Destino:", value=st.session_state.get("ovida_save_path", st.session_state.current_path), key="ovida_save_path")
+            with col_ov_btn:
+                 st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
+                 st.button("📂", key="btn_ovida_save", help="Seleccionar Ruta", on_click=update_path_key, args=("ovida_save_path", "Seleccionar Ruta"))
+        
+        st.divider()
+        st.markdown("### Paso 1: Abrir Navegador")
+        st.caption("Abra el navegador, inicie sesión manualmente y espere a estar dentro del sistema.")
+        
+        if is_remote:
+            if st.button("🌐 Abrir Navegador Remoto"):
+                with st.spinner("Iniciando navegador en agente remoto..."):
+                    tid = create_remote_task("OVIDA_LAUNCH")
+                    if tid:
+                        res = wait_for_remote_task(tid)
+                        if res and res.get("success"):
+                            st.success("✅ Navegador Remoto Abierto. Por favor inicie sesión en el equipo remoto.")
+                        else:
+                            st.error(f"Error: {res.get('error') if res else 'Timeout'}")
+        else:
+            if 'ovida_driver' in st.session_state and st.session_state['ovida_driver'] is not None:
+                 # Verificar si hay una descarga en curso para evitar conflictos con el driver
+                 is_downloading = False
+                 if 'bg_tasks' in st.session_state:
+                     for t in st.session_state.bg_tasks.values():
+                         if t['name'] == "Descargar OVIDA" and t['status'] == "RUNNING":
+                             is_downloading = True
+                             break
+                 
+                 if is_downloading:
+                     st.info("⏳ Descarga en curso... El navegador está ocupado.")
+                 else:
+                     try:
+                         # Verificar si sigue vivo
+                         t = st.session_state['ovida_driver'].title
+                         st.success("✅ Navegador conectado. Inicie sesión y pase al Paso 2.")
+                     except:
+                         st.session_state['ovida_driver'] = None
+                         st.warning("⚠️ El navegador se cerró. Ábralo nuevamente.")
+    
+            if st.button("🌐 Abrir Navegador Local"):
+                try:
+                    options = webdriver.ChromeOptions()
+                    options.add_argument('--kiosk-printing')
+                    service = Service(ChromeDriverManager().install())
+                    driver = webdriver.Chrome(service=service, options=options)
+                    driver.get("https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
+                    st.session_state['ovida_driver'] = driver
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error abriendo navegador: {e}")
 
-        if st.button("🚀 Iniciar Navegador y Descarga"):
-            submit_task("Descargar OVIDA", run_descargar_historias_ovida_task, df, col_map, save_path)
-            st.info("✅ Tarea iniciada en segundo plano. Se abrirá una ventana de navegador.")
+        st.markdown("### Paso 2: Ejecutar Descarga")
+        st.caption("Una vez logueado, presione este botón para iniciar la descarga automática.")
+        
+        if is_remote:
+            if st.button("🚀 Iniciar Descarga Remota"):
+                 # Prepare data for transport
+                 try:
+                    df_clean = df.copy()
+                    df_clean[col_ingreso] = df_clean[col_ingreso].astype(str)
+                    df_clean[col_egreso] = df_clean[col_egreso].astype(str)
+                    
+                    data_records = df_clean.to_dict(orient='records')
+                    params = {
+                        "data": data_records,
+                        "col_map": col_map,
+                        "save_path": save_path
+                    }
+                    
+                    tid = create_remote_task("OVIDA_PROCESS", params)
+                    if tid:
+                        st.success(f"Tarea iniciada (ID: {tid}). Revise la campana de notificaciones.")
+                        st.rerun()
+                    else:
+                        st.error("Error al crear tarea remota.")
+                 except Exception as e:
+                     st.error(f"Error preparando datos: {e}")
+        else:
+            if st.button("🚀 Iniciar Descarga (Sesión Actual)"):
+                if 'ovida_driver' not in st.session_state or st.session_state['ovida_driver'] is None:
+                    st.error("❌ Primero debe abrir el navegador (Paso 1).")
+                else:
+                    submit_task("Descargar OVIDA", run_descargar_historias_ovida_task, df, col_map, save_path, driver=st.session_state['ovida_driver'])
+                    st.info("✅ Tarea iniciada en segundo plano. NO CIERRE el navegador.")
             
     except Exception as e:
         st.error(f"Error leyendo Excel: {e}")
@@ -6647,6 +6915,7 @@ def buscar_archivos():
         st.warning("No se encontraron coincidencias.")
     else:
         st.success(f"Encontrados {len(results)} elementos.")
+        st.info(f"Total de archivos encontrados: {len(results)}")
 
 # --- WORKERS DE ANÁLISIS Y MANUALES (Portados de Desktop) ---
 
@@ -7750,6 +8019,13 @@ if "🔎 Búsqueda y Acciones" in tabs_map:
                 # If not local, show the web modal (Local is handled in callback)
                 if mode != "LOCAL":
                     browse_modal()
+            
+            # Toggle Modo Nativo
+            c_nat, c_help = st.columns([0.7, 0.3])
+            with c_nat:
+                st.toggle("Nativo", key="force_native_mode")
+            with c_help:
+                st.markdown("ℹ️", help="Activar para usar el explorador de archivos de Windows (Modo Escritorio). Desactivar para usar el navegador web.")
         # 2. Paneles de Criterios y Acciones
 
         c1, c2 = st.columns([1, 1])
@@ -7781,7 +8057,8 @@ if "🔎 Búsqueda y Acciones" in tabs_map:
             st.markdown('</div>', unsafe_allow_html=True)
         
         # 3. Tabla de Resultados
-        st.markdown("##### 📄 Archivos encontrados")
+        num_found = len(st.session_state.search_results) if st.session_state.search_results else 0
+        st.markdown(f"##### 📄 Archivos encontrados ({num_found})")
         df_display = pd.DataFrame(st.session_state.search_results) if st.session_state.search_results else pd.DataFrame(columns=["Ruta completa", "Fecha"])
         st.dataframe(df_display, width=1000, height=250, hide_index=True)
 
@@ -7989,11 +8266,14 @@ if "🔄 Conversión de Archivos" in tabs_map:
                 st.text_input("Ruta Destino", value=dest_display, disabled=True, label_visibility="collapsed", key="txt_dest_display")
             
             with col_d2:
-                if st.button("📂", key="btn_pick_dest_conv", help="Cambiar carpeta de destino"):
-                    sel = seleccionar_carpeta_nativa("Seleccionar Carpeta de Salida")
-                    if sel:
-                        st.session_state.conv_dest_folder = sel
-                        st.rerun()
+                # [WEB-REFACTOR] Disabled folder picker
+                if st.button("📂", key="btn_pick_dest_conv", help="Seleccionar Carpeta (Requiere Agente Local)", disabled=True):
+                     pass
+                # if st.button("📂", key="btn_pick_dest_conv", help="Cambiar carpeta de destino"):
+                #     sel = seleccionar_carpeta_nativa("Seleccionar Carpeta de Salida")
+                #     if sel:
+                #         st.session_state.conv_dest_folder = sel
+                #         st.rerun()
 
             if final_path and st.button("🚀 Convertir Archivo", key="btn_conv_ind"):
                 map_code = {
@@ -8611,7 +8891,51 @@ if "Validacion Usuario" in tabs_map:
                                     
                 elif mode == "MASIVO":
                     st.markdown("##### Validación Masiva")
-                    uploaded_file = st.file_uploader("Cargar Excel con Cédulas", type=["xlsx", "xls"])
+                    
+                    # Initialize session state for native mode if not present
+                    if "use_native_mode" not in st.session_state:
+                        st.session_state.use_native_mode = False
+                    
+                    uploaded_file = None
+                    
+                    # Display Input Method based on toggle
+                    if st.session_state.use_native_mode:
+                         if st.button("📂 Examinar (Ventana)", use_container_width=True):
+                            try:
+                                import tkinter as tk
+                                from tkinter import filedialog
+                                root = tk.Tk()
+                                root.withdraw()
+                                root.wm_attributes('-topmost', 1)
+                                file_path = filedialog.askopenfilename(filetypes=[("Excel Files", "*.xlsx;*.xls")])
+                                if file_path:
+                                    st.session_state["native_file_path"] = file_path
+                                    st.success(f"Seleccionado: {os.path.basename(file_path)}")
+                            except Exception as e:
+                                st.error(f"Error nativo: {e}")
+                        
+                         if "native_file_path" in st.session_state:
+                            st.info(f"Archivo cargado: {st.session_state['native_file_path']}")
+                            try:
+                                with open(st.session_state["native_file_path"], "rb") as f:
+                                    uploaded_file = io.BytesIO(f.read())
+                            except:
+                                pass
+                    else:
+                        uploaded_file = st.file_uploader("Cargar Excel con Cédulas", type=["xlsx", "xls"])
+
+                    # Native Mode Toggle (Below Input)
+                    # We use a callback-like pattern: check current value vs session state
+                    col_toggle, col_help = st.columns([0.9, 0.1])
+                    with col_toggle:
+                        new_native = st.checkbox("Activar Modo Nativo (Ventana Emergente)", 
+                                               value=st.session_state.use_native_mode,
+                                               help="Usa una ventana de Windows para seleccionar el archivo. Útil si el navegador falla o se bloquea.")
+                    
+                    # If changed, update and rerun
+                    if new_native != st.session_state.use_native_mode:
+                        st.session_state.use_native_mode = new_native
+                        st.rerun()
                     
                     if uploaded_file:
                         try:
@@ -8622,12 +8946,18 @@ if "Validacion Usuario" in tabs_map:
                                 df_sheet = df_preview[sheet]
                                 col_cedula = st.selectbox("Seleccione Columna de Cédulas", df_sheet.columns)
                                 
+                                # Optimization: Option to show browser
+                                show_browser = st.checkbox("Ver proceso en navegador (Más lento, consume más recursos)", value=False)
+                                
                                 if st.button("🚀 Iniciar Validación Masiva (Segundo Plano)", type="primary"):
                                     # Filter non-empty
                                     df_to_process = df_sheet[df_sheet[col_cedula].notna()]
                                     
-                                    # Submit to background
-                                    submit_task("Validación Registraduría Masiva", run_registraduria_massive, df_to_process, col_cedula)
+                                    # Submit to background with selected headless mode
+                                    # headless=True if show_browser is False
+                                    headless_mode = not show_browser
+                                    
+                                    submit_task("Validación Registraduría Masiva", run_registraduria_massive, df_to_process, col_cedula, headless=headless_mode)
                                     
                                     st.success("✅ Tarea iniciada en segundo plano. Puedes continuar trabajando en otras pestañas. Revisa el 'Centro de Tareas' en la barra lateral para ver el progreso y descargar el resultado.")
                                         
@@ -8925,7 +9255,7 @@ if "🤖 Bot Zeus Salud" in tabs_map:
                 st.caption("Configure la secuencia que el robot repetirá por cada fila.")
             
                 # Selector de posición de inserción
-                num_pasos = len(bot_zeus.PASOS_MEMORIZADOS)
+                num_pasos = len(bot_zeus.get_pasos())
             
                 # Opciones para inserción: [Final, 1, 2, ..., N]
                 # Usamos un índice visual 1-based para el usuario, pero interno 0-based
@@ -9304,7 +9634,7 @@ if "🤖 Bot Zeus Salud" in tabs_map:
             col_io1, col_io2 = st.columns(2)
             with col_io1:
                 # Botón de descarga
-                pasos_actuales = bot_zeus.PASOS_MEMORIZADOS
+                pasos_actuales = bot_zeus.get_pasos()
                 if pasos_actuales:
                     json_str = json.dumps(pasos_actuales, indent=4)
                 
@@ -9495,7 +9825,7 @@ if "🤖 Bot Zeus Salud" in tabs_map:
             st.divider()
 
             # Display steps with management controls
-            pasos = bot_zeus.PASOS_MEMORIZADOS
+            pasos = bot_zeus.get_pasos()
             if not pasos:
                 st.info("No hay pasos grabados.")
             else:
@@ -9602,7 +9932,7 @@ if "🤖 Bot Zeus Salud" in tabs_map:
         with col_ctrl1:
             # Botón INICIAR
             if not st.session_state.bot_running:
-                if st.button("▶️ Iniciar Secuencia Masiva", use_container_width=True, disabled=not (uploaded_bot and len(bot_zeus.PASOS_MEMORIZADOS) > 0)):
+                if st.button("▶️ Iniciar Secuencia Masiva", use_container_width=True, disabled=not (uploaded_bot and len(bot_zeus.get_pasos()) > 0)):
                     st.session_state.bot_running = True
                     st.session_state.bot_logs = []
                     st.session_state.bot_finished_shown = False # Reset flag de toast
@@ -9642,11 +9972,12 @@ if "🤖 Bot Zeus Salud" in tabs_map:
             if not st.session_state.get("bot_finished_shown", False):
                 
                 # Caso ERROR
-                if bot_zeus.ULTIMO_ERROR:
+                last_error = bot_zeus.get_ultimo_error()
+                if last_error:
                     st.error(f"❌ El proceso se detuvo con errores.")
-                    st.toast(f"Error: {bot_zeus.ULTIMO_ERROR}", icon="❌")
+                    st.toast(f"Error: {last_error}", icon="❌")
                     with st.expander("Ver detalle del error", expanded=True):
-                        st.write(bot_zeus.ULTIMO_ERROR)
+                        st.write(last_error)
                     st.session_state.bot_finished_shown = True
                     
                 # Caso ÉXITO (o Detenido por usuario pero sin error crash)

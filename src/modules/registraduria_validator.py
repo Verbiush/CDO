@@ -155,7 +155,7 @@ class ValidatorRegistraduria:
                 results.append(res)
                 
                 if progress_callback:
-                    progress_callback(i + 1, total)
+                    progress_callback(i + 1, total, message=f"Procesando Cédula: {cedula}...")
                     
         finally:
             self.close_driver()

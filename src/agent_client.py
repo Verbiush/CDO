@@ -15,7 +15,11 @@ def is_agent_available():
 def select_folder():
     """Request the agent to open a folder selection dialog."""
     try:
-        response = requests.post(f"{AGENT_URL}/select-folder", timeout=60) # Long timeout for user interaction
+        # Reduced timeout to avoid hanging the UI for too long if agent is unresponsive
+        # The agent should respond quickly once the dialog is opened, but if the user
+        # takes too long, we might timeout. Ideally, the agent returns "pending" or uses websockets,
+        # but for simple HTTP, we'll use a moderate timeout.
+        response = requests.post(f"{AGENT_URL}/select-folder", timeout=10) 
         if response.status_code == 200:
             data = response.json()
             if data.get("cancelled"):
