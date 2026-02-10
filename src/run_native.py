@@ -282,8 +282,8 @@ if __name__ == '__main__':
             "--server.address=127.0.0.1",
             f"--server.port={port}",
             "--server.fileWatcherType=none",
-            "--server.runOnSave=false",
-            "--theme.base=dark" 
+            "--server.runOnSave=false"
+            # "--theme.base=dark" # Removed to allow user selection
         ]
 
         log_debug(f"Sys.argv: {sys.argv}")
