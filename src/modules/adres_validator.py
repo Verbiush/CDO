@@ -17,10 +17,17 @@ class ValidatorAdres:
     def __init__(self):
         # API Base URL
         # Format: .../api/adres/{tipo_doc}/{numero_doc}
-        # Assuming 0 = CC based on user input
-        self.base_url = "https://pqrdsuperargo.supersalud.gov.co/api/api/adres/0/"
+        self.base_url = "https://pqrdsuperargo.supersalud.gov.co/api/api/adres/"
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        self.tipo_doc_map = {
+            "CC": "0", # Based on previous code assumption
+            "TI": "1",
+            "CE": "2",
+            "RC": "3",
+            "PA": "4",
+            "PE": "5" # Permiso Especial?
         }
 
     def start_driver(self):
@@ -31,28 +38,26 @@ class ValidatorAdres:
         # No driver needed for API
         pass
 
-    def validate_cedula(self, cedula, timeout=None):
+    def validate_cedula(self, cedula, tipo_doc="CC", timeout=None):
         """
         Validates a single cedula using the Supersalud API.
-        Timeout parameter is kept for compatibility but not strictly used as Selenium timeout.
         """
         try:
-            url = f"{self.base_url}{cedula}"
+            # Map text tipo_doc to API code
+            tipo_code = self.tipo_doc_map.get(str(tipo_doc).upper(), "0")
+            
+            url = f"{self.base_url}{tipo_code}/{cedula}"
             response = requests.get(url, headers=self.headers, verify=False, timeout=20)
             
             if response.status_code == 200:
                 data = response.json()
                 
                 # Extract fields from JSON
-                # JSON keys: numero_doc, nombre, s_nombre, apellido, s_apellido, fecha_nacimiento, 
-                # edad, celular, telefono, direccion, correo, municipio_id, departamento_id, 
-                # eps, eps_id, eps_tipo, sexo, tipo_de_afiliado, estado_afiliacion
-                
-                # Construct Name
                 nombres = f"{data.get('nombre', '')} {data.get('s_nombre', '')}".strip()
                 apellidos = f"{data.get('apellido', '')} {data.get('s_apellido', '')}".strip()
                 
                 return {
+                    "Tipo Doc": tipo_doc,
                     "Cedula": str(cedula),
                     "Nombres": nombres,
                     "Apellidos": apellidos,
@@ -61,11 +66,12 @@ class ValidatorAdres:
                     "Municipio": data.get("municipio_id", ""),
                     "Estado": data.get("estado_afiliacion", ""),
                     "Entidad": data.get("eps", ""),
-                    "Regimen": str(data.get("eps_tipo", "")),        # Mapped from eps_tipo
+                    "Regimen": str(data.get("eps_tipo", "")),
                     "Tipo Afiliado": str(data.get("tipo_de_afiliado", ""))
                 }
             else:
                 return {
+                    "Tipo Doc": tipo_doc,
                     "Cedula": cedula,
                     "Estado": f"Error API: {response.status_code}",
                     "Entidad": "No encontrado o Error de conexión"
@@ -73,24 +79,29 @@ class ValidatorAdres:
 
         except Exception as e:
             return {
+                "Tipo Doc": tipo_doc,
                 "Cedula": cedula,
                 "Estado": "Error Excepción",
                 "Entidad": f"Detalle: {str(e)}"
             }
 
-    def process_massive(self, df, cedula_col, progress_callback=None):
+    def process_massive(self, df, cedula_col, tipo_doc_col=None, default_tipo_doc="CC", progress_callback=None):
         results = []
         total = len(df)
         
         for i, row in df.iterrows():
             cedula = row[cedula_col]
             
+            tipo_doc = default_tipo_doc
+            if tipo_doc_col and tipo_doc_col in row and pd.notna(row[tipo_doc_col]):
+                tipo_doc = str(row[tipo_doc_col]).strip()
+            
             # Call API
-            res = self.validate_cedula(cedula)
+            res = self.validate_cedula(cedula, tipo_doc=tipo_doc)
             results.append(res)
             
             if progress_callback:
-                progress_callback(i + 1, total, message=f"Procesando Cédula: {cedula}...")
+                progress_callback(i + 1, total, message=f"Procesando: {tipo_doc} {cedula}...")
             
             # Small delay to be polite to the API
             time.sleep(0.5)
@@ -102,6 +113,13 @@ class ValidatorAdresWeb:
         self.url = "https://servicios.adres.gov.co/BDUA/Consulta-Afiliados-BDUA"
         self.driver = None
         self.headless = headless
+        self.tipo_doc_map = {
+            "CC": "1",
+            "TI": "2",
+            "CE": "3",
+            "RC": "4",
+            "PA": "5" # Pasaporte/Otros?
+        }
 
     def start_driver(self):
         if not self.driver:
@@ -127,7 +145,7 @@ class ValidatorAdresWeb:
                 pass
             self.driver = None
 
-    def validate_cedula(self, cedula, timeout=300):
+    def validate_cedula(self, cedula, tipo_doc="CC", timeout=300):
         """
         Validates a single cedula using Selenium (requires manual CAPTCHA).
         Opens the site, inputs cedula, waits for user to solve captcha and submit.
@@ -156,12 +174,15 @@ class ValidatorAdresWeb:
             # Simulate pressing ENTER as requested
             inp_doc.send_keys(Keys.RETURN)
             
-            # Select CC (TipoDoc)
+            # Select TipoDoc
             try:
                 from selenium.webdriver.support.ui import Select
                 select_elem = self.driver.find_element(By.ID, "tipoDoc")
                 select = Select(select_elem)
-                select.select_by_value("1")
+                
+                # Map value
+                val_to_select = self.tipo_doc_map.get(str(tipo_doc).upper(), "1")
+                select.select_by_value(val_to_select)
             except:
                 pass
             
@@ -221,6 +242,7 @@ class ValidatorAdresWeb:
             # Table 2 Keys: ESTADO, ENTIDAD, REGIMEN, FECHA DE AFILIACIÓN EFECTIVA, FECHA DE FINALIZACIÓN DE AFILIACIÓN, TIPO DE AFILIADO
 
             result = {
+                "Tipo Doc": tipo_doc,
                 "Cedula": str(cedula),
                 "Nombres": f"{data.get('NOMBRES', '')} {data.get('APELLIDOS', '')}".strip(),
                 "Apellidos": data.get("APELLIDOS", ""),
@@ -246,7 +268,7 @@ class ValidatorAdresWeb:
         except Exception as e:
             return {"Cedula": cedula, "Estado": "Error", "Entidad": str(e)}
 
-    def process_massive(self, df, cedula_col, progress_callback=None):
+    def process_massive(self, df, cedula_col, tipo_doc_col=None, default_tipo_doc="CC", progress_callback=None):
         results = []
         total = len(df)
         
@@ -256,12 +278,16 @@ class ValidatorAdresWeb:
             for i, row in df.iterrows():
                 cedula = row[cedula_col]
                 
+                tipo_doc = default_tipo_doc
+                if tipo_doc_col and tipo_doc_col in row and pd.notna(row[tipo_doc_col]):
+                    tipo_doc = str(row[tipo_doc_col]).strip()
+
                 # Validate
-                res = self.validate_cedula(cedula, timeout=120) # 2 mins per captcha
+                res = self.validate_cedula(cedula, tipo_doc=tipo_doc, timeout=120) # 2 mins per captcha
                 results.append(res)
                 
                 if progress_callback:
-                    progress_callback(i + 1, total, message=f"Procesando Cédula: {cedula} (Resuelva Captcha si es necesario)...")
+                    progress_callback(i + 1, total, message=f"Procesando: {tipo_doc} {cedula} (Resuelva Captcha)...")
                     
         finally:
             self.close_driver()

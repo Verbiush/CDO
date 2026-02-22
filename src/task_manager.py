@@ -98,12 +98,8 @@ def show_task_notifications():
             # Mark as seen
             task["seen"] = True
 
-def render_task_center():
-    """Renderiza el centro de tareas en la barra lateral."""
-    if "bg_tasks" not in st.session_state:
-        return
 
-def render_task_items(container, tasks):
+def render_task_items(container, tasks, key_prefix=""):
     """Renderiza la lista de tareas en un contenedor dado."""
     for task in tasks:
         container.markdown(f"**{task['name']}**")
@@ -142,7 +138,7 @@ def render_task_items(container, tasks):
                             data=data,
                             file_name=file_info["name"],
                             mime=file_info.get("mime", "application/octet-stream"),
-                            key=f"dl_{task['id']}_{i}"
+                            key=f"{key_prefix}dl_{task['id']}_{i}"
                         )
                 elif not msg:
                      # Si es un diccionario vacío o sin claves conocidas, mostrar algo genérico
@@ -172,7 +168,7 @@ def render_task_items(container, tasks):
                             data=file_data,
                             file_name=f"Resultado_{task['name']}.xlsx", # Default name
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            key=f"dl_{task['id']}"
+                            key=f"{key_prefix}dl_{task['id']}"
                         )
                     else:
                          container.write("✅ Finalizado (Sin archivo descargable)")
@@ -183,14 +179,14 @@ def render_task_items(container, tasks):
         elif status == "FAILED":
             container.error(f"Falló: {task.get('error')}")
             
-        if container.button("Limpiar", key=f"clr_{task['id']}", help="Eliminar de la lista"):
+        if container.button("Limpiar", key=f"{key_prefix}clr_{task['id']}", help="Eliminar de la lista"):
             del st.session_state.bg_tasks[task['id']]
             st.rerun()
             
         container.divider()
 
-def render_task_center():
-    """Renderiza el centro de tareas en la barra lateral."""
+def render_task_center(container=None, key_prefix=""):
+    """Renderiza el centro de tareas en el contenedor dado (o sidebar por defecto)."""
     if "bg_tasks" not in st.session_state:
         return
 
@@ -206,10 +202,13 @@ def render_task_center():
                 has_running = True
                 break
 
-        with st.sidebar.expander("🔔 Centro de Tareas", expanded=True):
-            # Limit to last 5 tasks for sidebar to avoid clutter
-            render_task_items(st.sidebar, tasks[:5])
-            
-    if has_running:
-        time.sleep(1)
-        st.rerun()
+        if container:
+            # Render directly into the provided container
+            render_task_items(container, tasks[:5], key_prefix=key_prefix)
+        else:
+            # Default to sidebar expander if no container provided
+            with st.sidebar.expander("🔔 Centro de Tareas", expanded=True):
+                render_task_items(st.sidebar, tasks[:5], key_prefix=f"{key_prefix}sidebar_")
+        if has_running:
+            time.sleep(0.1)
+            st.rerun()

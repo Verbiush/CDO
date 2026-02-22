@@ -49,6 +49,41 @@ def init_db():
         )
         ''')
         conn.commit()
+
+        # Create document records table (Gestión Documental)
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS document_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nro_estudio TEXT,
+            descripcion TEXT,
+            eps TEXT,
+            tipo_doc TEXT,
+            no_doc TEXT,
+            nombre_completo TEXT,
+            nombre_tercero TEXT,
+            fecha_ingreso TEXT,
+            fecha_salida TEXT,
+            autorizacion TEXT,
+            no_factura TEXT,
+            fecha_factura TEXT,
+            tipo_pago TEXT,
+            valor_servicio TEXT,
+            copago TEXT,
+            total TEXT,
+            regimen TEXT DEFAULT 'SUBSIDIADO',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'PENDING'
+        )
+        ''')
+        conn.commit()
+
+        # Check for missing columns in document_records (Migration)
+        cursor.execute("PRAGMA table_info(document_records)")
+        columns = [info[1] for info in cursor.fetchall()]
+        if "regimen" not in columns:
+            print("Migrating document_records: Adding 'regimen' column...")
+            cursor.execute("ALTER TABLE document_records ADD COLUMN regimen TEXT DEFAULT 'SUBSIDIADO'")
+            conn.commit()
         
         # Check if we need to migrate from JSON
         cursor.execute("SELECT count(*) FROM users")
@@ -107,8 +142,8 @@ def check_login(username, password):
     """Verifies username and password."""
     user = get_user(username)
     if user and user["password"] == password:
-        return True
-    return False
+        return user
+    return None
 
 def update_user_last_path(username, path):
     """Updates the last_path for a user."""

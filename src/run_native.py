@@ -80,29 +80,40 @@ def deploy_to_appdata(src_dir):
     # We preserve .json files (config, session) if they exist
     
     try:
+        # 1. Copy SRC content
         for item in os.listdir(src_dir):
             s = os.path.join(src_dir, item)
             d = os.path.join(app_data_dir, item)
             
             if os.path.isdir(s):
-                # For directories (like 'pages' or 'assets'), we copy recursively
-                # For simplicity, we can remove and recopy, OR merge.
-                # Let's remove and recopy code folders to ensure updates.
-                # But 'temp_sessions' should be preserved or cleaned.
                 if item in ["__pycache__", "temp_sessions", "temp_uploads"]:
                     continue
-                    
                 if os.path.exists(d):
-                    # Check if it's a data folder? Assuming code folders for now.
                     shutil.rmtree(d)
                 shutil.copytree(s, d)
             else:
-                # File
-                # Don't overwrite config/session files
                 if item.endswith(".json") and os.path.exists(d):
                     continue
                 shutil.copy2(s, d)
-                
+
+        # 2. Copy ASSETS content (if exists in parent of src)
+        # src_dir is usually .../src
+        # assets is usually .../assets
+        parent_src = os.path.dirname(src_dir)
+        assets_src = os.path.join(parent_src, "assets")
+        
+        # Destination for assets: sibling of 'app' folder -> .../CDO_Organizer/assets
+        parent_dst = os.path.dirname(app_data_dir)
+        assets_dst = os.path.join(parent_dst, "assets")
+
+        if os.path.exists(assets_src) and os.path.isdir(assets_src):
+            log_debug(f"Deploying assets from {assets_src} to {assets_dst}")
+            if os.path.exists(assets_dst):
+                shutil.rmtree(assets_dst)
+            shutil.copytree(assets_src, assets_dst)
+        else:
+            log_debug(f"Assets not found at {assets_src}, skipping.")
+
         log_debug("Deployment successful")
         return app_data_dir
     except Exception as e:
