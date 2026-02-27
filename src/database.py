@@ -11,7 +11,8 @@ if getattr(sys, 'frozen', False):
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DB_FILE = os.path.join(BASE_DIR, "users.db")
+# Allow overriding DB path via environment variable (useful for Docker/Cloud)
+DB_FILE = os.getenv("DB_PATH", os.path.join(BASE_DIR, "users.db"))
 USERS_JSON = os.path.join(BASE_DIR, "users.json")
 
 # Lock for thread safety within the same process

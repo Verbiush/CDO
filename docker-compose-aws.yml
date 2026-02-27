@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile_AWS
+    container_name: cdo_app
+    ports:
+      - "8501:8501"
+    environment:
+      - PORT=8501
+      - DB_PATH=/data/users.db
+      - TZ=America/Bogota
+    volumes:
+      - ./data:/data
+    restart: always

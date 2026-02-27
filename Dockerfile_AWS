@@ -1,0 +1,34 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    software-properties-common \
+    python3-tk \
+    chromium \
+    chromium-driver \
+    pandoc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copiar requirements para AWS (Linux)
+COPY requirements_aws.txt .
+
+# Instalar dependencias de Python
+RUN pip3 install --no-cache-dir -r requirements_aws.txt
+
+# Copiar todo el código
+COPY . .
+
+# Variables de entorno por defecto
+ENV PORT=8501
+ENV STREAMLIT_SERVER_PORT=8501
+ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+
+# Exponer el puerto
+EXPOSE 8501
+
+# Comando de inicio
+CMD ["streamlit", "run", "src/app_web.py", "--server.port=8501", "--server.address=0.0.0.0"]
