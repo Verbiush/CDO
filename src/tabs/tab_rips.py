@@ -7,48 +7,12 @@ import time
 import shutil
 
 try:
-    from src.gui_utils import abrir_dialogo_carpeta_nativo
+    from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector
 except ImportError:
     abrir_dialogo_carpeta_nativo = None
+    render_path_selector = None
 
 # --- HELPERS ---
-
-def render_path_selector(label, key):
-    # Auto-fill logic
-    if key not in st.session_state:
-        st.session_state[key] = st.session_state.get("current_path", "")
-    elif not st.session_state[key]:
-        st.session_state[key] = st.session_state.get("current_path", "")
-
-    is_native = st.session_state.get("force_native_mode", True)
-    
-    if is_native:
-        col1, col2 = st.columns([0.85, 0.15])
-        with col1:
-            # Sync logic similar to gui_utils
-            current_val = st.session_state.get(key, "")
-            val = st.text_input(label, value=current_val, key=f"input_{key}")
-            if val != current_val:
-                st.session_state[key] = val
-        with col2:
-            st.write("")
-            st.write("")
-            if abrir_dialogo_carpeta_nativo:
-                if st.button("📂", key=f"browse_{key}", help="Seleccionar carpeta"):
-                    # Use current input value as start dir if valid
-                    start_dir = val if val and os.path.isdir(val) else st.session_state.get("current_path", "")
-                    new_path = abrir_dialogo_carpeta_nativo(label, start_dir)
-                    if new_path:
-                        st.session_state[key] = new_path
-                        st.rerun()
-            else:
-                st.write("")
-        return st.session_state.get(key, "")
-    else:
-        # Modo Web: Input de texto simple
-        help_txt = "Ruta del entorno de trabajo (cargado desde ZIP en 'Búsqueda y Gestión')"
-        val = st.text_input(label, key=key, help=help_txt)
-        return val
 
 def get_val_ci(data_dict, key):
     if not isinstance(data_dict, dict): return None

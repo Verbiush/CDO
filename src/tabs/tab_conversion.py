@@ -8,10 +8,21 @@ import tempfile
 import pandas as pd
 
 try:
-    from gui_utils import seleccionar_carpeta_nativa
+    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector
 except ImportError:
-    def seleccionar_carpeta_nativa(title="Seleccionar Carpeta", initial_dir=None, key=None):
-        return st.text_input(f"{title}", value=initial_dir if initial_dir else "", key=key or f"fallback_{title}")
+    try:
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector
+    except ImportError:
+        abrir_dialogo_carpeta_nativo = None
+        def update_path_key(key, new_path, widget_key=None):
+            if new_path:
+                st.session_state[key] = new_path
+                if widget_key:
+                    st.session_state[widget_key] = new_path
+        
+        def render_path_selector(label, key, default_path=None, help_text=None):
+            st.warning("render_path_selector no disponible")
+            return default_path
 
 try:
     from pdf2docx import Converter
@@ -41,6 +52,12 @@ def _jpg_a_pdf(input_path, output_path):
 def _docx_a_pdf(input_path, output_path):
     if HAS_DOCX2PDF:
         # docx2pdf requires absolute paths
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+        except ImportError:
+            pass
+            
         convert_docx_to_pdf(os.path.abspath(input_path), os.path.abspath(output_path))
     else:
         raise ImportError("Librería docx2pdf no disponible o no compatible (requiere MS Word en Windows).")
@@ -187,6 +204,8 @@ def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=','):
             else: print(f"Error convirtiendo {f}: {msg}")
             
     progress_bar.progress(1.0, text="Finalizado.")
+    if count == 0:
+        return 0, "No se encontraron archivos compatibles para el tipo de conversión seleccionado."
     return count, f"Procesados {count} archivos."
 
 # --- RENDER ---
@@ -246,7 +265,15 @@ def render(container=None):
                     file_to_process = uploaded_file
             else:
                 # Carpeta Actual
-                current_path = st.session_state.get("current_path", os.getcwd())
+                # Permitir seleccionar una carpeta diferente como origen
+                current_path_default = st.session_state.get("current_path", os.getcwd())
+                
+                current_path = render_path_selector(
+                    label="Carpeta Origen (Individual)",
+                    key="conv_ind_source_path",
+                    default_path=current_path_default
+                )
+                
                 st.info(f"📁 Buscando archivos en: {current_path}")
                 
                 # Filter files based on conversion type
@@ -269,16 +296,17 @@ def render(container=None):
                 else:
                     st.warning(f"No se encontraron archivos compatibles con {conv_type_label} en la carpeta actual.")
 
-            # 3. Guardar en
-            st.write("**Ubicación de Salida:**")
-            ind_save_option = st.radio("Ubicación de Salida", ["Carpeta Principal (Por defecto)", "Otra Carpeta"], label_visibility="collapsed", key="ind_save_mode")
+            # 3. Output Folder
+            st.markdown("### 3. Carpeta de Salida")
             
             default_save = st.session_state.get("current_path", os.getcwd())
-            if ind_save_option == "Otra Carpeta":
-                output_folder = seleccionar_carpeta_nativa("Seleccionar Carpeta:", initial_dir=default_save, key="conv_ind_out")
-            else:
-                output_folder = default_save
-                st.info(f"Se guardará en: {output_folder}")
+            if not default_save: default_save = os.getcwd()
+            
+            output_folder = render_path_selector(
+                label="Carpeta Destino",
+                key="conv_ind_out",
+                default_path=default_save
+            )
 
             # 4. Action
             st.write("")
@@ -330,8 +358,20 @@ def render(container=None):
         with tab_mass:
             st.markdown("### Configuración de Conversión Masiva")
             
-            # 1. Carpeta Objetivo
-            target_folder = seleccionar_carpeta_nativa("Carpeta Objetivo:", initial_dir=st.session_state.get("current_path", os.getcwd()), key="conv_mass_target")
+            # 1. Carpeta Objetivo (Origen)
+            st.write("**Carpeta Origen:**")
+            
+            # Determinar ruta origen a mostrar/usar
+            current_global_path = st.session_state.get("current_path", os.getcwd())
+            if not current_global_path: current_global_path = os.getcwd()
+            
+            source_path = render_path_selector(
+                label="Ruta Origen",
+                key="conv_mass_target",
+                default_path=current_global_path
+            )
+            
+            target_folder = source_path
             
             # 2. Tipo de Conversión Masiva
             st.write("**Tipo de Conversión Masiva:**")
@@ -346,23 +386,27 @@ def render(container=None):
                 sep_map = {"Coma (,)": ",", "Punto y coma (;)": ";", "Pipe (|)": "|"}
                 mass_sep = sep_map[mass_sep_label]
 
-            # 3. Guardar en
+            # 3. Guardar en (Destino)
             st.write("**Ubicación de Salida:**")
-            mass_save_option = st.radio("Ubicación de Salida", ["Carpeta de Origen (Por defecto)", "Otra Carpeta"], label_visibility="collapsed", key="mass_save_mode")
             
-            target_output = None
-            if mass_save_option == "Otra Carpeta":
-                default_save_mass = st.session_state.get("current_path", os.getcwd())
-                target_output = seleccionar_carpeta_nativa("Seleccionar Carpeta:", initial_dir=default_save_mass, key="conv_mass_out")
-            else:
-                st.info("Los archivos convertidos se guardarán en la misma carpeta que los originales.")
+            target_output = render_path_selector(
+                label="Carpeta Salida",
+                key="conv_mass_out",
+                default_path=target_folder
+            )
+            
+            use_custom_out = st.session_state.get("cb_use_custom_conv_mass_out", False)
 
             # 4. Execute
             st.write("")
             if st.button("🚀 Ejecutar Conversión Masiva", key="btn_exec_mass"):
                 if target_folder and os.path.exists(target_folder):
-                    # Si target_output está vacío, usamos None para que worker_convertir_archivo use carpeta origen
-                    final_output = target_output if target_output.strip() else None
+                    # Si no se usa ruta personalizada, es None (In Place)
+                    if not use_custom_out:
+                        final_output = None
+                    else:
+                        final_output = target_output
+                        
                     count, msg = worker_convertir_masivo(target_folder, mass_conv_type_code, output_folder=final_output, sep=mass_sep)
                     if count > 0:
                         st.success(msg)

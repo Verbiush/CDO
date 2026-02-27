@@ -1,175 +1,162 @@
-import os
-import time
 import streamlit as st
-import tempfile
-import shutil
-import zipfile
-
-# Global timestamp to prevent rapid-fire dialog openings (debounce)
-_last_dialog_time = 0
+import os
+import tkinter as tk
+from tkinter import filedialog
+import time
 
 def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
     """
-    Función BLOQUEANTE que abre el diálogo nativo de Tkinter.
-    Debe ser llamada solo desde callbacks o cuando se sabe que es seguro bloquear.
-    NO llamar directamente en el bucle de renderizado de Streamlit sin un botón previo.
+    Abre un diálogo de selección de carpeta nativo usando Tkinter.
+    Retorna la ruta seleccionada o None si se cancela.
     """
-    global _last_dialog_time
-    
-    # Debounce check (2 seconds cooldown)
-    current_time = time.time()
-    if current_time - _last_dialog_time < 2.0:
-        print("Ignorando llamada a diálogo nativo (debounce activo)")
-        return None
-        
-    _last_dialog_time = current_time
-
-    # 0. Validación básica de entorno
     try:
-        if os.environ.get("STREAMLIT_SERVER_HEADLESS") == "true":
-             return None
-    except Exception:
-        pass
-
-    # 1. Intentar usar Agente Local
-    try:
-        agent_client = None
-        try:
-            import agent_client
-        except ImportError:
-            try:
-                from src import agent_client
-            except ImportError:
-                pass
+        # Verificar si estamos en un entorno compatible (local)
+        # En Streamlit Cloud esto no funcionará, pero asumimos entorno local Windows
+        root = tk.Tk()
+        root.withdraw()  # Ocultar la ventana principal
+        root.wm_attributes('-topmost', 1)  # Mantener siempre encima
         
-        if agent_client and hasattr(agent_client, 'is_agent_available') and agent_client.is_agent_available():
-            folder = agent_client.select_folder()
-            return folder
+        if not initial_dir:
+            initial_dir = os.getcwd()
+            
+        folder_path = filedialog.askdirectory(title=title, initialdir=initial_dir)
+        
+        root.destroy()
+        return folder_path if folder_path else None
     except Exception as e:
-        print(f"Advertencia: No se pudo contactar al agente local: {e}")
-
-    # 2. Intentar usar Tkinter (Nativo)
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        
-        try:
-            root = tk.Tk()
-            root.withdraw() # Ocultar ventana principal
-            root.attributes('-topmost', True) # Forzar al frente
-            
-            # Asegurar que initial_dir sea válido
-            if initial_dir and isinstance(initial_dir, str) and not os.path.isdir(initial_dir):
-                initial_dir = None
-            
-            # Abrir diálogo
-            folder = filedialog.askdirectory(
-                master=root, 
-                title=title, 
-                initialdir=initial_dir
-            )
-            
-            # Destruir root
-            try:
-                root.destroy()
-            except:
-                pass
-            
-            if not folder:
-                return None
-            
-            return os.path.normpath(folder)
-
-        except Exception as e:
-            print(f"Error Tkinter: {e}")
-            return None
-            
-    except ImportError:
-        print("Tkinter no instalado.")
+        st.error(f"Error al abrir selector nativo: {e}")
         return None
 
-def seleccionar_carpeta_nativa(title="Seleccionar Carpeta", initial_dir=None, key=None):
+def abrir_dialogo_archivo_nativo(title="Seleccionar Archivo", initial_dir=None, file_types=None):
     """
-    Componente UI de Streamlit para seleccionar carpeta.
-    En Modo Web: Muestra un uploader para crear un entorno de trabajo temporal y permite descargar resultados.
-    En Modo Nativo: Muestra la ruta actual y un botón 'Examinar' que abre el diálogo.
-    Retorna la ruta seleccionada (o temporal).
+    Abre un diálogo de selección de archivo nativo usando Tkinter.
+    Retorna la ruta seleccionada o None si se cancela.
     """
-    # Verificar modo nativo (Configuración General)
-    is_native = st.session_state.get("force_native_mode", True)
-    
-    # Generar key única si no existe
-    # IMPORTANTE: Usar una key estable basada en el título para mantener el estado entre reruns.
-    safe_title = "".join(c for c in title if c.isalnum() or c in ('_', '-')).strip()
-    if not key:
-        key = f"folder_selector_{safe_title}"
-    
-    # Inicializar estado si es necesario
-    last_initial_key = f"last_initial_{key}"
-    
-    if key not in st.session_state:
-        st.session_state[key] = initial_dir if initial_dir else os.getcwd()
-        if initial_dir:
-            st.session_state[last_initial_key] = initial_dir
-    else:
-        # Lógica inteligente para actualizar la ruta si el initial_dir cambia globalmente
-        # (ej: usuario cambia carpeta en pestaña Búsqueda y queremos que se propague aquí)
+    try:
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', 1)
         
-        # 1. Recuperar último initial_dir conocido para este widget
-        last_known = st.session_state.get(last_initial_key)
-        
-        # 2. Si initial_dir cambió respecto a la última vez, actualizamos el widget
-        if initial_dir and initial_dir != last_known:
-            st.session_state[key] = initial_dir
-            st.session_state[last_initial_key] = initial_dir
-        
-        # 3. Fallback: Heurística eliminada para evitar sobrescrituras accidentales
-        # Si last_known no existe, confiamos en el valor actual de st.session_state[key]
-        # para evitar que el input del usuario sea reemplazado por initial_dir.
-
-    if not is_native:
-        # --- MODO WEB LOCAL: Entrada de Texto Directa ---
-        # El usuario prefiere escribir/pegar la ruta localmente en lugar de usar un entorno aislado.
-        
-        # Sincronizar con cambios externos (search bar)
-        if key not in st.session_state:
-             st.session_state[key] = initial_dir if initial_dir else os.getcwd()
-
-        # Renderizar input de texto
-        # Usamos key=key para que Streamlit gestione el estado, pero permitimos actualizaciones externas
-        # Si initial_dir cambió (detectado arriba), st.session_state[key] ya está actualizado.
-        
-        val = st.text_input(f"📂 {title}", value=st.session_state[key], key=f"input_{key}")
-        
-        # Sincronización bidireccional
-        if val != st.session_state[key]:
-            st.session_state[key] = val
-            # Forzar actualización si es necesario (generalmente no lo es con key propia)
+        if not initial_dir:
+            initial_dir = os.getcwd()
             
-        return val
+        if not file_types:
+            file_types = [("Todos los archivos", "*.*")]
+            
+        file_path = filedialog.askopenfilename(title=title, initialdir=initial_dir, filetypes=file_types)
+        
+        root.destroy()
+        return file_path if file_path else None
+    except Exception as e:
+        st.error(f"Error al abrir selector de archivo nativo: {e}")
+        return None
 
-    # --- MODO NATIVO: UI Compuesta ---
-    col1, col2 = st.columns([0.85, 0.15])
+def update_path_key(key, new_path, widget_key=None):
+    """
+    Actualiza una clave en session_state con la nueva ruta.
+    Opcionalmente actualiza también la clave del widget de texto asociado.
+    """
+    if new_path:
+        st.session_state[key] = new_path
+        if widget_key:
+            st.session_state[widget_key] = new_path
+        # No llamamos a st.rerun() aquí para evitar bucles, el cambio de estado disparará la actualización reactiva si es necesario
+        # o el usuario puede continuar.
+
+def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
+    """
+    Renderiza un selector de ruta estandarizado con checkbox 'Escoger ruta diferente'.
+    Si omit_checkbox es True, el selector siempre está activo y no muestra el checkbox.
+    Retorna la ruta seleccionada.
+    """
+    if default_path is None:
+        default_path = st.session_state.get("current_path", os.getcwd())
+
+    # Checkbox state
+    cb_key = f"cb_use_custom_{key}"
+    if omit_checkbox:
+        use_custom = True
+    else:
+        use_custom = st.checkbox("Escoger ruta diferente a la inicial", value=False, key=cb_key)
+
+    # Determine target path
+    if use_custom:
+        # Initialize if not set
+        if key not in st.session_state:
+            st.session_state[key] = default_path
+        target_path = st.session_state[key]
+    else:
+        target_path = default_path
+        # Sync key if needed (optional, but good for consistency)
+        st.session_state[key] = target_path
+
+    col1, col2 = st.columns([0.8, 0.2])
     
     with col1:
-        # Mostrar ruta actual como input editable
-        current_path = st.session_state.get(key, "")
-        val = st.text_input(title, value=current_path, key=f"input_{key}")
-        
-        # Sincronización si se edita manualmente
-        if val != current_path:
-            st.session_state[key] = val
-        
+        input_key = f"input_{key}"
+        if use_custom:
+            # Active input with on_change sync
+            # Note: lambda inside on_change captures variables, but here input_key is local string, which is fine.
+            # However, st.session_state[input_key] needs to be accessed dynamically.
+            st.text_input(label, value=target_path, key=input_key, help=help_text,
+                          on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
+        else:
+            # Disabled input
+            st.text_input(label, value=target_path, key=f"{input_key}_disabled", disabled=True, help=help_text)
+
     with col2:
-        st.write("")
-        st.write("")
-        # Botón para abrir diálogo
-        if st.button("📂", key=f"btn_browse_{key}", help="Examinar carpeta..."):
-            # Usar el valor actual del input como inicio si es válido
-            start_dir = val if val and os.path.isdir(val) else (current_path if current_path else None)
-            new_path = abrir_dialogo_carpeta_nativo(title, start_dir)
-            if new_path:
-                st.session_state[key] = new_path
-                st.rerun()
-                
-    return st.session_state.get(key, "")
+        st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
+        # Button to open dialog
+        btn_key = f"btn_{key}"
+        st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom,
+                  on_click=lambda: update_path_key(key, abrir_dialogo_carpeta_nativo(initial_dir=target_path), widget_key=input_key))
+
+    return target_path
+
+def render_file_selector(label, key, default_path=None, help_text=None, file_types=None, omit_checkbox=False):
+    """
+    Renderiza un selector de archivo estandarizado con checkbox 'Escoger archivo diferente'.
+    Si omit_checkbox es True, el selector siempre está activo y no muestra el checkbox.
+    Retorna la ruta seleccionada.
+    """
+    if default_path is None:
+        default_path = st.session_state.get("current_path", os.getcwd())
+
+    # Checkbox state
+    cb_key = f"cb_use_custom_file_{key}"
+    if omit_checkbox:
+        use_custom = True
+    else:
+        use_custom = st.checkbox("Escoger archivo diferente", value=False, key=cb_key)
+
+    # Determine target path
+    if use_custom:
+        # Initialize if not set
+        if key not in st.session_state:
+            st.session_state[key] = default_path
+        target_path = st.session_state[key]
+    else:
+        target_path = default_path
+        # Sync key if needed
+        st.session_state[key] = target_path
+
+    col1, col2 = st.columns([0.8, 0.2])
+    
+    with col1:
+        input_key = f"input_{key}"
+        if use_custom:
+            # Active input with on_change sync
+            st.text_input(label, value=target_path, key=input_key, help=help_text,
+                          on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
+        else:
+            # Disabled input
+            st.text_input(label, value=target_path, key=f"{input_key}_disabled", disabled=True, help=help_text)
+
+    with col2:
+        st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
+        # Button to open dialog
+        btn_key = f"btn_{key}"
+        st.button("📄", key=btn_key, help="Seleccionar Archivo", disabled=not use_custom,
+                  on_click=lambda: update_path_key(key, abrir_dialogo_archivo_nativo(initial_dir=os.path.dirname(target_path) if os.path.isfile(target_path) else target_path, file_types=file_types), widget_key=input_key))
+
+    return target_path

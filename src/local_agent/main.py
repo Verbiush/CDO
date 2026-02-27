@@ -48,9 +48,11 @@ logger = logging.getLogger("LocalAgent")
 
 # Import Modules
 try:
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    # Also add parent dir if running from source
-    sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    if not getattr(sys, 'frozen', False):
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        # Also add parent dir if running from source
+        sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    
     from modules.ovida_validator import OvidaValidator
     # from modules.registraduria_validator import ValidatorRegistraduria
     # from modules.adres_validator import ValidatorAdres, ValidatorAdresWeb

@@ -19,21 +19,22 @@ except ImportError:
     Document = None
 
 # Imports from project
-try:
-    from task_manager import submit_task
-    from database import update_user_last_path
-except ImportError:
-    from src.task_manager import submit_task
-    from src.database import update_user_last_path
+
 
 try:
-    from src.gui_utils import seleccionar_carpeta_nativa, abrir_dialogo_carpeta_nativo
+    from gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key
 except ImportError:
     try:
-        from gui_utils import seleccionar_carpeta_nativa, abrir_dialogo_carpeta_nativo
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key
     except ImportError:
-        seleccionar_carpeta_nativa = None
         abrir_dialogo_carpeta_nativo = None
+        
+        def render_path_selector(label, key, default_path=None, help_text=None):
+            st.warning("render_path_selector no disponible")
+            return default_path
+            
+        def update_path_key(key, new_path, widget_key=None):
+             pass
 
 # --- HELPER FUNCTIONS ---
 
@@ -94,27 +95,7 @@ def undo_last_action():
     time.sleep(1.5)
     st.rerun()
 
-def update_path_key(key, title="Seleccionar Carpeta"):
-    """Callback para actualizar una ruta en session_state desde un botón."""
-    # Check mode first!
-    if not st.session_state.get("force_native_mode", True):
-        st.toast("⚠️ Modo Web: La selección nativa de carpetas no está disponible. Ingrese la ruta manualmente.")
-        return
 
-    initial_dir = st.session_state.get(key) or st.session_state.get("current_path")
-    
-    # Use blocking function inside callback
-    if abrir_dialogo_carpeta_nativo:
-        sel = abrir_dialogo_carpeta_nativo(title, initial_dir)
-        if sel:
-            st.session_state[key] = sel
-    elif seleccionar_carpeta_nativa:
-        # Fallback only if blocking function not available (shouldn't happen)
-        st.warning("Usando selector no bloqueante en callback (puede fallar).")
-        sel = seleccionar_carpeta_nativa(title, initial_dir) 
-        if sel: st.session_state[key] = sel
-    else:
-        st.error("Función de selección de carpeta no disponible.")
 
 def funcion_no_implementada(nombre):
     st.toast(f"⚠️ Función '{nombre}' simulada en versión web.")
@@ -125,9 +106,10 @@ def buscar_archivos_wrapper():
     buscar_archivos()
 
 def buscar_archivos():
-    path = st.session_state.get("current_path", os.path.expanduser("~"))
-    if not os.path.exists(path):
-        st.error(f"La ruta no existe: {path}")
+    path = st.session_state.get("current_path", "")
+    
+    if not path or not os.path.exists(path):
+        st.warning("⚠️ Por favor, seleccione una carpeta válida para analizar.")
         return
 
     pattern_input = st.session_state.get("pattern", "")
@@ -419,9 +401,14 @@ def worker_editar_texto(file_list, search_text, replace_text, silent_mode=False)
                             modified = True
                     else:
                         log(f"No se puede procesar DOCX (python-docx no disponible): {file_path}")
+                        errors += 1
+                        if not silent_mode:
+                            st.warning(f"Omitido {os.path.basename(file_path)}: Falta 'python-docx'")
                 except Exception as e:
                     log(f"Error procesando DOCX {file_path}: {e}")
                     errors += 1
+                    if not silent_mode:
+                        st.error(f"Error en {os.path.basename(file_path)}: {e}")
             
             if modified:
                 count += 1
@@ -430,6 +417,8 @@ def worker_editar_texto(file_list, search_text, replace_text, silent_mode=False)
         except Exception as e:
             log(f"Error general en {file_path}: {e}")
             errors += 1
+            if not silent_mode:
+                st.error(f"Error en {os.path.basename(file_path)}: {e}")
             
     msg = f"Proceso finalizado. Archivos modificados: {count}. Errores: {errors}"
     if not silent_mode:
@@ -487,6 +476,7 @@ def worker_copiar_lista(file_list, target_folder, silent_mode=False):
         progress_bar.progress(1.0, text="Finalizado.")
         st.success(msg)
         time.sleep(1.5)
+        st.rerun()
     return msg
 
 def run_copiar_lista_task(file_list, target_folder):
@@ -582,6 +572,8 @@ def worker_zip_lista(file_list, target_zip_path, silent_mode=False):
         if not silent_mode:
             progress_bar.progress(1.0, text="Finalizado.")
             st.success(msg)
+            time.sleep(1.5)
+            st.rerun()
         return msg
     except Exception as e:
         msg = f"Error creando ZIP: {e}"
@@ -709,15 +701,15 @@ def dialogo_modificar_nombres():
     col_cancel, col_ok = st.columns([1, 1])
     with col_ok:
         if st.button("✅ Ejecutar Cambios", use_container_width=True):
-            submit_task("Renombrado Masivo", run_renombrar_task, st.session_state.search_results,
+            procesar_renombrado(st.session_state.get("search_results", []),
                 activar_full, nuevo_nombre, 
                 activar_sust, buscar_txt, reemplazar_txt, 
                 eliminar_id, 
                 activar_pre, prefijo, 
                 activar_suf, sufijo,
-                activar_num, inicio_num
+                activar_num, inicio_num,
+                silent_mode=False
             )
-            st.info("✅ Tarea iniciada en segundo plano. Revisa el 'Centro de Tareas'.")
             
     with col_cancel:
         if st.button("❌ Cancelar", use_container_width=True):
@@ -728,11 +720,14 @@ def dialogo_editar_texto():
     st.write("Esta acción buscará y reemplazará texto en los archivos listados en la búsqueda.")
     st.warning("Aplica a archivos de texto plano (.txt, .json, .xml, .py, etc.) y documentos Word (.docx).")
     
-    if not st.session_state.search_results:
+    if Document is None:
+        st.warning("⚠️ La librería 'python-docx' no está instalada. No se podrán editar archivos .docx.")
+    
+    if not st.session_state.get("search_results", []):
         st.error("No hay archivos en la lista de resultados.")
         return
 
-    st.info(f"Archivos a procesar: {len(st.session_state.search_results)}")
+    st.info(f"Archivos a procesar: {len(st.session_state.get('search_results', []))}")
     
     search_text = st.text_input("Texto a buscar:")
     replace_text = st.text_input("Reemplazar con:")
@@ -742,113 +737,106 @@ def dialogo_editar_texto():
             st.warning("Debes ingresar el texto a buscar.")
             return
             
-        submit_task("Editar Texto Masivo", run_editar_texto_task, st.session_state.search_results, search_text, replace_text)
-        st.info("✅ Tarea iniciada en segundo plano. Revisa el 'Centro de Tareas'.")
+        worker_editar_texto(st.session_state.get("search_results", []), search_text, replace_text, silent_mode=False)
 
 @st.dialog("Copiar Archivos de Lista")
 def dialogo_copiar_lista():
     st.write("Copiará los archivos/carpetas de la lista de resultados a una nueva ubicación.")
     
-    if not st.session_state.search_results:
+    if not st.session_state.get("search_results", []):
         st.error("No hay elementos en la lista.")
         return
 
-    st.info(f"Elementos a copiar: {len(st.session_state.search_results)}")
+    st.info(f"Elementos a copiar: {len(st.session_state.get('search_results', []))}")
     
-    col_dest, col_browse = st.columns([0.85, 0.15])
-    with col_dest:
-        st.text_input("Carpeta Destino:", key="copy_dest_input", value=st.session_state.get("copy_dest_input", st.session_state.get("current_path", os.path.expanduser("~"))), help="Ruta absoluta donde se copiarán los archivos.")
-    with col_browse:
-        st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-        st.button("📂", key="btn_browse_copy", help="Examinar...", on_click=update_path_key, args=("copy_dest_input", "Seleccionar Destino"))
+    current_global_path = st.session_state.get("current_path", os.getcwd())
+    if not current_global_path: current_global_path = os.getcwd()
 
+    target_copy_path = render_path_selector(
+        label="Carpeta Destino:",
+        key="copy_dest_input",
+        default_path=current_global_path
+    )
+    
     if st.button("🚀 Copiar"):
         dest = st.session_state.get("copy_dest_input")
         if not dest:
             st.warning("Selecciona una carpeta destino.")
             return
-        submit_task("Copiar Lista", run_copiar_lista_task, st.session_state.search_results, dest)
-        st.info("✅ Tarea iniciada en segundo plano. Revisa el 'Centro de Tareas'.")
+        worker_copiar_lista(st.session_state.get("search_results", []), dest, silent_mode=False)
 
 @st.dialog("Mover Archivos de Lista")
 def dialogo_mover_lista():
     st.write("Moverá los archivos/carpetas de la lista de resultados a una nueva ubicación.")
     st.warning("Los archivos originales serán eliminados de su ubicación actual.")
     
-    if not st.session_state.search_results:
+    if not st.session_state.get("search_results", []):
         st.error("No hay elementos en la lista.")
         return
 
-    st.info(f"Elementos a mover: {len(st.session_state.search_results)}")
+    st.info(f"Elementos a mover: {len(st.session_state.get('search_results', []))}")
     
-    col_dest, col_browse = st.columns([0.85, 0.15])
-    with col_dest:
-        st.text_input("Carpeta Destino:", key="move_dest_input", value=st.session_state.get("move_dest_input", st.session_state.get("current_path", os.path.expanduser("~"))))
-    with col_browse:
-        st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-        st.button("📂", key="btn_browse_move", help="Examinar...", on_click=update_path_key, args=("move_dest_input", "Seleccionar Destino"))
+    # Selector de Ruta Estandarizado
+    target_move_path = render_path_selector(
+        label="Carpeta Destino",
+        key="move_dest_input",
+        default_path=st.session_state.get("current_path", os.getcwd()),
+        help_text="Donde se moverán los archivos."
+    )
 
     if st.button("🚀 Mover"):
-        dest = st.session_state.get("move_dest_input")
-        if not dest:
+        if not target_move_path:
             st.warning("Selecciona una carpeta destino.")
             return
-        submit_task("Mover Lista", run_mover_lista_task, st.session_state.search_results, dest)
-        st.info("✅ Tarea iniciada en segundo plano. Revisa el 'Centro de Tareas'.")
+        worker_mover_lista(st.session_state.get("search_results", []), target_move_path, silent_mode=False)
 
 @st.dialog("Comprimir Lista en ZIP")
 def dialogo_zip_lista():
     st.write("Creará un archivo ZIP con todos los elementos de la lista.")
     
-    if not st.session_state.search_results:
+    if not st.session_state.get("search_results", []):
         st.error("No hay elementos en la lista.")
         return
 
-    st.info(f"Elementos a comprimir: {len(st.session_state.search_results)}")
+    st.info(f"Elementos a comprimir: {len(st.session_state.get('search_results', []))}")
     
     zip_name = st.text_input("Nombre del archivo ZIP:", value="Archivos_Comprimidos.zip")
     
-    col_dest, col_browse = st.columns([0.85, 0.15])
-    with col_dest:
-         st.text_input("Carpeta Destino:", key="zip_dest_path", value=st.session_state.get("zip_dest_path", st.session_state.current_path))
-    with col_browse:
-         st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-         st.button("📂", key="btn_zip_dest", on_click=update_path_key, args=("zip_dest_path",))
+    # Selector de Ruta Estandarizado
+    target_zip_path = render_path_selector(
+        label="Carpeta Destino",
+        key="zip_dest_path",
+        default_path=st.session_state.get("current_path", os.getcwd()),
+        help_text="Donde se guardará el archivo ZIP."
+    )
     
     if st.button("🚀 Comprimir"):
         if not zip_name.endswith(".zip"): zip_name += ".zip"
-        dest = st.session_state.get("zip_dest_path", st.session_state.current_path)
-        target_path = os.path.join(dest, zip_name)
-        submit_task("ZIP Lista", run_zip_lista_task, st.session_state.search_results, target_path)
-        st.info("✅ Tarea iniciada en segundo plano. Revisa el 'Centro de Tareas'.")
+        
+        target_path = os.path.join(target_zip_path, zip_name)
+        worker_zip_lista(st.session_state.get("search_results", []), target_path, silent_mode=False)
 
 @st.dialog("Comprimir Carpetas Individualmente")
 def dialogo_zip_carpetas_individual():
     st.write("Buscará carpetas en la lista de resultados y creará un ZIP individual para cada una.")
     
-    if not st.session_state.search_results:
+    if not st.session_state.get("search_results", []):
         st.error("No hay elementos en la lista.")
         return
 
     # Filtrar solo carpetas
-    folders = [x for x in st.session_state.search_results if os.path.isdir(x["Ruta completa"])]
+    folders = [x for x in st.session_state.get("search_results", []) if os.path.isdir(x["Ruta completa"])]
     st.info(f"Carpetas encontradas en la lista: {len(folders)}")
     
     if len(folders) == 0:
         st.warning("No hay carpetas en la lista actual.")
         return
 
-    col_dest, col_browse = st.columns([0.85, 0.15])
-    with col_dest:
-         st.text_input("Carpeta Destino:", key="zip_ind_dest", value=st.session_state.get("zip_ind_dest", st.session_state.get("current_path", os.path.expanduser("~"))), help="Donde se guardarán los ZIPs generados.")
-    with col_browse:
-         st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-         st.button("📂", key="btn_zip_ind", on_click=update_path_key, args=("zip_ind_dest",))
+    target_zip_ind_path = render_path_selector("Carpeta Destino:", "zip_ind_dest", help_text="Donde se guardarán los ZIPs generados.")
         
     if st.button("🚀 Comprimir Carpetas"):
         dest = st.session_state.get("zip_ind_dest", st.session_state.get("current_path", os.path.expanduser("~")))
-        submit_task("ZIP Carpetas Individual", run_zip_carpetas_ind_task, st.session_state.search_results, dest)
-        st.info("✅ Tarea iniciada en segundo plano. Revisa el 'Centro de Tareas'.")
+        worker_zip_carpetas_individual(st.session_state.get("search_results", []), dest, silent_mode=False)
 
 @st.dialog("Confirmar Eliminación")
 def dialogo_confirmar_eliminar():
@@ -901,69 +889,7 @@ def dialogo_confirmar_eliminar():
 
 # --- RENDER FUNCTION ---
 
-def on_click_examinar(browse_func_arg=None):
-    """
-    Callback para el botón 'Examinar'.
-    Maneja la lógica de selección de carpeta.
-    """
-    # 1. Determinar el modo actual desde Session State (SSOT)
-    is_native = st.session_state.get("force_native_mode", True)
-    
-    # 2. Seleccionar función de búsqueda
-    func_to_use = None
-    
-    # Si estamos en modo nativo, intentamos usar la función nativa importada
-    if is_native:
-        # Use blocking function inside callback!
-        if abrir_dialogo_carpeta_nativo:
-            func_to_use = abrir_dialogo_carpeta_nativo
-        elif seleccionar_carpeta_nativa:
-             # Fallback (risky inside callback if it's UI component)
-             func_to_use = seleccionar_carpeta_nativa
-    else:
-        # En modo web, podríamos usar un explorador web custom si existiera
-        # Por ahora, mostramos mensaje y no hacemos nada
-        st.toast("Modo Web: Use el campo de texto para ingresar la ruta.")
-        return
 
-    # 3. Ejecutar
-    try:
-        current = st.session_state.get("current_path", os.getcwd())
-        # Llamar a la función (asumiendo que es bloqueante o retorna algo)
-        folder = None
-        if func_to_use:
-            # Algunas funciones pueden requerir argumentos diferentes, asumimos estándar (title, initial_dir)
-            try:
-                folder = func_to_use("Seleccionar Carpeta de Trabajo", current)
-            except TypeError:
-                # Fallback por si la función no acepta argumentos
-                try:
-                    folder = func_to_use()
-                except Exception:
-                    folder = None
-            except Exception as e:
-                print(f"Error ejecutando funcion de busqueda: {e}")
-                folder = None
-        
-        if folder:
-            st.session_state.current_path = os.path.normpath(folder)
-            st.session_state.path_input = st.session_state.current_path
-            # Sync widget key to ensure UI updates
-            st.session_state["path_input_widget"] = st.session_state.current_path
-            
-            # Clear previous download zip if any
-            if "ready_to_download_zip" in st.session_state:
-                del st.session_state["ready_to_download_zip"]
-            
-            # Actualizar preferencia de usuario si existe
-            if st.session_state.get("username"):
-                try:
-                    from src.database import update_user_last_path
-                    update_user_last_path(st.session_state.username, st.session_state.current_path)
-                except Exception:
-                    pass
-    except Exception as e:
-        st.error(f"Error al abrir explorador: {e}")
 
 def handle_zip_upload():
     """Maneja la carga de archivos ZIP para el modo web."""
@@ -1055,77 +981,31 @@ def handle_zip_download(current_path):
             key="btn_download_zip_final"
         )
 
-def render(container, browse_func):
+def render(container):
     """
     Renderiza el panel de búsqueda y gestión de archivos.
     """
-    # Asegurar inicialización de estado
     if "current_path" not in st.session_state:
-        st.session_state.current_path = os.getcwd()
-    if "path_input" not in st.session_state:
-        st.session_state.path_input = st.session_state.current_path
+         st.session_state.current_path = "" # Inicialmente vacío
+    
+    # Asegurar inicialización de otras variables de estado
     if "search_results" not in st.session_state:
         st.session_state.search_results = []
     if "app_config" not in st.session_state:
         st.session_state.app_config = {}
-    if "force_native_mode" not in st.session_state:
-        # Por defecto activado si estamos en Windows local
-        st.session_state.force_native_mode = True
-    
+
+    # Layout Principal
     with container:
-        st.header("🔍 Búsqueda y Gestión de Archivos")
+        st.markdown("## 🔍 Búsqueda y Gestión de Archivos")
         
-        # --- Selector de Ruta y Gestión de Archivos (Dinámico según Modo) ---
-        is_native = st.session_state.get("force_native_mode", True)
-
-        if is_native:
-            # --- MODO NATIVO (Selector Clásico) ---
-            col1, col2 = st.columns([0.85, 0.15])
-            
-            with col1:
-                # Input de texto sincronizado
-                path_input = st.text_input(
-                    "Carpeta a Analizar", 
-                    value=st.session_state.current_path, 
-                    key="path_input_widget"
-                )
-                # Actualizar estado si el usuario escribe manualmente
-                if path_input != st.session_state.current_path:
-                    st.session_state.current_path = path_input
-                    st.session_state.path_input = path_input
-
-            with col2:
-                st.write("") 
-                st.write("")
-                # Botón Examinar con Callback
-                st.button(
-                    "📂 Examinar", 
-                    help="Explorar archivos", 
-                    on_click=on_click_examinar, 
-                    args=(browse_func,),
-                    key="btn_browse_search"
-                )
-            
-            st.caption("✅ Modo Nativo Activo (Integración con explorador de Windows)")
-
-        else:
-            # --- MODO WEB (Gestión ZIP) ---
-            # Se oculta el selector nativo y se muestra la gestión de ZIP
-            st.markdown("### ☁️ Entorno de Trabajo Web")
-            
-            # Contenedor principal para carga/descarga
-            with st.container(border=True):
-                 col_up, col_down = st.columns(2)
-                 with col_up:
-                     st.markdown("#### 1. Cargar Entorno")
-                     handle_zip_upload()
-                 with col_down:
-                     st.markdown("#### 2. Descargar Resultados")
-                     handle_zip_download(st.session_state.current_path)
-            
-            # Mostrar ruta actual como información (solo lectura visual)
-            st.info(f"📂 Carpeta de trabajo actual: `{st.session_state.current_path}`")
-            st.caption("☁️ Modo Web Activo (Explorador de archivos integrado)")
+        # --- SELECCIÓN DE RUTA ---
+        # Usamos el selector estandarizado que maneja la sincronización y diálogo nativo
+        current_path = render_path_selector(
+            "Ruta a analizar:", 
+            key="current_path", 
+            help_text="Selecciona la carpeta base para realizar búsquedas y operaciones.",
+            omit_checkbox=True
+        )
 
         # Información de ayuda general
         # c_info, c_help = st.columns([0.8, 0.2]) # Ya integrado arriba
@@ -1163,9 +1043,10 @@ def render(container, browse_func):
             st.markdown('</div>', unsafe_allow_html=True)
         
         # 3. Tabla de Resultados
-        num_found = len(st.session_state.search_results) if st.session_state.search_results else 0
+        search_results = st.session_state.get("search_results", [])
+        num_found = len(search_results)
         st.markdown(f"##### 📄 Archivos encontrados ({num_found})")
-        df_display = pd.DataFrame(st.session_state.search_results) if st.session_state.search_results else pd.DataFrame(columns=["Ruta completa", "Fecha"])
+        df_display = pd.DataFrame(search_results) if search_results else pd.DataFrame(columns=["Ruta completa", "Fecha"])
         st.dataframe(df_display, width=1000, height=250, hide_index=True)
 
         # 4. Barra de Botones Inferior

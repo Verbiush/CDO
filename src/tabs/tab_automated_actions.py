@@ -60,18 +60,24 @@ except ImportError:
     pass
 
 try:
-    from task_manager import submit_task
-    from gui_utils import seleccionar_carpeta_nativa
+    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector
 except ImportError:
     try:
-        from src.task_manager import submit_task
-        from src.gui_utils import seleccionar_carpeta_nativa
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector
     except ImportError:
-        def submit_task(name, func, *args, **kwargs):
-            st.warning(f"Task Manager not available. Running {name} synchronously.")
-            return func(*args, **kwargs)
-        def seleccionar_carpeta_nativa(key):
-            return st.text_input(f"Ruta para {key}", key=key)
+        def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
+            st.warning("Selector de carpeta nativo no disponible.")
+            return None
+
+        def update_path_key(key, new_path, widget_key=None):
+            if new_path:
+                st.session_state[key] = new_path
+                if widget_key:
+                    st.session_state[widget_key] = new_path
+        
+        def render_path_selector(label, key, default_path=None, help_text=None):
+            st.warning("render_path_selector no disponible")
+            return default_path
 
 try:
     from pdf2docx import Converter
@@ -97,6 +103,9 @@ except ImportError:
     pyperclip = None
 
 import google.generativeai as genai
+
+# Helper for callback-based folder selection
+# update_path_key imported from gui_utils
 
 # --- HELPERS ---
 
@@ -1697,13 +1706,30 @@ def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False):
     except Exception as e:
         return f"Error: {e}"
 
-def worker_anadir_sufijo_excel(excel_path, sheet_name, col_name, col_suffix, folder_path, use_filter=False, silent_mode=False):
+def worker_anadir_sufijo_excel(excel_path, sheet_name, col_folder, col_suffix, root_path, use_filter=False, silent_mode=False):
+    """
+    Versión sincronizada con app_web.py:
+    1. Lee Excel (Carpeta, Sufijo).
+    2. Busca la carpeta dentro de root_path.
+    3. Si existe, renombra TODOS los archivos dentro de esa carpeta añadiendo el sufijo.
+    """
     try:
         if isinstance(excel_path, bytes):
             excel_path = io.BytesIO(excel_path)
-        excel_path.seek(0)
+            if hasattr(excel_path, 'seek'):
+                excel_path.seek(0)
+
+        # Helper para limpiar y normalizar valores
+        def clean_val(v):
+            if v is None: return ""
+            s = str(v).strip()
+            if s.endswith(".0"): s = s[:-2]
+            # Normalizar unicode (quitar tildes, etc)
+            s = ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
+            return s.lower()
 
         data_rows = []
+        # --- Extracción de datos ---
         if use_filter:
             import openpyxl
             wb = openpyxl.load_workbook(excel_path, data_only=True)
@@ -1711,91 +1737,103 @@ def worker_anadir_sufijo_excel(excel_path, sheet_name, col_name, col_suffix, fol
             ws = wb[sheet_name]
             header = [cell.value for cell in ws[1]]
             try:
-                # Buscar columnas por nombre exacto
-                idx_name = header.index(col_name)
-                idx_suffix = header.index(col_suffix)
-            except: return f"Columnas '{col_name}' o '{col_suffix}' no encontradas en el encabezado."
+                header_map = {str(h).strip().lower(): i for i, h in enumerate(header) if h is not None}
+                idx_folder = header_map.get(str(col_folder).strip().lower())
+                idx_suffix = header_map.get(str(col_suffix).strip().lower())
+                
+                if idx_folder is None or idx_suffix is None:
+                    return f"Columnas '{col_folder}' o '{col_suffix}' no encontradas."
+            except Exception as e: return f"Error al buscar columnas: {e}"
             
             for row in ws.iter_rows(min_row=2):
                 if not ws.row_dimensions[row[0].row].hidden:
-                    # Safe value retrieval
-                    v_name = row[idx_name].value
-                    v_suffix = row[idx_suffix].value
+                    v_folder = row[idx_folder].value if idx_folder < len(row) else None
+                    v_suffix = row[idx_suffix].value if idx_suffix < len(row) else None
                     
-                    val_name = str(v_name).strip() if v_name is not None else ""
-                    val_suffix = str(v_suffix).strip() if v_suffix is not None else ""
+                    val_folder_norm = clean_val(v_folder)
+                    val_folder_raw = str(v_folder).strip() if v_folder is not None else ""
+                    if val_folder_raw.endswith(".0"): val_folder_raw = val_folder_raw[:-2]
+
+                    val_suffix_clean = str(v_suffix).strip() if v_suffix is not None else ""
+                    if val_suffix_clean.endswith(".0"): val_suffix_clean = val_suffix_clean[:-2]
                     
-                    if val_name and val_suffix:
-                        data_rows.append((val_name, val_suffix))
+                    if val_folder_norm and val_suffix_clean:
+                        data_rows.append((val_folder_norm, val_folder_raw, val_suffix_clean))
         else:
-            df = pd.read_excel(excel_path, sheet_name=sheet_name)
-            if col_name not in df.columns or col_suffix not in df.columns:
-                return f"Columnas '{col_name}' o '{col_suffix}' no encontradas en Excel."
+            try:
+                df = pd.read_excel(excel_path, sheet_name=sheet_name, dtype=str)
+            except Exception as e:
+                return f"Error leyendo Excel: {e}"
+                
+            df.columns = [str(c).strip() for c in df.columns]
+            if col_folder not in df.columns or col_suffix not in df.columns:
+                return f"Columnas no encontradas."
+            
             for _, row in df.iterrows():
-                if pd.notna(row[col_name]) and pd.notna(row[col_suffix]):
-                    val_name = str(row[col_name]).strip()
-                    val_suffix = str(row[col_suffix]).strip()
-                    if val_name and val_suffix:
-                        data_rows.append((val_name, val_suffix))
+                if pd.notna(row[col_folder]) and pd.notna(row[col_suffix]):
+                    v_folder = row[col_folder]
+                    v_suffix = row[col_suffix]
+                    
+                    val_folder_norm = clean_val(v_folder)
+                    val_folder_raw = str(v_folder).strip()
+                    if val_folder_raw.endswith(".0"): val_folder_raw = val_folder_raw[:-2]
+
+                    val_suffix_clean = str(v_suffix).strip()
+                    if val_suffix_clean.endswith(".0"): val_suffix_clean = val_suffix_clean[:-2]
+
+                    if val_folder_norm and val_suffix_clean:
+                        data_rows.append((val_folder_norm, val_folder_raw, val_suffix_clean))
 
         if not data_rows:
-            return "No se encontraron datos válidos (nombres/sufijos no vacíos) para procesar."
+            return "No se encontraron datos válidos."
 
-        if not os.path.isdir(folder_path):
-            return f"La carpeta objetivo no existe: {folder_path}"
-
-        # Listar archivos UNA VEZ
-        try:
-            existing_files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
-        except Exception as e:
-            return f"Error leyendo carpeta objetivo: {e}"
-
-        count = 0
-        errores = 0
+        count_files = 0
+        count_folders = 0
         
         progress_bar = None
         if not silent_mode:
-            progress_bar = st.progress(0, text="Añadiendo sufijos...")
+            progress_bar = st.progress(0, text="Procesando carpetas...")
 
         total = len(data_rows)
-        processed_files = set() 
+        
+        # Cachear lista de carpetas en root_path para búsqueda rápida normalizada
+        try:
+            root_subdirs = {clean_val(d): d for d in os.listdir(root_path) if os.path.isdir(os.path.join(root_path, d))}
+        except Exception as e:
+            return f"Error leyendo carpeta raíz: {e}"
 
-        for i, (name, suffix) in enumerate(data_rows):
+        for i, (folder_norm, folder_raw, suffix) in enumerate(data_rows):
             if not silent_mode and progress_bar:
                 progress_bar.progress((i + 1) / total)
             
-            # Buscar coincidencias EXACTAS (ignorando mayúsculas/minúsculas)
-            # Match: nombre archivo sin extension == name OR nombre archivo completo == name
-            matches = []
-            for f in existing_files:
-                if f.lower() == name.lower() or os.path.splitext(f)[0].lower() == name.lower():
-                    matches.append(f)
+            # 1. Intentar match exacto (rápido)
+            target_path = os.path.join(root_path, folder_raw)
+            if not os.path.isdir(target_path):
+                # 2. Intentar match normalizado
+                matched_real_name = root_subdirs.get(folder_norm)
+                if matched_real_name:
+                    target_path = os.path.join(root_path, matched_real_name)
+                else:
+                    continue # No existe la carpeta
             
-            for f in matches:
-                if f in processed_files: continue
-                
-                base, ext = os.path.splitext(f)
-                
-                # Evitar doble sufijo si ya lo tiene
-                if f.endswith(f"_{suffix}{ext}"):
-                    continue
-                    
-                new_name = f"{base}_{suffix}{ext}"
-                old_path = os.path.join(folder_path, f)
-                new_path = os.path.join(folder_path, new_name)
-                
-                try:
-                    if old_path != new_path and not os.path.exists(new_path):
-                        os.rename(old_path, new_path)
-                        count += 1
-                        processed_files.add(f)
-                    elif os.path.exists(new_path):
-                        errores += 1 
-                except Exception:
-                    errores += 1
+            # Procesar archivos en la carpeta encontrada
+            count_folders += 1
+            try:
+                for f in os.listdir(target_path):
+                    f_full = os.path.join(target_path, f)
+                    if os.path.isfile(f_full):
+                        name, ext = os.path.splitext(f)
+                        # Evitar doble sufijo
+                        if not name.endswith(suffix):
+                            new_name = f"{name}{suffix}{ext}"
+                            try:
+                                os.rename(f_full, os.path.join(target_path, new_name))
+                                count_files += 1
+                            except: pass
+            except: pass
 
         if not silent_mode and progress_bar: progress_bar.empty()
-        return f"Sufijos añadidos a {count} archivos. Errores/Omitidos: {errores}."
+        return f"Proceso completado. {count_files} archivos renombrados en {count_folders} carpetas encontradas."
     except Exception as e:
         return f"Error crítico: {e}"
 
@@ -3085,13 +3123,24 @@ def dialog_importar_excel():
     st.write("### Renombrar archivos usando Excel")
     uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"])
     if uploaded:
-        folder = st.text_input("Carpeta donde aplicar cambios", value=st.session_state.get('current_path', ''))
+        target_path = render_path_selector("Carpeta donde aplicar cambios", "ren_excel_folder")
+        folder = target_path
+        
         if st.button("Aplicar Renombrado"):
-            submit_task("Renombrar Excel", worker_aplicar_renombrado_excel, uploaded, folder)
+            try:
+                with st.spinner("Renombrando..."):
+                    uploaded.seek(0)
+                    result = worker_aplicar_renombrado_excel(uploaded, folder)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("Añadir Sufijo desde Excel")
 def dialog_sufijo():
-    st.write("### Añadir Sufijo a Archivos")
+    st.write("### Añadir Sufijo a Archivos (Por Carpeta)")
+    st.info("Esta opción busca las carpetas listadas en el Excel y añade el sufijo a TODOS los archivos dentro de ellas.")
     uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"])
     if uploaded:
         try:
@@ -3100,17 +3149,26 @@ def dialog_sufijo():
             df_preview = pd.read_excel(uploaded, sheet_name=sheet, nrows=1)
             cols = df_preview.columns.tolist()
             
-            col_name = st.selectbox("Columna Nombre Archivo (Inicio)", cols, index=0, key="suf_col_name")
+            col_folder = st.selectbox("Columna Nombre Carpeta", cols, index=0, key="suf_col_folder")
             col_suffix = st.selectbox("Columna Sufijo", cols, index=min(1, len(cols)-1), key="suf_col_suf")
             
             use_filter = st.checkbox("Usar filtro de Excel (Filas visibles)", value=False, key="suf_filter")
             
-            folder = st.text_input("Carpeta Objetivo", value=st.session_state.get('current_path', ''))
+            target_path = render_path_selector("Carpeta Raíz (donde están las carpetas)", "suf_folder")
+            folder = target_path
             
             if st.button("Aplicar Sufijos"):
-                # Reset pointer for worker
-                uploaded.seek(0)
-                submit_task("Sufijos", worker_anadir_sufijo_excel, uploaded, sheet, col_name, col_suffix, folder, use_filter)
+                try:
+                    with st.spinner("Procesando sufijos..."):
+                        # Reset pointer for worker
+                        uploaded.seek(0)
+                        # Run synchronously
+                        result = worker_anadir_sufijo_excel(uploaded, sheet, col_folder, col_suffix, folder, use_filter)
+                        st.success(result)
+                        time.sleep(2)
+                        # st.rerun()
+                except Exception as e:
+                    st.error(f"Error al procesar: {e}")
         except Exception as e:
             st.error(f"Error leyendo Excel: {e}")
 
@@ -3139,14 +3197,23 @@ def dialog_renombrar_mapeo_excel():
         except Exception as e:
             st.error(f"Error: {e}")
 
-    folder = seleccionar_carpeta_nativa("ren_map_folder", initial_dir=st.session_state.get('current_path', ''))
+    st.write("Carpeta Objetivo:")
+    
+    target_path = render_path_selector("Ruta", "ren_map_folder")
+    folder = target_path
     
     if st.button("Renombrar"):
         if uploaded and sheet and col_src and col_dst and folder:
-            if hasattr(uploaded, 'seek'):
-                uploaded.seek(0)
-            submit_task("Renombrar Mapeo", worker_renombrar_mapeo_excel, uploaded, sheet, col_src, col_dst, use_filter, folder)
-            st.rerun()
+            try:
+                with st.spinner("Renombrando..."):
+                    if hasattr(uploaded, 'seek'):
+                        uploaded.seek(0)
+                    result = worker_renombrar_mapeo_excel(uploaded, sheet, col_src, col_dst, use_filter, folder)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("Modificar DOCX Completo")
 def dialog_modif_docx_completo():
@@ -3165,13 +3232,22 @@ def dialog_modif_docx_completo():
         except Exception as e:
             st.error(f"Error: {e}")
 
-    folder = seleccionar_carpeta_nativa("mod_full_folder", initial_dir=st.session_state.get('current_path', ''))
+    st.write("Carpeta Objetivo:")
+    
+    target_path = render_path_selector("Ruta", "mod_full_folder")
+    folder = target_path
     
     if st.button("Ejecutar Modificación"):
         if uploaded and sheet and folder:
-            uploaded.seek(0)
-            submit_task("Modif DOCX Completo", worker_modificar_docx_completo, uploaded, sheet, folder, use_filter)
-            st.rerun()
+            try:
+                with st.spinner("Modificando documentos..."):
+                    uploaded.seek(0)
+                    result = worker_modificar_docx_completo(uploaded, sheet, folder, use_filter)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("Insertar Firma en DOCX (Masivo)")
 def dialog_insertar_firma_docx():
@@ -3183,14 +3259,24 @@ def dialog_insertar_firma_docx():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
 
-    base_path = seleccionar_carpeta_nativa("firma_docx_base", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    st.write("Carpeta Base:")
+    
+    target_path = render_path_selector("Ruta", "firma_docx_base")
+    
+    base_path = target_path
     docx_name = st.text_input("Nombre del DOCX", value="Consentimiento.docx")
     sig_name = st.text_input("Nombre de la Firma (Imagen)", value="firma.jpg")
     
     if st.button("Iniciar Inserción de Firmas"):
         if base_path and docx_name and sig_name:
-            submit_task("Insertar Firmas", worker_firmar_docx_con_imagen_masivo, base_path, docx_name, sig_name)
-            st.rerun()
+            try:
+                with st.spinner("Insertando firmas..."):
+                    result = worker_firmar_docx_con_imagen_masivo(base_path, docx_name, sig_name)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
         else:
             st.error("Complete todos los campos.")
 
@@ -3233,10 +3319,29 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
         return None
 
     patterns = {
-        'Paciente': re.compile(r"Paciente:\s*(.*?)(?:\n|$)", re.IGNORECASE),
-        'Estrato': re.compile(r"Estrato:\s*(.*?)\s*Municipio:", re.IGNORECASE | re.DOTALL),
-        'Contrato': re.compile(r"Contrato:\s*(.*?)(?:\n|$)", re.IGNORECASE),
-        'HISTORIA CLÍNICA': re.compile(r"DATOS HISTORIA CL[IÍ]NICA\s*(.*?)\s*¿ES V[IÍ]CTIMA DE VIOLENCIA\?", re.IGNORECASE | re.DOTALL)
+        'Identificación': re.compile(r"Identificaci[oó]n:?\s*(.*?)(?=\s+Paciente:|\n|$)", re.IGNORECASE),
+        # 'Paciente': re.compile(r"Paciente:?\s*(.*?)(?=\s+Fecha|Ingreso:|\n|$)", re.IGNORECASE),
+        'Fecha Ingreso': re.compile(r"Fecha Ingreso:?\s*(.*?)(?=\s+Hora|\n|$)", re.IGNORECASE),
+        'Hora Ing': re.compile(r"Hora Ing:?\s*(.*?)(?=\s+Ingreso:|\n|$)", re.IGNORECASE),
+        'Ingreso': re.compile(r"(?<!Fecha\s)Ingreso:?\s*(\d+)", re.IGNORECASE),
+        'Fecha Atencion': re.compile(r"Fecha Atenci[oó]n:?\s*(.*?)(?=\s+Fecha|\n|$)", re.IGNORECASE),
+        'Fecha Cierre HC': re.compile(r"Fecha Cierre HC:?\s*(.*?)(?=\s+Fecha|\n|$)", re.IGNORECASE),
+        'Fecha Naci': re.compile(r"Fecha Naci:?\s*(.*?)(?=\s+Edad:|\n|$)", re.IGNORECASE),
+        'Edad': re.compile(r"Edad:?\s*(.*?)(?=\s+Sexo:|\n|$)", re.IGNORECASE),
+        'Sexo': re.compile(r"Sexo:?\s*(.*?)(?=\n|$)", re.IGNORECASE),
+        'Nro.Historia': re.compile(r"Nro\.Historia:?\s*(.*?)(?=\s+Tipo Usuario:|\n|$)", re.IGNORECASE),
+        'Tipo Usuario': re.compile(r"Tipo Usuario:?\s*(.*?)(?=\n|$)", re.IGNORECASE),
+        'Telefono': re.compile(r"Tel[ée]fono:?\s*([\d\-\s]+)(?=\s+Estrato:|\n|$)", re.IGNORECASE),
+        'Estrato': re.compile(r"Estrato:?\s*(.*?)(?=\s+Municipio:|\n|$)", re.IGNORECASE),
+        'Municipio': re.compile(r"Municipio:?\s*(.*?)(?=\n|$)", re.IGNORECASE),
+        'Dirección': re.compile(r"Direcci[oó]n:?\s*(.*?)(?=\s+Estado Civil:|\n|$)", re.IGNORECASE),
+        'Estado Civil': re.compile(r"Estado Civil:?\s*(.*?)(?=\n|$)", re.IGNORECASE),
+        'Empresa': re.compile(r"Empresa:?\s*(.*?)(?=\s+Contrato:|\n|$)", re.IGNORECASE),
+        'Contrato': re.compile(r"Contrato:?\s*(.*?)(?=\n|$)", re.IGNORECASE),
+        'Acompañante': re.compile(r"Acompañante:?\s*(.*?)(?=\s+Tel\. Acompañante:|\n|$)", re.IGNORECASE),
+        # 'Tel. Acompañante': re.compile(r"Tel\. Acompañante:?\s*(.*?)(?=\n|$)", re.IGNORECASE),
+        'Discapacidad': re.compile(r"DISCAPACIDAD\s*(.*?)(?=\s+DESCRIPCION|\n\n|$)", re.IGNORECASE | re.DOTALL),
+        'Motivo Consulta': re.compile(r"MOTIVO DE CONSULTA\s*(.*?)(?=\s+ENFERMEDAD ACTUAL|\s+ANTECEDENTES|\s+REVISION POR SISTEMAS|$)", re.IGNORECASE | re.DOTALL)
     }
 
     extracted_data = []
@@ -3262,9 +3367,11 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
                 match = pattern.search(full_text)
                 if match:
                     val = match.group(1).strip()
+                    # Clean up common issues
+                    val = val.replace('\n', ' ').strip()
                     record[key] = val
                 else:
-                    record[key] = "No encontrado"
+                    record[key] = ""
 
             extracted_data.append(record)
 
@@ -3276,7 +3383,13 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
         return None
 
     try:
-        column_order = ['Archivo', 'Paciente', 'Estrato', 'Contrato', 'HISTORIA CLÍNICA']
+        column_order = [
+            'Archivo', 'Identificación', 'Fecha Ingreso', 'Hora Ing', 'Ingreso', 
+            'Fecha Atencion', 'Fecha Cierre HC', 'Fecha Naci', 'Edad', 'Sexo', 
+            'Nro.Historia', 'Tipo Usuario', 'Telefono', 'Estrato', 'Municipio', 
+            'Dirección', 'Estado Civil', 'Empresa', 'Contrato', 
+            'Acompañante', 'Discapacidad', 'Motivo Consulta'
+        ]
         df = pd.DataFrame(extracted_data)
         # Reorder if columns exist
         cols = [c for c in column_order if c in df.columns] + [c for c in df.columns if c not in column_order]
@@ -3448,6 +3561,540 @@ def worker_leer_pdf_retefuente(file_list, silent_mode=False):
             "message": f"Procesados: {len(resultados_datos)} registros."
         }
     return None
+
+def worker_analisis_emssanar(file_list, silent_mode=False):
+    """
+    Analiza archivos PDF de Emssanar (Autorizaciones).
+    Extrae información del encabezado, paciente, servicios y pagos.
+    Resalta columnas en amarillo.
+    Retorna bytes de Excel.
+    """
+    if not file_list: return None
+    
+    archivos_pdf = [f for f in file_list if f.lower().endswith('.pdf')]
+    if not archivos_pdf: return None
+
+    extracted_data = []
+    
+    progress_bar = None
+    if not silent_mode:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+    for i, pdf_path in enumerate(archivos_pdf):
+        if not silent_mode and progress_bar:
+            progress_bar.progress((i + 1) / len(archivos_pdf))
+            status_text.text(f"Procesando: {os.path.basename(pdf_path)}")
+
+        try:
+            record = {'Archivo': os.path.basename(pdf_path)}
+            
+            with fitz.open(pdf_path) as doc:
+                page = doc[0] # Asumimos primera página
+                text = page.get_text("text")
+                words = page.get_text("words") # (x0, y0, x1, y1, "word", block_no, line_no, word_no)
+                
+                clean_text = re.sub(r'\s+', ' ', text)
+                
+                # --- 1. Número de Autorización ---
+                # Usamos una búsqueda más robusta:
+                # 1. Regex directo si el texto está limpio.
+                # 2. Búsqueda por coordenadas si el texto está fragmentado.
+                m_auth = re.search(r'N[UÚ]MERO DE AUTORIZACI[OÓ]N[:\.]?\s*(\d+)', clean_text, re.IGNORECASE)
+                if m_auth:
+                    record['Numero Autorizacion'] = m_auth.group(1)
+                else:
+                    # Búsqueda espacial
+                    label_rects = page.search_for("NÚMERO DE AUTORIZACIÓN")
+                    if label_rects:
+                        r = label_rects[0]
+                        # Buscar a la derecha
+                        val_rect = fitz.Rect(r.x1, r.y0 - 2, page.rect.width, r.y1 + 2)
+                        val = page.get_text("text", clip=val_rect).strip()
+                        # Extraer dígitos largos
+                        nums = re.findall(r'\d{5,}', val)
+                        record['Numero Autorizacion'] = nums[0] if nums else ""
+                    else:
+                        # Intento fallback: Buscar cualquier número largo al inicio del documento
+                        m_auth_fallback = re.search(r'AUTORIZACI[OÓ]N\s*:?\s*(\d{5,})', clean_text, re.IGNORECASE)
+                        record['Numero Autorizacion'] = m_auth_fallback.group(1) if m_auth_fallback else ""
+
+                # --- 2. Número Documento ---
+                m_doc = re.search(r'(\d{6,15})\s*N[uú]mero documento de identificaci[oó]n', clean_text, re.IGNORECASE)
+                if not m_doc:
+                     m_doc = re.search(r'N[uú]mero documento de identificaci[oó]n\s*(\d{6,15})', clean_text, re.IGNORECASE)
+                
+                if not m_doc:
+                      label_rect = page.search_for("Número documento de identificación")
+                      if label_rect:
+                           l_rect = label_rect[0]
+                           search_rect = fitz.Rect(l_rect.x0 - 50, l_rect.y0 - 30, l_rect.x1 + 50, l_rect.y0)
+                           nearby_text = page.get_text("text", clip=search_rect).strip()
+                           nums = re.findall(r'\d{6,15}', nearby_text)
+                           if nums: record['Documento Paciente'] = nums[0]
+                           else: record['Documento Paciente'] = ""
+                      else:
+                           record['Documento Paciente'] = ""
+                else:
+                     record['Documento Paciente'] = m_doc.group(1)
+
+                # --- 3. Tipo Documento (Detectar X) ---
+                tipos_doc = [
+                    "Registro civil", "Tarjeta de identidad", "Cédula de ciudadanía", "Cédula de extranjería",
+                    "Pasaporte", "Adulto sin identificación", "Menor sin identificación", "Permiso especial de permanencia"
+                ]
+                found_type = ""
+                xs = [w for w in words if w[4].strip().upper() == 'X']
+                for x_word in xs:
+                    x_rect = fitz.Rect(x_word[:4])
+                    search_area = fitz.Rect(x_rect.x1, x_rect.y0 - 5, page.rect.width, x_rect.y1 + 5)
+                    text_right = page.get_text("text", clip=search_area).strip()
+                    text_right = re.sub(r'\s+', ' ', text_right)
+                    for t in tipos_doc:
+                        if t.lower() in text_right.lower():
+                            found_type = t
+                            break
+                    if found_type: break
+                record['Tipo Documento'] = found_type
+
+                # --- 4. Nombre Paciente (Mejorado) ---
+                # Buscar texto entre "DATOS DEL PACIENTE" y la siguiente etiqueta estructural
+                label_datos = page.search_for("DATOS DEL PACIENTE")
+                label_tipo = page.search_for("Tipo Documento") # Suele estar debajo
+                
+                nombre_encontrado = ""
+                if label_datos:
+                    y_top = label_datos[0].y1
+                    # Definir limite inferior
+                    y_bottom = label_tipo[0].y0 if label_tipo else y_top + 100 
+                    
+                    # Buscar texto en esa franja
+                    name_rect = fitz.Rect(0, y_top, page.rect.width, y_bottom)
+                    name_text = page.get_text("text", clip=name_rect).strip()
+                    # Limpieza
+                    name_text = re.sub(r'\s+', ' ', name_text)
+                    # Eliminar etiquetas comunes que podrían aparecer
+                    name_text = re.sub(r'(1er Apellido|2do Apellido|1er Nombre|2do Nombre)', '', name_text, flags=re.IGNORECASE)
+                    nombre_encontrado = name_text.strip()
+                
+                if not nombre_encontrado:
+                    # Fallback regex original
+                    m_nombres = re.search(r'DATOS DEL PACIENTE\s+([A-Z\s]+?)\s+(?:Tipo Documento|1er Apellido)', clean_text)
+                    if m_nombres:
+                        nombre_encontrado = m_nombres.group(1).strip()
+                
+                record['Nombre Paciente'] = nombre_encontrado
+
+                # --- 5. Valor a Pagar por el Usuario ---
+                label_valor = page.search_for("Valor a pagar por el usuario")
+                val_pagar = "0"
+                if label_valor:
+                    r = label_valor[0]
+                    # Buscar debajo de la etiqueta
+                    # Asumimos que el valor está en una caja debajo, digamos 30px de alto
+                    search_rect = fitz.Rect(r.x0 - 20, r.y1, r.x1 + 20, r.y1 + 40)
+                    val_text = page.get_text("text", clip=search_rect).strip()
+                    # Extraer números/moneda
+                    matches = re.findall(r'[\d\.,]+', val_text)
+                    if matches:
+                        val_pagar = matches[0]
+                record['Valor a Pagar'] = val_pagar
+
+                # --- 6. Concepto (Cuota moderadora, etc) ---
+                conceptos_posibles = ["Cuota moderadora", "Copago", "Cuota de recuperación", "Pagos compartidos"]
+                found_concepto = "exento de pago"
+                
+                # Reutilizamos las Xs encontradas
+                for x_word in xs:
+                    x_rect = fitz.Rect(x_word[:4])
+                    search_area = fitz.Rect(x_rect.x1, x_rect.y0 - 5, page.rect.width, x_rect.y1 + 5)
+                    text_right = page.get_text("text", clip=search_area).strip()
+                    text_right = re.sub(r'\s+', ' ', text_right).lower()
+                    
+                    for c in conceptos_posibles:
+                        if c.lower() in text_right:
+                            found_concepto = c
+                            break
+                    if found_concepto != "exento de pago":
+                        break
+                record['Concepto'] = found_concepto
+
+
+                # --- Otros Campos ---
+                m_nit = re.search(r'NIT/CC:?\s*([\d\.-]+)', clean_text, re.IGNORECASE)
+                record['NIT Entidad'] = m_nit.group(1) if m_nit else ""
+
+                m_regimen = re.search(r'R[ée]gimen afiliaci[oó]n:?\s*(\w+)', clean_text, re.IGNORECASE)
+                record['Regimen'] = m_regimen.group(1) if m_regimen else ""
+
+                m_depto = re.search(r'Departamento:?\s*(.*?)(?=\s+Municipio:)', clean_text, re.IGNORECASE)
+                record['Departamento'] = m_depto.group(1).strip() if m_depto else ""
+                
+                found_codes = re.findall(r'(?<!\d)(\d{6})(?!\d)', clean_text)
+                valid_codes = []
+                for c in found_codes:
+                    if c not in [record.get('Documento Paciente', ''), '900438792']: 
+                         valid_codes.append(c)
+                record['Codigos Servicios'] = " | ".join(set(valid_codes))
+
+                m_desc = re.search(r'SE AUTORIZA\s*\((\d+)\)\s*-\s*([^-\.]+)', clean_text, re.IGNORECASE)
+                if m_desc:
+                     record['Descripcion Servicio'] = m_desc.group(2).strip()
+                else:
+                     m_desc2 = re.search(r'(CONSULTA DE [A-Z\s]+)', clean_text)
+                     record['Descripcion Servicio'] = m_desc2.group(1).strip() if m_desc2 else ""
+
+                m_cant = re.search(r'\s(\d+)\s+Consulta', clean_text, re.IGNORECASE)
+                record['Cantidad'] = m_cant.group(1) if m_cant else "1"
+
+            extracted_data.append(record)
+
+        except Exception as e:
+            if not silent_mode: st.error(f"Error procesando {os.path.basename(pdf_path)}: {e}")
+
+    if extracted_data:
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df = pd.DataFrame(extracted_data)
+            
+            # Columnas prioritarias y a resaltar
+            # Reemplazamos Porcentaje por Valor a Pagar y Concepto
+            cols_highlight = [
+                'Numero Autorizacion', 'Documento Paciente', 'Tipo Documento', 'NIT Entidad',
+                'Nombre Paciente', 'Regimen', 'Departamento', 'Codigos Servicios',
+                'Descripcion Servicio', 'Cantidad', 'Valor a Pagar', 'Concepto'
+            ]
+            
+            # Reordenar
+            cols_final = ['Archivo'] + [c for c in cols_highlight if c in df.columns] + [c for c in df.columns if c not in cols_highlight and c != 'Archivo']
+            df = df[cols_final]
+            
+            sheet_name = 'Resultados'
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+            
+            # Formato Amarillo
+            workbook = writer.book
+            worksheet = writer.sheets[sheet_name]
+            yellow_format = workbook.add_format({'bg_color': '#FFFF00', 'border': 1})
+            header_format = workbook.add_format({'bg_color': '#FFFF00', 'bold': True, 'border': 1})
+
+            # Aplicar formato
+            for col_num, value in enumerate(df.columns.values):
+                if value in cols_highlight:
+                    worksheet.write(0, col_num, value, header_format)
+                    worksheet.conditional_format(1, col_num, len(df), col_num, {
+                        'type': 'no_errors',
+                        'format': yellow_format
+                    })
+                else:
+                    worksheet.set_column(col_num, col_num, 20)
+
+            
+        return {
+            "files": [{
+                "name": "Analisis_Autorizaciones_Emssanar_Completo.xlsx",
+                "data": output.getvalue(),
+                "label": "Descargar Emssanar Completo"
+            }],
+            "message": f"Procesados: {len(extracted_data)} registros."
+        }
+    return None
+
+def worker_analisis_fomag(file_list, silent_mode=False):
+    """
+    Analiza archivos PDF de Autorizaciones FOMAG.
+    Extrae información del encabezado, paciente, prestador y servicios.
+    Retorna bytes de Excel.
+    """
+    if not file_list: return None
+    
+    archivos_pdf = [f for f in file_list if f.lower().endswith('.pdf')]
+    if not archivos_pdf: return None
+
+    extracted_data = []
+    
+    progress_bar = None
+    if not silent_mode:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+    def get_value_below(page, label_text, h=30, w_add=0, match_idx=0):
+        """Busca una etiqueta y devuelve el texto inmediatamente debajo."""
+        labels = [label_text] if isinstance(label_text, str) else label_text
+        all_rects = []
+        for l in labels:
+            all_rects.extend(page.search_for(l))
+        
+        all_rects.sort(key=lambda r: r.y0)
+        
+        if not all_rects or len(all_rects) <= match_idx: return ""
+        r = all_rects[match_idx]
+        
+        # Rectángulo de búsqueda debajo de la etiqueta
+        search_rect = fitz.Rect(r.x0, r.y1, r.x1 + w_add, r.y1 + h)
+        val = page.get_text("text", clip=search_rect).strip()
+        return re.sub(r'\s+', ' ', val)
+    
+    def get_field_dynamic(page, labels, next_labels=None, h=30, min_width=100, match_idx=0, single_line=False, stop_words=None, x_offset=0):
+        """
+        Busca 'labels' y trata de determinar el ancho hasta el siguiente campo ('next_labels').
+        Si no encuentra next_labels, usa min_width.
+        """
+        if isinstance(labels, str): labels = [labels]
+        if isinstance(next_labels, str): next_labels = [next_labels]
+        
+        # 1. Encontrar etiqueta principal
+        candidates = []
+        for l in labels:
+            candidates.extend(page.search_for(l))
+        candidates.sort(key=lambda r: (r.y0, r.x0)) # Sort by Y then X
+        
+        if not candidates or len(candidates) <= match_idx: return ""
+        curr_rect = candidates[match_idx]
+        
+        # 2. Encontrar etiqueta siguiente (para limitar ancho)
+        limit_x = curr_rect.x1 + min_width # Default limit
+        
+        if next_labels:
+            next_candidates = []
+            for nl in next_labels:
+                next_candidates.extend(page.search_for(nl))
+            
+            # Filtrar solo aquellos que están en la misma "línea" (y similar) y a la derecha
+            valid_next = [nr for nr in next_candidates 
+                          if abs(nr.y0 - curr_rect.y0) < 10 and nr.x0 > curr_rect.x0]
+            
+            if valid_next:
+                valid_next.sort(key=lambda r: r.x0)
+                limit_x = valid_next[0].x0 # El inicio del siguiente campo es el límite
+            
+        # 3. Extraer texto
+        # Aplicamos x_offset al inicio de la búsqueda (útil si el texto empieza antes de la etiqueta o para ajustar márgenes)
+        search_rect = fitz.Rect(curr_rect.x0 + x_offset, curr_rect.y1, limit_x, curr_rect.y1 + h)
+        val = page.get_text("text", clip=search_rect).strip()
+        
+        if single_line and '\n' in val:
+            val = val.split('\n')[0].strip()
+            
+        if stop_words:
+            for sw in stop_words:
+                # Case insensitive stop word check
+                if sw.lower() in val.lower():
+                    # Find the actual index to split
+                    idx = val.lower().find(sw.lower())
+                    if idx != -1:
+                        val = val[:idx].strip()
+        
+        return re.sub(r'\s+', ' ', val)
+
+    for i, pdf_path in enumerate(archivos_pdf):
+        if not silent_mode and progress_bar:
+            progress_bar.progress((i + 1) / len(archivos_pdf))
+            status_text.text(f"Procesando: {os.path.basename(pdf_path)}")
+
+        try:
+            record = {'Archivo': os.path.basename(pdf_path)}
+            
+            with fitz.open(pdf_path) as doc:
+                page = doc[0]
+                text = page.get_text("text")
+                clean_text = re.sub(r'\s+', ' ', text)
+
+                # --- 1. Encabezado ---
+                m_fecha = re.search(r'Fecha de Gestion de Red:?\s*([\d-]+)', clean_text, re.IGNORECASE)
+                record['Fecha Gestion'] = m_fecha.group(1) if m_fecha else ""
+
+                m_orden = re.search(r'N[uú]mero de Orden:?\s*(\d+)', clean_text, re.IGNORECASE)
+                record['Numero Orden'] = m_orden.group(1) if m_orden else ""
+
+                # --- 2. Paciente ---
+                # Usamos get_field_dynamic con x_offset negativo para capturar nombres largos alineados a la izquierda
+                # single_line=False para evitar cortar nombres en dos líneas, luego limpiamos
+                record['Nombre Paciente'] = get_field_dynamic(page, "Nombre Paciente", next_labels=["Sexo", "Identificación", "Identificacion"], min_width=250, h=40, single_line=False, stop_words=["Telefono", "Teléfono", "Direccion"], x_offset=-40)
+                if record['Nombre Paciente']:
+                     # Limpieza básica: quitar saltos de línea y posibles letras basura al inicio (ej: "E FLOREZ")
+                     record['Nombre Paciente'] = re.sub(r'\s+', ' ', record['Nombre Paciente'])
+                     # Si empieza con una letra sola y espacio, y luego sigue texto largo, asumimos basura
+                     if re.match(r'^[A-Z]\s+[A-Z]{3,}', record['Nombre Paciente']):
+                         # Pero cuidado con iniciales. Solo quitamos si es "E" o similar conocido
+                         # Por ahora dejamos todo, mejor tener "E FLOREZ" que "OREZ"
+                         pass
+
+                record['Sexo'] = get_field_dynamic(page, "Sexo", next_labels=["Identificación", "Identificacion", "Edad"], min_width=50, h=20, single_line=True)
+                
+                # Identificacion: Aumentamos ancho y altura, y añadimos variaciones de etiqueta
+                # single_line=False porque a veces aparece basura "E D I" en la primera línea y el ID en la segunda
+                record['Identificacion'] = get_field_dynamic(page, ["Identificación", "Identificacion", "Identificación del Paciente", "Identificacion del Paciente"], next_labels=["Edad", "Nacimiento"], min_width=200, h=40, single_line=False, stop_words=["Correo", "Edad"])
+                # Limpieza extra de Identificacion
+                if record['Identificacion']:
+                     # Eliminar prefijos comunes de basura o etiquetas repetidas
+                     val_id = record['Identificacion']
+                     val_id = re.sub(r'^(E\s?D\s?I\s?|Trans\s?)', '', val_id, flags=re.IGNORECASE).strip()
+                     # Buscar patrón de documento si existe (CC, TI, etc seguido de numeros)
+                     m_id = re.search(r'((?:CC|TI|RC|CE|PA|CD|SC|PE)\s*[-:]?\s*\d+)', val_id, re.IGNORECASE)
+                     if m_id:
+                         val_id = m_id.group(1)
+                     record['Identificacion'] = val_id
+
+                record['Edad'] = get_field_dynamic(page, "Edad", next_labels=["Nacimiento"], min_width=50, h=20, single_line=True, stop_words=["Munic", "Municipio"])
+                # record['Nacimiento'] = get_field_dynamic(page, "Nacimiento", next_labels=["Direccion", "Dirección"], min_width=100, h=15, single_line=True)
+                
+                # Direccion aparece 2 veces (Paciente y Prestador)
+                # record['Direccion Paciente'] = get_field_dynamic(page, ["Direccion", "Dirección"], next_labels=["Telefono", "Teléfono"], min_width=200, match_idx=0, h=15, single_line=True)
+                # record['Telefono Paciente'] = get_field_dynamic(page, ["Telefono", "Teléfono"], next_labels=["Correo"], min_width=100, match_idx=0, h=15, single_line=True)
+                # record['Correo'] = get_field_dynamic(page, ["Correo"], next_labels=["Municipio"], min_width=150, h=15, single_line=True)
+                # record['Municipio Paciente'] = get_field_dynamic(page, "Municipio", next_labels=["Nombre Prestador"], min_width=150, match_idx=0, h=15, single_line=True)
+
+                # --- 3. Prestador ---
+                # record['Nombre Prestador'] = get_value_below(page, "Nombre Prestador", w_add=200)
+                # record['Direccion Prestador'] = get_value_below(page, ["Direccion", "Dirección"], w_add=200, match_idx=1)
+                
+                # NIT Prestador (el segundo NIT en el documento, el primero es del encabezado)
+                # record['NIT Prestador'] = get_value_below(page, "NIT", match_idx=1, w_add=50)
+                
+                # record['Telefono Prestador'] = get_value_below(page, ["Telefono", "Teléfono"], w_add=50, match_idx=1)
+                
+                # Cod Habilitacion: Aumentamos w_add y variaciones (incluyendo acento grave `ò`)
+                record['Cod Habilitacion'] = get_value_below(page, ["Cod Habilitación", "Cod Habilitacion", "Cod Habilitaciòn", "Código de Habilitación", "Codigo de Habilitacion", "Cód. Habilitación"], w_add=150, h=35)
+                # Limpieza Cod Habilitacion (quitar basura como "O M")
+                if record['Cod Habilitacion']:
+                    m_cod = re.search(r'(\d{8,12})', record['Cod Habilitacion'])
+                    if m_cod:
+                        record['Cod Habilitacion'] = m_cod.group(1)
+                # record['Municipio Prestador'] = get_value_below(page, "Municipio", w_add=100, match_idx=1)
+                # record['Diagnostico DX'] = get_value_below(page, "Diagnostico DX", w_add=50)
+
+                # --- 4. Servicio ---
+                # Estrategia por columnas basada en encabezados para mayor precisión
+                
+                # 1. Buscar encabezado de referencia (Consecutivo)
+                header_consec = None
+                for l in ["N°.Consecutivo", "N°. Consecutivo", "Consecutivo"]:
+                    res = page.search_for(l)
+                    if res:
+                        header_consec = res[0]
+                        break
+                
+                # 2. Buscar encabezado de Codigo (Cerca del consecutivo)
+                header_cod = None
+                for l in ["Código", "Codigo", "Cód"]:
+                    res = page.search_for(l)
+                    # Debe estar cerca en Y del consecutivo
+                    if res and header_consec and abs(res[0].y0 - header_consec.y0) < 15:
+                        header_cod = res[0]
+                        break
+                        
+                # 3. Buscar encabezado de Descripcion/Nombre
+                header_desc = None
+                for l in ["Descripción", "Descripcion", "Nombre"]:
+                    res = page.search_for(l)
+                    if res and header_consec and abs(res[0].y0 - header_consec.y0) < 15:
+                        header_desc = res[0]
+                        break
+
+                # 4. Buscar encabezado Cantidad
+                header_cant = None
+                for l in ["Cant", "Cantidad", "Cant."]:
+                    res = page.search_for(l)
+                    if res and header_consec and abs(res[0].y0 - header_consec.y0) < 15:
+                        header_cant = res[0]
+                        break
+                
+                if header_consec:
+                    y_top = header_consec.y1 + 2
+                    # y_bot_single: Para campos que deben ser de una sola línea (Consecutivo, Codigo, Cantidad)
+                    # Reducimos drásticamente la altura para evitar leer la siguiente línea (Observación, etc.)
+                    y_bot_single = y_top + 12 
+                    
+                    # y_bot_desc: Para la descripción, permitimos más altura porque puede ser multilinea
+                    y_bot_desc = y_top + 45
+                    
+                    # Definir limites X
+                    x_consec = header_consec.x0
+                    x_cod = header_cod.x0 if header_cod else x_consec + 80
+                    x_desc = header_desc.x0 if header_desc else x_cod + 80
+                    x_cant = header_cant.x0 if header_cant else page.rect.width - 50
+                    
+                    # Extraer Consecutivo (Single Line Strict)
+                    r_consec = fitz.Rect(x_consec, y_top, x_cod, y_bot_single)
+                    val_consec = page.get_text("text", clip=r_consec).strip()
+                    if '\n' in val_consec: val_consec = val_consec.split('\n')[0].strip()
+                    # Limpieza extra: Si aparece "Observación" o digitos raros pegados
+                    if "Observ" in val_consec: val_consec = val_consec.split("Observ")[0].strip()
+                    record['Consecutivo'] = val_consec
+                    
+                    # Extraer Codigo (Single Line Strict)
+                    r_cod = fitz.Rect(x_cod, y_top, x_desc, y_bot_single)
+                    val_cod = page.get_text("text", clip=r_cod).strip()
+                    if '\n' in val_cod: val_cod = val_cod.split('\n')[0].strip()
+                    record['Codigo Servicio'] = val_cod
+                    
+                    # Extraer Nombre/Descripcion (Multi Line)
+                    r_desc = fitz.Rect(x_desc, y_top, x_cant, y_bot_desc)
+                    nom_serv = page.get_text("text", clip=r_desc).strip().replace('\n', ' ')
+                    
+                    # Extraer Cantidad (Single Line Strict)
+                    r_cant = fitz.Rect(x_cant, y_top, page.rect.width, y_bot_single)
+                    val_cant = page.get_text("text", clip=r_cant).strip()
+                    if '\n' in val_cant: val_cant = val_cant.split('\n')[0].strip()
+                    # Limpieza de emails o horas que aparecen abajo
+                    for garbage in ["@", ":", "fomag"]: 
+                        if garbage in val_cant: val_cant = val_cant.split(garbage)[0].strip()
+                        # Si cortamos por : (hora), a veces queda el número antes. Ej "1 6:25" -> "1 6".
+                        # Mejor: tomar solo el primer token numérico si hay espacios
+                        if ' ' in val_cant:
+                             tokens = val_cant.split()
+                             # Tomar el primer token que sea numero o digito
+                             if tokens: val_cant = tokens[0]
+                    record['Cantidad'] = val_cant
+
+                    # BUSCAR OBSERVACIÓN (Aparece debajo, usualmente alineada a la izquierda)
+                    # Definimos un area amplia debajo de la fila principal
+                    # Buscamos DESDE y_bot_single hacia abajo
+                    r_obs_search = fitz.Rect(0, y_bot_single, page.rect.width, y_bot_desc + 20)
+                    text_obs_area = page.get_text("text", clip=r_obs_search)
+                    
+                    # Buscamos la línea que empiece con Observación:
+                    m_obs = re.search(r'(Observaci[óo]n:.*?)(?:\n|$)', text_obs_area, re.IGNORECASE)
+                    if m_obs:
+                        obs_text = m_obs.group(1).strip()
+                        # Solo agregar si no está ya en el nombre (a veces se lee doble)
+                        if obs_text not in nom_serv:
+                            nom_serv += f" | {obs_text}"
+                    
+                    record['Nombre Servicio'] = nom_serv
+
+                else:
+                    # Fallback si no encuentra encabezados
+                    pass
+
+            extracted_data.append(record)
+
+        except Exception as e:
+            if not silent_mode: st.error(f"Error procesando {os.path.basename(pdf_path)}: {e}")
+
+    if extracted_data:
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df = pd.DataFrame(extracted_data)
+            df.to_excel(writer, index=False, sheet_name='Resultados')
+            
+            # Ajuste de columnas
+            workbook = writer.book
+            worksheet = writer.sheets['Resultados']
+            for i, col in enumerate(df.columns):
+                worksheet.set_column(i, i, 20)
+
+        return {
+            "files": [{
+                "name": "Analisis_Autorizaciones_FOMAG.xlsx",
+                "data": output.getvalue(),
+                "label": "Descargar FOMAG"
+            }],
+            "message": f"Procesados: {len(extracted_data)} registros."
+        }
+    return None
+
 
 def worker_analisis_sos(file_list, silent_mode=False, use_ai=False, api_key=None):
     """
@@ -3965,13 +4612,22 @@ def dialog_descargar_firmas():
         col_id = st.text_input("Columna ID Firma", value="id_firma", key="firmas_col_id")
         col_folder = st.text_input("Columna Nombre Carpeta", value="nombre_carpeta", key="firmas_col_folder")
     
-    root_path = st.text_input("Ruta Raíz Descarga", value=st.session_state.get('current_path', 'C:/Firmas'), key="firmas_path")
+    root_path = render_path_selector(
+        key="firmas_path",
+        label="Ruta Raíz Descarga"
+    )
     
     if st.button("Iniciar Descarga"):
         if uploaded and sheet_name and col_id and col_folder and root_path:
-            uploaded.seek(0)
-            submit_task("Descargar Firmas", worker_descargar_firmas, uploaded, sheet_name, col_id, col_folder, root_path)
-            st.rerun()
+            try:
+                with st.spinner("Descargando firmas..."):
+                    uploaded.seek(0)
+                    result = worker_descargar_firmas(uploaded, sheet_name, col_id, col_folder, root_path)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
         else:
             st.error("Complete todos los campos.")
 
@@ -4011,14 +4667,23 @@ def dialog_descargar_historias_ovida():
             col_egreso = st.text_input("Columna Fecha Egreso", value="f_egreso", key="ovida_egr")
             col_carpeta = st.text_input("Columna Carpeta Destino", value="carpeta", key="ovida_carp")
         
-    download_path = st.text_input("Ruta Descarga Base", value=st.session_state.get('current_path', 'C:/Historias'), key="ovida_path")
+    download_path = render_path_selector(
+        key="ovida_path",
+        label="Ruta Descarga Base"
+    )
     
     if st.button("Iniciar Descarga Masiva"):
         if uploaded and sheet_name and col_estudio and col_ingreso and col_egreso and col_carpeta and download_path:
             # Re-read file to ensure pointer is at start or handled by worker
             uploaded.seek(0)
-            submit_task("Descargar OVIDA", worker_descargar_historias_ovida, uploaded, sheet_name, col_estudio, col_ingreso, col_egreso, col_carpeta, download_path)
-            st.rerun()
+            try:
+                with st.spinner("Descargando historias de OVIDA..."):
+                    result = worker_descargar_historias_ovida(uploaded, sheet_name, col_estudio, col_ingreso, col_egreso, col_carpeta, download_path)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
         else:
             st.error("Complete todos los campos.")
 
@@ -4656,18 +5321,31 @@ def dialog_crear_firma():
     with c2_opt:
         humanize = st.checkbox("🎨 Estilo Natural", value=True, help="Aplica rotación aleatoria e imperfecciones.")
 
+    # Folder Selector
+    st.write("Carpeta Base de Trabajo:")
+    
+    target_path = render_path_selector(
+        key="crear_firma_path",
+        label="Ruta"
+    )
+    current_path = target_path
+
     # Tabs para los modos
     tab1, tab2 = st.tabs(["📁 Usar Nombre Carpeta", "📊 Usar Excel"])
-    
-    current_path = st.session_state.get("current_path", os.getcwd())
     
     with tab1:
         st.write("Usa el nombre de la subcarpeta como texto de la firma.")
         st.info(f"Ruta actual: {current_path}")
         if st.button("🚀 Generar (Carpeta)"):
             if font_path and os.path.exists(font_path):
-                submit_task("Crear Firmas (Carpeta)", worker_crear_firma_nombre, current_path, font_path, size, humanize)
-                st.rerun()
+                try:
+                    with st.spinner("Generando firmas..."):
+                        result = worker_crear_firma_nombre(current_path, font_path, size, humanize)
+                        st.success(result)
+                        time.sleep(2)
+                        # st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
             else:
                 st.error(f"No se encontró la fuente en: {font_path}")
 
@@ -4693,8 +5371,14 @@ def dialog_crear_firma():
                      uploaded.seek(0)
                      file_bytes = uploaded.getvalue()
                      if font_path and os.path.exists(font_path):
-                        submit_task("Crear Firmas (Excel)", worker_crear_firma_excel, current_path, font_path, size, file_bytes, sheet, col_folder, col_full_name, humanize)
-                        st.rerun()
+                        try:
+                            with st.spinner("Generando firmas..."):
+                                result = worker_crear_firma_excel(current_path, font_path, size, file_bytes, sheet, col_folder, col_full_name, humanize)
+                                st.success(result)
+                            time.sleep(2)
+                            # st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {e}")
                      else:
                         st.error(f"No se encontró la fuente en: {font_path}")
             except Exception as e:
@@ -4709,15 +5393,29 @@ def dialog_organizar_feov_avanzado():
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
 
     st.write("1. Carpeta Destino (contiene subcarpetas con PDFs FEOV...)")
-    path_dest = seleccionar_carpeta_nativa("feov_adv_dest", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    
+    path_dest = render_path_selector(
+        key="feov_adv_dest",
+        label="Ruta Destino"
+    )
     
     st.write("2. Carpeta Origen (archivos a mover)")
-    path_orig = seleccionar_carpeta_nativa("feov_adv_orig", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    
+    path_orig = render_path_selector(
+        key="feov_adv_orig",
+        label="Ruta Origen"
+    )
     
     if st.button("Iniciar Organización Avanzada"):
         if path_dest and path_orig:
-            submit_task("Org. FEOV Avanzado", worker_organizar_facturas_por_pdf_avanzado, path_dest, path_orig)
-            st.rerun()
+            try:
+                with st.spinner("Organizando facturas..."):
+                    result = worker_organizar_facturas_por_pdf_avanzado(path_dest, path_orig)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
         else:
             st.error("Seleccione ambas carpetas.")
 
@@ -4749,13 +5447,23 @@ def dialog_autorizacion_docx():
         except Exception as e:
             st.error(f"Error: {e}")
 
-    base_path = seleccionar_carpeta_nativa("auth_base", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    base_path = render_path_selector(
+        key="auth_base",
+        label="Carpeta Base"
+    )
     
     if st.button("Iniciar Modificación"):
         if uploaded and base_path and col_folder and col_auth:
-            uploaded.seek(0)
-            submit_task("Autorización DOCX", worker_autorizacion_docx_desde_excel, uploaded, sheet, col_folder, col_auth, base_path, use_filter)
-            st.rerun()
+            try:
+                uploaded.seek(0)
+                file_bytes = uploaded.getvalue()
+                with st.spinner("Modificando DOCX..."):
+                    result = worker_autorizacion_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_auth, use_filter)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("Régimen DOCX desde Excel")
 def dialog_regimen_docx():
@@ -4785,13 +5493,23 @@ def dialog_regimen_docx():
         except Exception as e:
             st.error(f"Error: {e}")
 
-    base_path = seleccionar_carpeta_nativa("reg_base", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    base_path = render_path_selector(
+        key="reg_base",
+        label="Carpeta Base"
+    )
     
     if st.button("Iniciar Modificación"):
         if uploaded and base_path and col_folder and col_reg:
-            uploaded.seek(0)
-            submit_task("Régimen DOCX", worker_regimen_docx_desde_excel, base_path, uploaded, sheet, col_folder, col_reg, use_filter)
-            st.rerun()
+            try:
+                uploaded.seek(0)
+                file_bytes = uploaded.getvalue()
+                with st.spinner("Modificando Régimen..."):
+                    result = worker_regimen_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_reg, use_filter)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("Crear Carpetas desde Excel")
 def dialog_crear_carpetas_excel():
@@ -4819,13 +5537,23 @@ def dialog_crear_carpetas_excel():
         except Exception as e:
             st.error(f"Error leyendo Excel: {e}")
             
-    base_path = seleccionar_carpeta_nativa("create_fold_base", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    base_path = render_path_selector(
+        key="create_fold_base",
+        label="Carpeta Base"
+    )
     
     if st.button("Crear Carpetas"):
         if uploaded and base_path and col_name:
-            uploaded.seek(0)
-            submit_task("Crear Carpetas", worker_crear_carpetas_excel_avanzado, uploaded, sheet, col_name, base_path, use_filter)
-            st.rerun()
+            try:
+                uploaded.seek(0)
+                file_bytes = uploaded.getvalue()
+                with st.spinner("Creando carpetas..."):
+                    result = worker_crear_carpetas_excel_avanzado(file_bytes, sheet, col_name, base_path, use_filter)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("Copiar Mapeo Subcarpetas")
 def dialog_copiar_mapeo():
@@ -4852,14 +5580,29 @@ def dialog_copiar_mapeo():
             st.error(f"Error leyendo Excel: {e}")
     
     st.write("Rutas Base:")
-    src_base = seleccionar_carpeta_nativa("copy_map_src_base", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
-    dst_base = seleccionar_carpeta_nativa("copy_map_dst_base", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    
+    src_base = render_path_selector(
+        key="copy_map_src_base",
+        label="Carpeta Origen Base"
+    )
+
+    dst_base = render_path_selector(
+        key="copy_map_dst_base",
+        label="Carpeta Destino Base"
+    )
     
     if st.button("Iniciar Copia"):
         if uploaded and src_base and dst_base and col_src and col_dst:
-            uploaded.seek(0)
-            submit_task("Copiar Mapeo", worker_copiar_mapeo_subcarpetas, uploaded, sheet, col_src, col_dst, src_base, dst_base, use_filter)
-            st.rerun()
+            try:
+                uploaded.seek(0)
+                file_bytes = uploaded.getvalue()
+                with st.spinner("Copiando archivos..."):
+                    result = worker_copiar_mapeo_subcarpetas(file_bytes, sheet, col_src, col_dst, src_base, dst_base, use_filter)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("Copiar desde Raíz (Mapeo)")
 def dialog_copiar_raiz():
@@ -4891,14 +5634,29 @@ def dialog_copiar_raiz():
             st.error(f"Error leyendo Excel: {e}")
 
     st.write("Rutas:")
-    root_src = seleccionar_carpeta_nativa("copy_root_src_base", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
-    root_dst = seleccionar_carpeta_nativa("copy_root_dst_base", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    
+    root_src = render_path_selector(
+        key="copy_root_src_base",
+        label="Carpeta Origen (Archivos)"
+    )
+
+    root_dst = render_path_selector(
+        key="copy_root_dst_base",
+        label="Carpeta Destino (Carpetas)"
+    )
     
     if st.button("Iniciar Copia"):
         if uploaded and root_src and root_dst and col_id and col_folder:
-            uploaded.seek(0)
-            submit_task("Copiar Raíz", worker_copiar_archivos_desde_raiz_mapeo, uploaded, sheet, col_id, col_folder, root_src, root_dst, use_filter)
-            st.rerun()
+            try:
+                uploaded.seek(0)
+                file_bytes = uploaded.getvalue()
+                with st.spinner("Copiando archivos..."):
+                    result = worker_copiar_archivos_desde_raiz_mapeo(file_bytes, sheet, col_id, col_folder, root_src, root_dst, use_filter)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("RIPS Eventos Masivos")
 def dialog_rips_masivos():
@@ -4911,58 +5669,103 @@ def dialog_rips_masivos():
     mode = st.radio("Modo", ["JSON -> Excel", "Excel -> JSON"])
     
     if mode == "JSON -> Excel":
-        folder_src = seleccionar_carpeta_nativa("rips_json_src", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+        folder_src = render_path_selector(
+            key="rips_json_src",
+            label="Carpeta JSONs"
+        )
+
         file_dst = st.text_input("Nombre Archivo Salida (.xlsx)", "Consolidado.xlsx")
         if st.button("Convertir JSONs a Excel"):
             if folder_src:
-                submit_task("JSON Evento -> Excel", worker_json_evento_a_xlsx_masivo, folder_src, os.path.join(folder_src, file_dst))
-                st.rerun()
+                try:
+                    with st.spinner("Convirtiendo JSONs..."):
+                        result = worker_json_evento_a_xlsx_masivo(folder_src, os.path.join(folder_src, file_dst))
+                        st.success(result)
+                        time.sleep(2)
+                        # st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
     else:
         file_src = st.file_uploader("Excel Eventos", type=["xlsx"])
-        folder_dst = seleccionar_carpeta_nativa("rips_excel_dst", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+        
+        folder_dst = render_path_selector(
+            key="rips_excel_dst",
+            label="Carpeta Destino JSONs"
+        )
+
         if st.button("Convertir Excel a JSONs"):
             if file_src and folder_dst:
-                # Need to save temp excel first? worker takes path
-                t_path = os.path.join(folder_dst, "temp_eventos.xlsx")
-                with open(t_path, "wb") as f: f.write(file_src.getbuffer())
-                submit_task("Excel Evento -> JSON", worker_xlsx_evento_a_json_masivo, t_path, folder_dst)
-                st.rerun()
+                try:
+                    # Need to save temp excel first? worker takes path
+                    t_path = os.path.join(folder_dst, "temp_eventos.xlsx")
+                    with open(t_path, "wb") as f: f.write(file_src.getbuffer())
+                    
+                    with st.spinner("Generando JSONs..."):
+                        result = worker_xlsx_evento_a_json_masivo(t_path, folder_dst)
+                        st.success(result)
+                        time.sleep(2)
+                        # st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
 
 # --- DIALOGS: RENAMING ---
 
 @st.dialog("Exportar para Renombrar")
 def dialog_exportar_renombrado():
     st.write("Genera un Excel con los archivos de una carpeta para renombrarlos masivamente.")
-    folder = seleccionar_carpeta_nativa("renombrar_export_src", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    
+    c1, c2 = st.columns([0.8, 0.2])
+    
+    folder = render_path_selector(
+        key="renombrar_export_src",
+        label="Carpeta"
+    )
+    
     if st.button("Generar Excel"):
         if folder:
-            # Create a simple Excel with OldName, NewName
-            data = []
-            for f in os.listdir(folder):
-                if os.path.isfile(os.path.join(folder, f)):
-                    data.append({"NombreActual": f, "NuevoNombre": f})
-            
-            if data:
-                df = pd.DataFrame(data)
-                out_path = os.path.join(folder, "Renombrar_Archivos.xlsx")
-                df.to_excel(out_path, index=False)
-                st.success(f"Excel generado en: {out_path}")
-            else:
-                st.warning("No se encontraron archivos en la carpeta.")
+            try:
+                # Create a simple Excel with OldName, NewName
+                data = []
+                for f in os.listdir(folder):
+                    if os.path.isfile(os.path.join(folder, f)):
+                        data.append({"NombreActual": f, "NuevoNombre": f})
+                
+                if data:
+                    df = pd.DataFrame(data)
+                    out_path = os.path.join(folder, "Renombrar_Archivos.xlsx")
+                    df.to_excel(out_path, index=False)
+                    st.success(f"Excel generado en: {out_path}")
+                else:
+                    st.warning("No se encontraron archivos en la carpeta.")
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("Aplicar Renombrado (Excel)")
 def dialog_aplicar_renombrado():
     st.write("Renombra archivos basándose en un Excel (NombreActual -> NuevoNombre).")
     excel_file = st.file_uploader("Archivo Excel", type=["xlsx"])
-    folder = seleccionar_carpeta_nativa("renombrar_apply_src", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    
+    c1, c2 = st.columns([0.8, 0.2])
+    
+    folder = render_path_selector(
+        key="renombrar_apply_src",
+        label="Carpeta"
+    )
     
     if st.button("Aplicar Cambios"):
         if excel_file and folder:
-            # Save temp excel
-            t_path = os.path.join(folder, "temp_renombrar.xlsx")
-            with open(t_path, "wb") as f: f.write(excel_file.getbuffer())
-            submit_task("Renombrado Masivo", worker_aplicar_renombrado_excel, t_path, folder)
-            st.rerun()
+            try:
+                # Save temp excel
+                t_path = os.path.join(folder, "temp_renombrar.xlsx")
+                with open(t_path, "wb") as f: f.write(excel_file.getbuffer())
+                
+                with st.spinner("Renombrando archivos..."):
+                    result = worker_aplicar_renombrado_excel(t_path, folder)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 @st.dialog("Copiar Archivo a Subcarpetas")
 def dialog_copiar_archivo_a_subcarpetas():
@@ -4973,17 +5776,29 @@ def dialog_copiar_archivo_a_subcarpetas():
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
 
     file_to_copy = st.file_uploader("Archivo a Copiar", key="copy_sub_file")
-    dest_base_path = seleccionar_carpeta_nativa("copy_sub_dest", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    
+    c1, c2 = st.columns([0.8, 0.2])
+    
+    dest_base_path = render_path_selector(
+        key="copy_sub_dest",
+        label="Carpeta Destino Base"
+    )
     
     if st.button("Iniciar Copia a Subcarpetas"):
         if file_to_copy and dest_base_path:
-            # Save temp file
-            t_path = os.path.join(dest_base_path, file_to_copy.name)
-            with open(t_path, "wb") as f:
-                f.write(file_to_copy.getbuffer())
-            
-            submit_task("Copiar a Subcarpetas", worker_copiar_archivo_a_subcarpetas, t_path, dest_base_path)
-            st.rerun()
+            try:
+                # Save temp file
+                t_path = os.path.join(dest_base_path, file_to_copy.name)
+                with open(t_path, "wb") as f:
+                    f.write(file_to_copy.getbuffer())
+                
+                with st.spinner("Copiando archivos..."):
+                    result = worker_copiar_archivo_a_subcarpetas(t_path, dest_base_path)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
         else:
             st.error("Seleccione archivo y carpeta destino.")
 
@@ -4996,13 +5811,26 @@ def dialog_organizar_feov():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible. Use las rutas manuales.")
 
-    target_path = seleccionar_carpeta_nativa("feov_target", "Carpeta DESTINO (Subcarpetas)", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
-    source_path = seleccionar_carpeta_nativa("feov_source", "Carpeta ORIGEN (Archivos)", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+    target_path = render_path_selector(
+        key="feov_target",
+        label="Carpeta DESTINO"
+    )
+
+    source_path = render_path_selector(
+        key="feov_source",
+        label="Carpeta ORIGEN"
+    )
     
     if st.button("Organizar Facturas"):
         if target_path and source_path:
-            submit_task("Organizar FEOV", worker_organizar_facturas_feov, source_path, target_path)
-            st.rerun()
+            try:
+                with st.spinner("Organizando facturas..."):
+                    result = worker_organizar_facturas_feov(source_path, target_path)
+                    st.success(result)
+                    time.sleep(2)
+                    # st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
         else:
             st.warning("Seleccione ambas carpetas.")
 
@@ -5017,35 +5845,26 @@ def dialog_escala_grises():
     tab1, tab2 = st.tabs(["Individual/Manual", "Resultados de Búsqueda"])
     
     with tab1:
-        files = st.file_uploader("Seleccionar PDFs", type=["pdf"], accept_multiple_files=True, key="gray_manual_files")
-        replace = st.checkbox("Reemplazar originales", value=True, key="gray_manual_replace")
+        st.write("Procesar carpeta completa:")
+        folder = render_path_selector(
+            key="gray_folder",
+            label="Carpeta"
+        )
         
-        if st.button("Convertir Seleccionados"):
-            if files:
-                # Save temp files if uploaded? 
-                # worker expects paths. 
-                # If we use file_uploader, we have BytesIO.
-                # We need to save them to temp or use a version of worker that accepts file objects (but fitz needs path or bytes).
-                # The original app used filedialog, so it had paths.
-                # Here we can use paths if we ask for a folder, OR handle uploaded files.
-                # Since user wants "Native" feel, maybe we should ask for a folder to process?
-                # Or just handle the uploaded files by saving them to a temp dir.
-                
-                # However, to support "Reemplazar originales", we really need the original paths.
-                # So file_uploader is not ideal for "Reemplazar".
-                # Better to ask for a folder or file paths via dialog? 
-                # Streamlit doesn't support picking files with paths natively securely.
-                # But we have `seleccionar_carpeta_nativa`.
-                pass
-                
-        st.write("O procesar carpeta completa:")
-        folder = seleccionar_carpeta_nativa("gray_folder", initial_dir=st.session_state.get("current_path", os.path.expanduser("~")))
+        replace = st.checkbox("Reemplazar originales", value=True, key="gray_manual_replace")
+
         if st.button("Convertir Carpeta"):
             if folder:
                 pdfs = [os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith('.pdf')]
                 if pdfs:
-                    submit_task("Grayscale Folder", worker_pdf_a_escala_grises, pdfs, replace)
-                    st.rerun()
+                    try:
+                        with st.spinner("Convirtiendo a escala de grises..."):
+                            result = worker_pdf_a_escala_grises(pdfs, replace)
+                            st.success(result)
+                            time.sleep(2)
+                            # st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
                 else:
                     st.warning("No hay PDFs en la carpeta.")
 
@@ -5058,8 +5877,14 @@ def dialog_escala_grises():
         
         if st.button("Convertir Resultados"):
             if pdfs_res:
-                submit_task("Grayscale Results", worker_pdf_a_escala_grises, pdfs_res, replace_res)
-                st.rerun()
+                try:
+                    with st.spinner("Convirtiendo resultados..."):
+                        result = worker_pdf_a_escala_grises(pdfs_res, replace_res)
+                        st.success(result)
+                        time.sleep(2)
+                        # st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
             else:
                 st.warning("No hay resultados PDF disponibles.")
 
@@ -5088,23 +5913,58 @@ def render():
         
         with col_u1:
             st.subheader("Operaciones por Carpeta")
-            path_unif = seleccionar_carpeta_nativa("Carpeta de Trabajo (Unificación)", initial_dir=default_path, key="tab_unif_folder")
+                # Selector de ruta estandarizado
+            path_unif = render_path_selector(
+                label="Carpeta de Trabajo",
+                key="tab_unif_folder",
+                default_path=default_path
+            )
             
             if st.button("🗂️ Unificar PDF por Carpeta", key="btn_unif_pdf"):
-                submit_task("Unif. PDF", worker_unificar_por_carpeta, path_unif, "Unificado")
+                if path_unif:
+                    try:
+                        with st.spinner("Unificando PDFs..."):
+                            result = worker_unificar_por_carpeta(path_unif, "Unificado")
+                            st.success(result)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
             
             if st.button("🖼️ Unificar JPG por Carpeta", key="btn_unif_jpg"):
-                submit_task("Unif. JPG", worker_unificar_imagenes_por_carpeta_rec, path_unif, "Unificado.pdf", "JPG")
+                if path_unif:
+                    try:
+                        with st.spinner("Unificando JPGs..."):
+                            result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "JPG")
+                            st.success(result)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
                 
             if st.button("🖼️ Unificar PNG por Carpeta", key="btn_unif_png"):
-                submit_task("Unif. PNG", worker_unificar_imagenes_por_carpeta_rec, path_unif, "Unificado.pdf", "PNG")
+                if path_unif:
+                    try:
+                        with st.spinner("Unificando PNGs..."):
+                            result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "PNG")
+                            st.success(result)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
                 
             if st.button("📄 Unificar DOCX por Carpeta", key="btn_unif_docx"):
-                submit_task("Unif. DOCX", worker_unificar_docx_por_carpeta, path_unif, "Unificado.docx")
+                if path_unif:
+                    try:
+                        with st.spinner("Unificando DOCX..."):
+                            result = worker_unificar_docx_por_carpeta(path_unif, "Unificado.docx")
+                            st.success(result)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
             st.divider()
             if st.button("✂️ Dividir PDFs Masivamente", key="btn_split_mass"):
-                submit_task("Dividir Masivo", worker_dividir_pdfs_masivamente, path_unif)
+                if path_unif:
+                    try:
+                        with st.spinner("Dividiendo PDFs..."):
+                            result = worker_dividir_pdfs_masivamente(path_unif)
+                            st.success(result)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
         with col_u2:
             st.subheader("Operaciones Manuales")
@@ -5113,8 +5973,13 @@ def render():
             uploaded_pdfs = st.file_uploader("Unificar PDFs (Manual)", type=['pdf'], accept_multiple_files=True, key="col1_pdf_man")
             if st.button("🧷 Unificar Seleccionados", key="btn_unif_sel"):
                  if uploaded_pdfs:
-                     out_path = os.path.join(st.session_state.get('current_path', '.'), "Unificado_Manual.pdf")
-                     submit_task("Unificar Manual", worker_unificar_pdfs_list, uploaded_pdfs, out_path)
+                     try:
+                         with st.spinner("Unificando PDFs seleccionados..."):
+                             out_path = os.path.join(st.session_state.get('current_path', '.'), "Unificado_Manual.pdf")
+                             result = worker_unificar_pdfs_list(uploaded_pdfs, out_path)
+                             st.success(result)
+                     except Exception as e:
+                         st.error(f"Error: {e}")
 
             st.divider()
 
@@ -5122,14 +5987,24 @@ def render():
             uploaded_split = st.file_uploader("Dividir PDF (Manual)", type=['pdf'], key="col1_split_man")
             if st.button("✂️ Dividir en Páginas", key="btn_split_man"):
                 if uploaded_split:
-                    out_folder = os.path.join(st.session_state.get('current_path', '.'), "Dividido")
-                    submit_task("Dividir PDF", worker_dividir_pdf_paginas, uploaded_split, out_folder)
+                    try:
+                        with st.spinner("Dividiendo PDF..."):
+                            out_folder = os.path.join(st.session_state.get('current_path', '.'), "Dividido")
+                            result = worker_dividir_pdf_paginas(uploaded_split, out_folder)
+                            st.success(result)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
     # --- TAB 2: Organización ---
     with tab_org:
         st.caption("Organización de facturas, movimiento por coincidencia y consolidación.")
         
-        path_org = seleccionar_carpeta_nativa("Seleccionar Carpeta de Trabajo", initial_dir=default_path, key="tab_org_folder")
+        # Selector de ruta estandarizado
+        path_org = render_path_selector(
+            label="Carpeta de Trabajo",
+            key="tab_org_folder",
+            default_path=default_path
+        )
         
         col_o1, col_o2 = st.columns(2)
         with col_o1:
@@ -5137,7 +6012,13 @@ def render():
                 dialog_organizar_feov()
                 
             if st.button("📂➡️📁 Mover por Coincidencia", key="btn_org_move"):
-                submit_task("Mover Coincidencia", worker_mover_por_coincidencia, path_org)
+                if path_org:
+                    try:
+                        with st.spinner("Moviendo archivos por coincidencia..."):
+                            result = worker_mover_por_coincidencia(path_org)
+                            st.success(result)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
                 
             if st.button("⚫⚪ PDF a Escala de Grises", key="btn_org_gray"):
                 dialog_escala_grises()
@@ -5150,7 +6031,13 @@ def render():
                 dialog_copiar_raiz()
                 
             if st.button("📤 Consolidar Subcarpetas", key="btn_org_consol"):
-                submit_task("Consolidar", worker_consolidar_subcarpetas, path_org)
+                if path_org:
+                    try:
+                        with st.spinner("Consolidando subcarpetas..."):
+                            result = worker_consolidar_subcarpetas(path_org)
+                            st.success(result)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
     # --- TAB 3: Modificación ---
     with tab_modif:
@@ -5187,12 +6074,23 @@ def render():
     with tab_an:
         st.caption("Análisis y extracción de datos de historias clínicas y otros documentos.")
         
-        path_an = seleccionar_carpeta_nativa("Carpeta de Análisis", initial_dir=default_path, key="tab_an_folder")
+        # Selector de ruta estandarizado
+        path_an = render_path_selector(
+            label="Carpeta de Análisis",
+            key="tab_an_folder",
+            default_path=default_path
+        )
         
-        # Obtener lista de PDFs para análisis
+        # Obtener lista de PDFs para análisis (Recursivo)
         files_pdf = []
         if path_an and os.path.exists(path_an):
-             files_pdf = [os.path.join(path_an, f) for f in os.listdir(path_an) if f.lower().endswith('.pdf')]
+             for root, dirs, files in os.walk(path_an):
+                 for f in files:
+                     if f.lower().endswith('.pdf'):
+                         files_pdf.append(os.path.join(root, f))
+        
+        if path_an and os.path.exists(path_an):
+            st.caption(f"📂 Se encontraron {len(files_pdf)} archivos PDF en {path_an} (búsqueda recursiva).")
         
         col_a1, col_a2 = st.columns(2)
 
@@ -5255,6 +6153,18 @@ def render():
             if st.button("📊 Análisis Retefuente/ICA", key="btn_an_rete"):
                  if files_pdf:
                     run_analysis_sync(worker_leer_pdf_retefuente, [files_pdf], "an_rete")
+                 else:
+                    st.warning("No se encontraron PDFs.")
+
+            if st.button("📊 Análisis Aut. Emssanar", key="btn_an_emssanar"):
+                 if files_pdf:
+                    run_analysis_sync(worker_analisis_emssanar, [files_pdf], "an_emssanar")
+                 else:
+                    st.warning("No se encontraron PDFs.")
+
+            if st.button("📊 Análisis Aut. FOMAG", key="btn_an_fomag"):
+                 if files_pdf:
+                    run_analysis_sync(worker_analisis_fomag, [files_pdf], "an_fomag")
                  else:
                     st.warning("No se encontraron PDFs.")
 

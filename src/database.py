@@ -3,8 +3,16 @@ import json
 import os
 import threading
 
-DB_FILE = os.path.join(os.path.dirname(__file__), "users.db")
-USERS_JSON = os.path.join(os.path.dirname(__file__), "users.json")
+import sys
+
+# Detect if we are running as a frozen executable (PyInstaller)
+if getattr(sys, 'frozen', False):
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DB_FILE = os.path.join(BASE_DIR, "users.db")
+USERS_JSON = os.path.join(BASE_DIR, "users.json")
 
 # Lock for thread safety within the same process
 _db_lock = threading.Lock()
@@ -75,6 +83,56 @@ def init_db():
             status TEXT DEFAULT 'PENDING'
         )
         ''')
+        
+        # --- NEW TABLES FOR NORMALIZED SCHEMA ---
+        
+        # Create Pacientes table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pacientes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo_doc TEXT,
+            no_doc TEXT UNIQUE,
+            nombre_completo TEXT,
+            nombre_tercero TEXT,
+            eps TEXT,
+            regimen TEXT DEFAULT 'SUBSIDIADO',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+
+        # Create Atenciones table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS atenciones (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            paciente_id INTEGER NOT NULL,
+            nro_estudio TEXT,
+            descripcion_cups TEXT,
+            fecha_ingreso TEXT,
+            fecha_salida TEXT,
+            autorizacion TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(paciente_id) REFERENCES pacientes(id)
+        )
+        ''')
+
+        # Create Facturas table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS facturas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            atencion_id INTEGER NOT NULL,
+            no_factura TEXT UNIQUE,
+            fecha_factura TEXT,
+            tipo_pago TEXT,
+            valor_servicio TEXT,
+            copago TEXT,
+            radicado TEXT,
+            total TEXT,
+            status TEXT DEFAULT 'PENDING',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(atencion_id) REFERENCES atenciones(id)
+        )
+        ''')
+        
         conn.commit()
 
         # Check for missing columns in document_records (Migration)
@@ -373,6 +431,59 @@ def get_task_status(task_id):
         except: task["result"] = None
         return task
     return None
+
+# --- ADMIN REPORTS & BACKUP ---
+
+def get_db_path():
+    """Returns the absolute path to the database file."""
+    return DB_FILE
+
+def get_all_invoices():
+    """Returns all invoices with patient details."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT f.*, p.eps, p.regimen, p.nombre_completo, p.no_doc
+        FROM facturas f
+        LEFT JOIN atenciones a ON f.atencion_id = a.id
+        LEFT JOIN pacientes p ON a.paciente_id = p.id
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def get_pending_invoices():
+    """Returns pending invoices with patient details."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT f.*, p.eps, p.regimen, p.nombre_completo, p.no_doc
+        FROM facturas f
+        LEFT JOIN atenciones a ON f.atencion_id = a.id
+        LEFT JOIN pacientes p ON a.paciente_id = p.id
+        WHERE f.status = 'PENDING'
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def get_radicado_invoices():
+    """Returns invoices with radicado with patient details."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    query = """
+        SELECT f.*, p.eps, p.regimen, p.nombre_completo, p.no_doc
+        FROM facturas f
+        LEFT JOIN atenciones a ON f.atencion_id = a.id
+        LEFT JOIN pacientes p ON a.paciente_id = p.id
+        WHERE f.radicado IS NOT NULL AND f.radicado != ''
+    """
+    cursor.execute(query)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 # Initialize DB on module load
 init_db()

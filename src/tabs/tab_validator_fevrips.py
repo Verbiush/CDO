@@ -15,7 +15,30 @@ try:
 except ImportError:
     from src import database as db
 
+try:
+    from gui_utils import abrir_dialogo_carpeta_nativo, abrir_dialogo_archivo_nativo, update_path_key, render_path_selector, render_file_selector
+except ImportError:
+    try:
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, abrir_dialogo_archivo_nativo, update_path_key, render_path_selector, render_file_selector
+    except ImportError:
+        abrir_dialogo_carpeta_nativo = None
+        abrir_dialogo_archivo_nativo = None
+        def update_path_key(key, new_path, widget_key=None):
+             if new_path:
+                 st.session_state[key] = new_path
+                 if widget_key:
+                     st.session_state[widget_key] = new_path
+        
+        def render_path_selector(label, key, default_path=None, help_text=None):
+            st.warning("render_path_selector no disponible")
+            return default_path
+
+        def render_file_selector(label, key, default_path=None, help_text=None, file_types=None):
+            st.warning("render_file_selector no disponible")
+            return default_path
+
 # --- HELPERS ---
+
 def check_process_running(process_name):
     """Verifica si un proceso está corriendo en Windows"""
     try:
@@ -76,12 +99,30 @@ def update_user_config_helper(key, value):
         except Exception as e:
             print(f"Error actualizando config: {e}")
 
+def update_config_key(key, new_value, widget_key=None):
+    if new_value:
+        update_user_config_helper(key, new_value)
+        if widget_key:
+            st.session_state[widget_key] = new_value
+        # st.rerun() # Removed to avoid callback error
+
+def on_click_update_config(key, new_value):
+    if new_value:
+        update_user_config_helper(key, new_value)
+
 @st.dialog("Generar CUV Masivo (FEVRIPS)")
 def dialog_generar_cuv():
     st.write("Genera el Código Único de Validación (CUV) enviando los archivos RIPS a la API local.")
     
-    st.text_input("Carpeta de Facturas (Raíz)", value=st.session_state.get("current_path", ""), key="path_cuv", disabled=True)
-    st.caption("Se usará la carpeta seleccionada en la pantalla principal.")
+    current_global_path = st.session_state.get("current_path", os.getcwd())
+    if not current_global_path: current_global_path = os.getcwd()
+
+    target_cuv_path = render_path_selector(
+        label="Carpeta de Facturas (Raíz)",
+        key="path_cuv",
+        default_path=current_global_path,
+        help_text="Se usará la carpeta seleccionada para buscar los archivos RIPS."
+    )
     
     # --- NUEVA SECCIÓN: MODO SERVICIO WEB ---
     if st.session_state.get("is_web_service_mode", False):
@@ -133,7 +174,7 @@ def dialog_generar_cuv():
                     if status == "running":
                         if st.button("⏹️ Detener", key="stop_docker"):
                             subprocess.run("docker stop fevrips-api", shell=True)
-                            st.rerun()
+                            # st.rerun()
                     elif status == "stopped":
                         if st.button("▶️ Iniciar", key="start_docker", type="primary"):
                             subprocess.run("docker start fevrips-api", shell=True)
@@ -146,7 +187,7 @@ def dialog_generar_cuv():
                             subprocess.run(cmd, shell=True)
                             st.toast("Descargando e iniciando (puede tardar)...")
                             time.sleep(10)
-                            st.rerun()
+                            # st.rerun()
 
         # Modo Local: Permitir URL personalizada para flexibilidad (Docker o Nativo Windows)
         elif conn_mode == "Local (Nativo)":
@@ -191,11 +232,30 @@ def dialog_generar_cuv():
             
             # Default path inferido
             default_exe_path = r"C:\Program Files\FEVRIPS Validador Local\FVE.ValidadorLocal.exe"
-            exe_path = st.text_input("Ruta del Ejecutable FEVRIPS:", value=st.session_state.app_config.get("fevrips_exe_path", default_exe_path))
+            current_exe_path = st.session_state.app_config.get("fevrips_exe_path", default_exe_path)
             
-            if exe_path != st.session_state.app_config.get("fevrips_exe_path"):
-                update_user_config_helper("fevrips_exe_path", exe_path)
-
+            # Usar render_file_selector estandarizado
+            # Usamos una key específica para el selector
+            selector_key = "fevrips_exe_path_selector"
+            
+            # Asegurar que el selector inicie con el valor actual de config si no está en session
+            if selector_key not in st.session_state:
+                st.session_state[selector_key] = current_exe_path
+                
+            new_exe_path = render_file_selector(
+                "Ruta del Ejecutable FEVRIPS:", 
+                key=selector_key,
+                default_path=current_exe_path,
+                help_text="Seleccione el ejecutable de FEVRIPS (FVE.ValidadorLocal.exe).",
+                file_types=[("Ejecutables", "*.exe"), ("Todos", "*.*")]
+            )
+            
+            # Sincronizar con config si cambió
+            if new_exe_path != current_exe_path:
+                update_user_config_helper("fevrips_exe_path", new_exe_path)
+                current_exe_path = new_exe_path
+            
+            exe_path = current_exe_path
             exe_name = os.path.basename(exe_path)
             is_running = check_process_running(exe_name)
             
@@ -517,7 +577,7 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
             return
             
         # Lógica de procesamiento masivo
-        path_input = st.session_state.get("current_path", "")
+        path_input = target_cuv_path
         if not path_input or not os.path.exists(path_input):
             st.error("Ruta de archivos inválida.")
             return

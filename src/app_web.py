@@ -1,4 +1,7 @@
 import streamlit as st
+import pandas as pd
+import datetime
+import time
 import os
 import sys
 import io
@@ -12,25 +15,32 @@ import json
 import base64
 import threading
 try:
-    from task_manager import submit_task, render_task_center, show_task_notifications, render_task_items
+    from task_manager import render_task_center, show_task_notifications, render_task_items
 except ImportError:
-    from src.task_manager import submit_task, render_task_center, show_task_notifications, render_task_items
+    from src.task_manager import render_task_center, show_task_notifications, render_task_items
+
+try:
+    from gui_utils import render_path_selector
+except ImportError:
+    try:
+        from src.gui_utils import render_path_selector
+    except ImportError:
+        def render_path_selector(label, key, default_path=None, help_text=None):
+            st.error("render_path_selector no disponible")
+            return default_path
 
 try:
     from tabs import tab_bot_zeus, tab_ai_assistant, tab_search_actions, tab_automated_actions
-    from tabs import tab_conversion, tab_visor, tab_rips, tab_validator_fevrips, tab_user_validation, tab_gestion_documental
+    from tabs import tab_conversion, tab_visor, tab_rips, tab_validator_fevrips, tab_user_validation, tab_gestion_documental, tab_admin, tab_user_management
 except ImportError as e:
     # Only fallback if the error is about finding 'tabs' module itself
     if e.name == 'tabs' or "No module named 'tabs'" in str(e):
         from src.tabs import tab_bot_zeus, tab_ai_assistant, tab_search_actions, tab_automated_actions
-        from src.tabs import tab_conversion, tab_visor, tab_rips, tab_validator_fevrips, tab_user_validation, tab_gestion_documental
+        from src.tabs import tab_conversion, tab_visor, tab_rips, tab_validator_fevrips, tab_user_validation, tab_gestion_documental, tab_admin, tab_user_management
     else:
         raise e
 
-try:
-    from gui_utils import seleccionar_carpeta_nativa
-except ImportError:
-    from src.gui_utils import seleccionar_carpeta_nativa
+
 
 
 # --- AGENT HELPERS ---
@@ -198,125 +208,7 @@ with col_header_bell:
                 st.toast("Revisa el Centro de Tareas en la barra lateral.")
 
 # --- ADMIN PANEL ---
-@st.dialog("Panel de Administración de Usuarios")
-def admin_panel_modal():
-    st.header("👥 Gestión de Usuarios")
-    
-    tab_list, tab_create, tab_edit = st.tabs(["Listar / Eliminar", "Crear Nuevo", "✏️ Editar Permisos"])
-    
-    with tab_list:
-        users = db.get_all_users()
-        df_data = [{"Usuario": u, "Rol": d.get("role", "user"), "Bot Zeus": d.get("permissions", {}).get("bot_zeus", "full")} for u, d in users.items()]
-        st.dataframe(df_data, use_container_width=True)
-        
-        st.divider()
-        st.subheader("🗑️ Eliminar Usuario")
-        user_to_delete = st.selectbox("Seleccionar usuario a eliminar", [u for u in users.keys() if u != "admin"])
-        
-        if st.button("Eliminar Usuario Seleccionado", type="primary"):
-            if user_to_delete:
-                ok, msg = db.delete_user(user_to_delete)
-                if ok:
-                    st.success(msg)
-                    st.rerun()
-                else:
-                    st.error(msg)
-    
-    with tab_create:
-        st.subheader("➕ Nuevo Usuario")
-        new_user = st.text_input("Nombre de usuario")
-        new_pass = st.text_input("Contraseña", type="password")
-        new_role = st.selectbox("Rol", ["user", "admin"])
-        
-        if st.button("Crear Usuario"):
-            if new_user and new_pass:
-                # Create with default permissions
-                ok, msg = db.create_user(new_user, new_pass, role=new_role)
-                if ok:
-                    st.success(msg)
-                    st.rerun()
-                else:
-                    st.error(msg)
-            else:
-                st.warning("Complete todos los campos")
-
-    with tab_edit:
-        st.subheader("✏️ Editar Permisos y Roles")
-        users = db.get_all_users()
-        user_to_edit = st.selectbox("Seleccionar usuario", list(users.keys()))
-        
-        if user_to_edit:
-            user_data = users[user_to_edit]
-            current_role = user_data.get("role", "user")
-            current_perms = user_data.get("permissions", {})
-            current_bot = current_perms.get("bot_zeus", "full") # default full for backward compat
-            current_tabs = current_perms.get("allowed_tabs", ["*"])
-            
-            # Form
-            new_role_edit = st.selectbox("Rol del Usuario", ["user", "admin"], index=0 if current_role == "user" else 1, key="edit_role")
-            
-            st.divider()
-            st.markdown("**Permisos Específicos**")
-            
-            # Bot Zeus Permissions
-            bot_options = ["full", "edit", "execute", "none"]
-            bot_labels = ["Completo (Crear/Editar/Ejecutar)", "Edición (Editar/Ejecutar)", "Solo Ejecución", "Sin Acceso"]
-            
-            try:
-                bot_index = bot_options.index(current_bot)
-            except:
-                bot_index = 0
-                
-            new_bot_perm = st.selectbox(
-                "🤖 Permisos Bot Zeus", 
-                bot_options, 
-                format_func=lambda x: bot_labels[bot_options.index(x)],
-                index=bot_index,
-                key="edit_bot"
-            )
-            
-            # Tab Visibility
-            all_tabs_available = [
-                "🔎 Búsqueda y Acciones",
-                "⚙️ Acciones Automatizadas",
-                "🔄 Conversión de Archivos",
-                "📄 Visor (JSON/XML)",
-                "RIPS",
-                "✅ Validador FevRips",
-                "📂 Gestión Documental",
-                "👤 Validación Usuario",
-                "🤖 Asistente IA (Gemini)",
-                "🤖 Bot Zeus Salud"
-            ]
-            
-            # Helper for multiselect default
-            default_tabs = all_tabs_available if "*" in current_tabs else [t for t in current_tabs if t in all_tabs_available]
-            
-            new_tabs = st.multiselect(
-                "👁️ Pestañas Visibles",
-                all_tabs_available,
-                default=default_tabs,
-                key="edit_tabs"
-            )
-            
-            if st.button("💾 Guardar Cambios de Permisos"):
-                # Update role
-                db.update_user_role(user_to_edit, new_role_edit)
-                
-                # Update permissions
-                new_perms = current_perms.copy()
-                new_perms["bot_zeus"] = new_bot_perm
-                
-                # If all selected, save as "*"
-                if len(new_tabs) == len(all_tabs_available):
-                    new_perms["allowed_tabs"] = ["*"]
-                else:
-                    new_perms["allowed_tabs"] = new_tabs
-                    
-                db.update_user_config(user_to_edit, {"permissions": new_perms})
-                st.success(f"Permisos actualizados para {user_to_edit}")
-                time.sleep(1)
-                st.rerun()
+# Admin Panel logic moved to src/tabs/tab_admin.py
 
 # --- USER PREFERENCES ---
 # Use absolute path to ensure persistence across different working directories
@@ -471,12 +363,6 @@ else:
             
         st.divider()
         
-        # Admin Panel Button
-        if st.session_state.role == "admin":
-            if st.button("⚙️ Gestión de Usuarios"):
-                admin_panel_modal()
-            st.divider()
-
         # Configuración General
         with st.expander("⚙️ Configuración General"):
             tab_gen, tab_proc, tab_ui, tab_sys = st.tabs(["General", "Procesamiento", "Interfaz", "Sistema"])
@@ -587,7 +473,12 @@ else:
                 st.text_area("Patrones de Exclusión (separados por coma)", value="Thumbs.db, .DS_Store", key="cfg_exclusion_patterns", help="Archivos a ignorar durante el procesamiento.")
                 
                 st.number_input("Timeout de Bots (segundos)", value=30, min_value=10, max_value=300, key="cfg_bot_timeout")
-                st.text_input("Carpeta de Descargas (Opcional)", key="cfg_download_path", help="Ruta local para guardar reportes automáticamente.")
+                render_path_selector(
+                    label="Carpeta de Descargas (Opcional)",
+                    key="cfg_download_path",
+                    default_path="",
+                    help_text="Ruta local para guardar reportes automáticamente."
+                )
 
             with tab_ui:
                 st.caption("Personalización de la interfaz.")
@@ -625,6 +516,8 @@ else:
         ("👤 Validación Usuario", tab_user_validation.render if 'tab_user_validation' in globals() else None),
         ("🤖 Bot Zeus Salud", tab_bot_zeus.render if 'tab_bot_zeus' in globals() else None),
         ("🤖 Asistente IA (Gemini)", tab_ai_assistant.render if 'tab_ai_assistant' in globals() else None),
+        ("📊 Gestión de Información", tab_admin.render if 'tab_admin' in globals() else None),
+        ("👥 Gestión de Usuarios", tab_user_management.render if 'tab_user_management' in globals() else None),
     ]
     
     # Filter tabs based on permissions
@@ -649,7 +542,7 @@ else:
                     render_func = visible_tabs[i][1]
                     
                     if name == "🔎 Búsqueda y Acciones":
-                        render_func(tab, seleccionar_carpeta_nativa)
+                        render_func(tab)
                     elif name == "⚙️ Acciones Automatizadas" or name == "📂 Gestión Documental":
                         render_func()
                     else:

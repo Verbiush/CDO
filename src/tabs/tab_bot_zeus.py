@@ -107,7 +107,7 @@ def render(tab_container):
                         if ok: 
                             st.toast(msg, icon="✅")
                             time.sleep(0.5)
-                            st.rerun()
+                            # st.rerun()
                         else: 
                             st.error(msg)
                 with col_ses2:
@@ -412,17 +412,20 @@ def render(tab_container):
                             # Mostrar lista de contenedores
                             if "multi_contenedores" in st.session_state and st.session_state["multi_contenedores"]:
                                 st.markdown("##### Contenedores Seleccionados:")
+                                
+                                def _del_cont(idx_to_del):
+                                    st.session_state["multi_contenedores"].pop(idx_to_del)
+
                                 for idx, xp in enumerate(st.session_state["multi_contenedores"]):
                                     c_idx, c_xp, c_del = st.columns([0.5, 4, 0.5])
                                     c_idx.text(f"#{idx+1}")
                                     c_xp.code(xp, language="text")
-                                    if c_del.button("🗑️", key=f"del_cont_{idx}"):
-                                        st.session_state["multi_contenedores"].pop(idx)
-                                        st.rerun()
+                                    c_del.button("🗑️", key=f"del_cont_{idx}", on_click=_del_cont, args=(idx,))
                                 
-                                if st.button("Limpiar Todos los Contenedores", key="clean_all_cont"):
+                                def _clean_all_cont():
                                     st.session_state["multi_contenedores"] = []
-                                    st.rerun()
+
+                                st.button("Limpiar Todos los Contenedores", key="clean_all_cont", on_click=_clean_all_cont)
                                 
                                 lista_contenedores = st.session_state["multi_contenedores"]
                             else:
@@ -528,9 +531,7 @@ def render(tab_container):
                             ok, msg = bot_zeus.cargar_pasos_externos(data)
                             if ok:
                                 st.session_state.last_flow_hash = file_hash
-                                st.toast(msg, icon="✅") # Usar toast en lugar de success+sleep
-                                time.sleep(0.5)
-                                st.rerun()
+                                st.toast(msg, icon="✅")
                             else:
                                 st.error(msg)
                     except Exception as e:
@@ -567,7 +568,6 @@ def render(tab_container):
                                                 bot_zeus.update_flujo_condicional(idx_tab, pasos=data_alt)
                                                 st.session_state[f"last_hash_alt_{idx_tab}"] = f_hash
                                                 st.toast(f"Flujo Alternativo {idx_tab+1} cargado", icon="✅")
-                                                st.rerun()
                                             else:
                                                 st.error("Formato JSON inválido (debe ser una lista de pasos).")
                                     except Exception as e:
@@ -688,7 +688,7 @@ def render(tab_container):
                             if st.button(f"🗑️ Limpiar Alternativo {idx_tab+1}", key=f"clean_{idx_tab}"):
                                 bot_zeus.update_flujo_condicional(idx_tab, pasos=[], condicion={})
                                 st.session_state.pop(f"last_hash_alt_{idx_tab}", None)
-                                st.rerun()
+                                st.toast(f"Flujo Alternativo {idx_tab+1} limpiado", icon="🗑️")
 
             st.divider()
 
@@ -713,8 +713,22 @@ def render(tab_container):
                     h1.markdown("**Descripción**")
                     h2.markdown("**Estado**")
             
-                action_taken = False
-            
+                # Helper callbacks for step management
+                def _toggle_opt(idx):
+                    bot_zeus.alternar_opcional_paso(idx)
+
+                def _move_up(idx):
+                    bot_zeus.mover_paso(idx, -1)
+
+                def _move_down(idx):
+                    bot_zeus.mover_paso(idx, 1)
+
+                def _delete_step(idx):
+                    bot_zeus.eliminar_paso_indice(idx)
+                
+                def _clear_all_steps():
+                    bot_zeus.limpiar_pasos()
+
                 for i, p in enumerate(pasos):
                     # Check status
                     es_opcional = p.get("opcional", False)
@@ -730,42 +744,31 @@ def render(tab_container):
                         # Optional Toggle
                         btn_label = "⚠️" if es_opcional else "✅"
                         help_text = "Click para marcar como Opcional" if not es_opcional else "Click para marcar como Obligatorio"
-                        if c2.button(btn_label, key=f"btn_opt_{i}", help=help_text):
-                            bot_zeus.alternar_opcional_paso(i)
-                            action_taken = True
+                        c2.button(btn_label, key=f"btn_opt_{i}", help=help_text, on_click=_toggle_opt, args=(i,))
                     
                         # Move Up
                         if i > 0: 
-                            if c3.button("⬆️", key=f"btn_up_{i}"):
-                                bot_zeus.mover_paso(i, -1)
-                                action_taken = True
+                            c3.button("⬆️", key=f"btn_up_{i}", on_click=_move_up, args=(i,))
                     
                         # Move Down
                         if i < len(pasos) - 1:
-                            if c4.button("⬇️", key=f"btn_down_{i}"):
-                                bot_zeus.mover_paso(i, 1)
-                                action_taken = True
+                            c4.button("⬇️", key=f"btn_down_{i}", on_click=_move_down, args=(i,))
                             
                         # Delete
-                        if c5.button("🗑️", key=f"btn_del_{i}"):
-                            bot_zeus.eliminar_paso_indice(i)
-                            action_taken = True
+                        c5.button("🗑️", key=f"btn_del_{i}", on_click=_delete_step, args=(i,))
                     else:
                         c1, c2 = st.columns([5, 1])
                         c1.text(desc_texto)
                         c2.text("⚠️ Opcional" if es_opcional else "✅ Obligatorio")
                 
-                    if action_taken:
-                        st.rerun()
+                # Removed manual rerun logic as on_click handles it
             
                 st.divider()
             
                 if bot_perm in ["full", "edit"]:
                     c1, c2 = st.columns(2)
                     with c2:
-                        if st.button("Borrar Todo", type="primary"):
-                            bot_zeus.limpiar_pasos()
-                            st.rerun()
+                        st.button("Borrar Todo", type="primary", on_click=_clear_all_steps)
 
         st.markdown("---")
         st.subheader("4. Ejecución")
@@ -812,7 +815,7 @@ def render(tab_container):
                     except:
                         pass
                     t.start()
-                    st.rerun()
+                    # Rerun triggered automatically by loop below
             else:
                  st.info("🚀 Ejecutando... (Espere o Detenga)")
 

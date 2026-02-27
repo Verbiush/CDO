@@ -10,7 +10,7 @@ except ImportError:
     from src.modules.adres_validator import ValidatorAdres, ValidatorAdresWeb
     from src.modules.registraduria_validator import ValidatorRegistraduria
 
-from task_manager import submit_task
+
 
 def render(container=None):
     if container is None:
@@ -90,11 +90,27 @@ def render(container=None):
                         from src.tabs.tab_automated_actions import worker_registraduria_masiva, worker_adres_api_masiva, worker_adres_web_massive
                     
                     if tipo_masivo == "Registraduría":
-                        submit_task("Validación Masiva Registraduría", worker_registraduria_masiva, df, col_cedula)
-                        st.success("Tarea iniciada en segundo plano.")
+                        with st.spinner("Procesando validación masiva Registraduría..."):
+                            try:
+                                res_bytes, msg = worker_registraduria_masiva(df, col_cedula, headless=True, silent_mode=False)
+                                if res_bytes:
+                                    st.success(f"Validación completada. {msg}")
+                                    st.download_button("Descargar Resultados", res_bytes, file_name="validacion_registraduria.xlsx")
+                                else:
+                                    st.error(f"Error: {msg}")
+                            except Exception as e:
+                                st.error(f"Excepción: {e}")
                     else:
                         # ADRES (Default to Web as per original intent, but could be API if specified)
                         # Pass tipo_doc_column to the worker
-                        submit_task("Validación Masiva ADRES", worker_adres_web_massive, df, col_cedula, tipo_doc_column)
-                        st.success("Tarea iniciada (requerirá interacción manual para CAPTCHA).")
+                        with st.spinner("Procesando validación masiva ADRES..."):
+                            try:
+                                res_bytes, msg = worker_adres_web_massive(df, col_cedula, col_tipo_doc=tipo_doc_column, silent_mode=False)
+                                if res_bytes:
+                                    st.success(f"Validación completada. {msg}")
+                                    st.download_button("Descargar Resultados", res_bytes, file_name="validacion_adres.xlsx")
+                                else:
+                                    st.error(f"Error: {msg}")
+                            except Exception as e:
+                                st.error(f"Excepción: {e}")
 

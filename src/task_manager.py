@@ -1,84 +1,12 @@
-import threading
-import uuid
 import time
 import streamlit as st
-from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 def init_task_manager():
     """Inicializa la estructura de tareas en session_state si no existe."""
     if "bg_tasks" not in st.session_state:
         st.session_state.bg_tasks = {}
 
-def submit_task(name, target_func, *args, **kwargs):
-    """
-    Envía una tarea a ejecución en segundo plano.
-    
-    Args:
-        name (str): Nombre legible de la tarea.
-        target_func (callable): Función a ejecutar. Debe devolver (bytes, msg) o bytes.
-        *args, **kwargs: Argumentos para la función.
-    """
-    init_task_manager()
-    task_id = str(uuid.uuid4())
-    
-    def task_wrapper():
-        try:
-            # Give Streamlit a moment to render the UI response before starting heavy work
-            time.sleep(1.0)
-            
-            # Update status to running
-            if task_id in st.session_state.bg_tasks:
-                st.session_state.bg_tasks[task_id]["status"] = "RUNNING"
-            
-            # Run function
-            import inspect
-            sig = inspect.signature(target_func)
-            
-            # Inject task_id or update_progress if requested
-            func_kwargs = kwargs.copy()
-            if "task_id" in sig.parameters:
-                func_kwargs["task_id"] = task_id
-            if "update_progress" in sig.parameters:
-                def update_progress_callback(current, total, message=None):
-                    if task_id in st.session_state.bg_tasks:
-                        if total > 0:
-                            p = int((current / total) * 100)
-                        else:
-                            p = 0
-                        st.session_state.bg_tasks[task_id]["progress"] = p
-                        if message:
-                            st.session_state.bg_tasks[task_id]["status_message"] = message
-                func_kwargs["update_progress"] = update_progress_callback
-                
-            result = target_func(*args, **func_kwargs)
-            
-            # Store result
-            if task_id in st.session_state.bg_tasks:
-                st.session_state.bg_tasks[task_id]["result"] = result
-                st.session_state.bg_tasks[task_id]["status"] = "COMPLETED"
-                st.session_state.bg_tasks[task_id]["end_time"] = time.time()
-                st.session_state.bg_tasks[task_id]["seen"] = False # For notification
-            
-        except Exception as e:
-            if task_id in st.session_state.bg_tasks:
-                st.session_state.bg_tasks[task_id]["error"] = str(e)
-                st.session_state.bg_tasks[task_id]["status"] = "FAILED"
-                st.session_state.bg_tasks[task_id]["end_time"] = time.time()
-                st.session_state.bg_tasks[task_id]["seen"] = False
 
-    # Initialize task entry
-    st.session_state.bg_tasks[task_id] = {
-        "id": task_id,
-        "name": name,
-        "status": "PENDING",
-        "start_time": time.time(),
-        "progress": 0
-    }
-    
-    t = threading.Thread(target=task_wrapper)
-    add_script_run_ctx(t)
-    t.start()
-    return task_id
 
 def show_task_notifications():
     """Muestra notificaciones toast para tareas terminadas recientemente."""
