@@ -152,111 +152,184 @@ def render(*args, **kwargs):
         
         # Key Metrics
         try:
+            # 1. Fetch ALL data first
             all_invoices = db.get_all_invoices()
-            pending_invoices = db.get_pending_invoices()
-            radicado_invoices = db.get_radicado_invoices()
             
-            col_m1, col_m2, col_m3 = st.columns(3)
-            col_m1.metric("Total Facturas", len(all_invoices))
-            col_m2.metric("Pendientes", len(pending_invoices))
-            col_m3.metric("Con Radicado", len(radicado_invoices))
-            
-            st.divider()
-            
-            report_type = st.radio("Seleccionar Informe", ["Facturas Pendientes", "Facturas con Radicado", "Análisis General"], horizontal=True, key="report_type_radio")
-            
-            if report_type == "Facturas Pendientes":
-                st.markdown("#### Facturas Pendientes de Pago/Trámite")
-                if pending_invoices:
-                    df_pending = pd.DataFrame(pending_invoices)
-                    # Select useful columns if available
-                    desired_cols = ["no_factura", "fecha_factura", "total", "status", "eps", "regimen", "nombre_completo", "no_doc"]
-                    cols = [c for c in desired_cols if c in df_pending.columns]
-                    st.dataframe(df_pending[cols] if cols else df_pending, use_container_width=True)
-                else:
-                    st.info("No hay facturas pendientes.")
+            if not all_invoices:
+                st.info("No hay datos para mostrar.")
+            else:
+                df_all = pd.DataFrame(all_invoices)
+                
+                # --- FILTROS ---
+                with st.expander("🔍 Filtros de Búsqueda", expanded=True):
+                    col_f1, col_f2, col_f3 = st.columns(3)
                     
-            elif report_type == "Facturas con Radicado":
-                st.markdown("#### Facturas con Radicado Asignado")
-                if radicado_invoices:
-                    df_rad = pd.DataFrame(radicado_invoices)
-                    desired_cols = ["no_factura", "radicado", "fecha_radicado", "total", "eps", "regimen", "nombre_completo"]
-                    cols = [c for c in desired_cols if c in df_rad.columns]
-                    st.dataframe(df_rad[cols] if cols else df_rad, use_container_width=True)
-                else:
-                    st.info("No hay facturas con radicado.")
-                    
-            elif report_type == "Análisis General":
-                st.markdown("#### Análisis General")
-                if all_invoices:
-                    df_all = pd.DataFrame(all_invoices)
-                    
-                    col_g1, col_g2 = st.columns(2)
-                    
-                    with col_g1:
-                        # Status Distribution
-                        if "status" in df_all.columns:
-                            st.markdown("**Distribución por Estado**")
-                            status_counts = df_all['status'].value_counts().reset_index()
-                            status_counts.columns = ['Estado', 'Cantidad']
-                            
-                            if HAS_PLOTLY:
-                                fig = px.pie(status_counts, values='Cantidad', names='Estado', title='Estado de Facturas')
-                                st.plotly_chart(fig, use_container_width=True)
-                            else:
-                                st.bar_chart(df_all['status'].value_counts())
-                    
-                    with col_g2:
-                        # EPS Distribution
-                        if "eps" in df_all.columns:
-                            st.markdown("**Distribución por EPS**")
-                            eps_counts = df_all['eps'].fillna("Sin EPS").value_counts().reset_index()
-                            eps_counts.columns = ['EPS', 'Cantidad']
-                            
-                            if HAS_PLOTLY:
-                                fig = px.pie(eps_counts, values='Cantidad', names='EPS', title='Facturas por EPS')
-                                st.plotly_chart(fig, use_container_width=True)
-                            else:
-                                st.bar_chart(df_all['eps'].value_counts())
-
-                    # Regimen Distribution (New Row)
-                    if "regimen" in df_all.columns:
-                        st.markdown("**Distribución por Régimen**")
-                        reg_counts = df_all['regimen'].fillna("Sin Régimen").value_counts().reset_index()
-                        reg_counts.columns = ['Régimen', 'Cantidad']
+                    # A. Filter by Date Range
+                    with col_f1:
+                        st.markdown("**📅 Rango de Fechas**")
+                        # Convert to datetime for filtering
+                        df_all['fecha_dt'] = pd.to_datetime(df_all['fecha_factura'], errors='coerce')
                         
-                        if HAS_PLOTLY:
-                            fig = px.pie(reg_counts, values='Cantidad', names='Régimen', title='Facturas por Régimen')
-                            st.plotly_chart(fig, use_container_width=True)
-                        else:
-                            st.bar_chart(df_all['regimen'].value_counts())
+                        min_date = df_all['fecha_dt'].min()
+                        max_date = df_all['fecha_dt'].max()
+                        
+                        if pd.isnull(min_date): min_date = datetime.date.today()
+                        if pd.isnull(max_date): max_date = datetime.date.today()
+                        
+                        date_range = st.date_input(
+                            "Seleccionar Rango",
+                            value=(min_date, max_date),
+                            key="filter_date_range"
+                        )
                     
-                    # Monthly Billing
-                    if "fecha_factura" in df_all.columns and "total" in df_all.columns:
-                        try:
-                            # Clean total (remove currency symbols, commas, convert to float)
-                            df_all['total_clean'] = df_all['total'].astype(str).str.replace(r'[^\d]', '', regex=True)
-                            df_all['total_num'] = pd.to_numeric(df_all['total_clean'], errors='coerce').fillna(0)
+                    # B. Filter by EPS
+                    with col_f2:
+                        st.markdown("**🏥 EPS**")
+                        if "eps" in df_all.columns:
+                            eps_options = sorted(df_all['eps'].dropna().unique().tolist())
+                            selected_eps = st.multiselect("Filtrar por EPS", eps_options, default=[], key="filter_eps")
+                        else:
+                            selected_eps = []
                             
-                            # Parse date
-                            df_all['fecha_dt'] = pd.to_datetime(df_all['fecha_factura'], errors='coerce')
-                            
-                            # Drop invalid dates
-                            df_billing = df_all.dropna(subset=['fecha_dt'])
-                            
-                            if not df_billing.empty:
-                                df_billing['mes_año'] = df_billing['fecha_dt'].dt.strftime('%Y-%m')
-                                monthly_billing = df_billing.groupby('mes_año')['total_num'].sum()
+                    # C. Filter by Regimen
+                    with col_f3:
+                        st.markdown("**📋 Régimen**")
+                        if "regimen" in df_all.columns:
+                            reg_options = sorted(df_all['regimen'].dropna().unique().tolist())
+                            selected_regimen = st.multiselect("Filtrar por Régimen", reg_options, default=[], key="filter_regimen")
+                        else:
+                            selected_regimen = []
+
+                # --- APPLY FILTERS ---
+                df_filtered = df_all.copy()
+                
+                # Apply Date Filter
+                if isinstance(date_range, tuple) and len(date_range) == 2:
+                    start_date, end_date = date_range
+                    # Ensure we compare date objects
+                    mask_date = (df_filtered['fecha_dt'].dt.date >= start_date) & (df_filtered['fecha_dt'].dt.date <= end_date)
+                    df_filtered = df_filtered[mask_date]
+                
+                # Apply EPS Filter
+                if selected_eps:
+                    df_filtered = df_filtered[df_filtered['eps'].isin(selected_eps)]
+                    
+                # Apply Regimen Filter
+                if selected_regimen:
+                    df_filtered = df_filtered[df_filtered['regimen'].isin(selected_regimen)]
+                
+                # --- CALCULATE METRICS ON FILTERED DATA ---
+                # Define subsets based on filtered data
+                # Pending: status == 'PENDING' (case insensitive check just in case)
+                pending_mask = df_filtered['status'].str.upper() == 'PENDING'
+                df_pending = df_filtered[pending_mask]
+                
+                # Radicado: radicado is not null and not empty
+                radicado_mask = df_filtered['radicado'].notna() & (df_filtered['radicado'] != '')
+                df_rad = df_filtered[radicado_mask]
+                
+                st.divider()
+                
+                col_m1, col_m2, col_m3 = st.columns(3)
+                col_m1.metric("Total Facturas (Filtradas)", len(df_filtered))
+                col_m2.metric("Pendientes", len(df_pending))
+                col_m3.metric("Con Radicado", len(df_rad))
+                
+                st.divider()
+                
+                report_type = st.radio("Seleccionar Informe", ["Facturas Pendientes", "Facturas con Radicado", "Análisis General"], horizontal=True, key="report_type_radio")
+                
+                if report_type == "Facturas Pendientes":
+                    st.markdown("#### Facturas Pendientes de Pago/Trámite")
+                    if not df_pending.empty:
+                        # Select useful columns if available
+                        desired_cols = ["no_factura", "fecha_factura", "total", "status", "eps", "regimen", "nombre_completo", "no_doc"]
+                        cols = [c for c in desired_cols if c in df_pending.columns]
+                        st.dataframe(df_pending[cols] if cols else df_pending, use_container_width=True)
+                    else:
+                        st.info("No hay facturas pendientes en la selección actual.")
+                        
+                elif report_type == "Facturas con Radicado":
+                    st.markdown("#### Facturas con Radicado Asignado")
+                    if not df_rad.empty:
+                        desired_cols = ["no_factura", "radicado", "fecha_radicado", "total", "eps", "regimen", "nombre_completo"]
+                        cols = [c for c in desired_cols if c in df_rad.columns]
+                        st.dataframe(df_rad[cols] if cols else df_rad, use_container_width=True)
+                    else:
+                        st.info("No hay facturas con radicado en la selección actual.")
+                        
+                elif report_type == "Análisis General":
+                    st.markdown("#### Análisis General")
+                    if not df_filtered.empty:
+                        
+                        col_g1, col_g2 = st.columns(2)
+                        
+                        with col_g1:
+                            # Status Distribution
+                            if "status" in df_filtered.columns:
+                                st.markdown("**Distribución por Estado**")
+                                status_counts = df_filtered['status'].value_counts().reset_index()
+                                status_counts.columns = ['Estado', 'Cantidad']
                                 
-                                st.markdown("**Facturación Mensual**")
-                                st.bar_chart(monthly_billing)
-                        except Exception as e:
-                            st.warning(f"No se pudo generar gráfico mensual: {e}")
-                else:
-                    st.info("No hay datos suficientes.")
+                                if HAS_PLOTLY:
+                                    fig = px.pie(status_counts, values='Cantidad', names='Estado', title='Estado de Facturas')
+                                    st.plotly_chart(fig, use_container_width=True)
+                                else:
+                                    st.bar_chart(df_filtered['status'].value_counts())
+                        
+                        with col_g2:
+                            # EPS Distribution
+                            if "eps" in df_filtered.columns:
+                                st.markdown("**Distribución por EPS**")
+                                eps_counts = df_filtered['eps'].fillna("Sin EPS").value_counts().reset_index()
+                                eps_counts.columns = ['EPS', 'Cantidad']
+                                
+                                if HAS_PLOTLY:
+                                    fig = px.pie(eps_counts, values='Cantidad', names='EPS', title='Facturas por EPS')
+                                    st.plotly_chart(fig, use_container_width=True)
+                                else:
+                                    st.bar_chart(df_filtered['eps'].value_counts())
+
+                        # Regimen Distribution (New Row)
+                        if "regimen" in df_filtered.columns:
+                            st.markdown("**Distribución por Régimen**")
+                            reg_counts = df_filtered['regimen'].fillna("Sin Régimen").value_counts().reset_index()
+                            reg_counts.columns = ['Régimen', 'Cantidad']
+                            
+                            if HAS_PLOTLY:
+                                fig = px.pie(reg_counts, values='Cantidad', names='Régimen', title='Facturas por Régimen')
+                                st.plotly_chart(fig, use_container_width=True)
+                            else:
+                                st.bar_chart(df_filtered['regimen'].value_counts())
+                        
+                        # Monthly Billing
+                        if "fecha_factura" in df_filtered.columns and "total" in df_filtered.columns:
+                            try:
+                                # Clean total (remove currency symbols, commas, convert to float)
+                                df_filtered['total_clean'] = df_filtered['total'].astype(str).str.replace(r'[^\d]', '', regex=True)
+                                df_filtered['total_num'] = pd.to_numeric(df_filtered['total_clean'], errors='coerce').fillna(0)
+                                
+                                # Use already parsed date
+                                # Drop invalid dates
+                                df_billing = df_filtered.dropna(subset=['fecha_dt'])
+                                
+                                if not df_billing.empty:
+                                    df_billing['mes_año'] = df_billing['fecha_dt'].dt.strftime('%Y-%m')
+                                    monthly_billing = df_billing.groupby('mes_año')['total_num'].sum()
+                                    
+                                    st.markdown("**Facturación Mensual**")
+                                    st.bar_chart(monthly_billing)
+                            except Exception as e:
+                                st.warning(f"No se pudo generar gráfico mensual: {e}")
+                    else:
+                        st.info("No hay datos suficientes en la selección actual.")
                     
         except Exception as e:
             st.error(f"Error generando informes: {e}")
+            import traceback
+            st.text(traceback.format_exc())
+
+
 
     with tab_sql:
         st.subheader("🛠️ Administración de Base de Datos SQL")

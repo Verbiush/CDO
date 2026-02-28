@@ -390,9 +390,18 @@ def render():
         
         if uploaded_file:
             try:
-                df = pd.read_excel(uploaded_file)
+                try:
+                    df = pd.read_excel(uploaded_file)
+                except ValueError as e:
+                    if "Duplicate column names" in str(e):
+                        st.warning("⚠️ Se detectaron nombres de columna duplicados. Leyendo archivo sin encabezados (Header=None).")
+                        uploaded_file.seek(0)
+                        df = pd.read_excel(uploaded_file, header=None)
+                    else:
+                        raise e
+
                 # Normalize column names (strip whitespace)
-                df.columns = df.columns.str.strip()
+                df.columns = df.columns.astype(str).str.strip()
                 
                 st.write("Vista previa de los datos:")
                 st.dataframe(df.head())
@@ -443,11 +452,11 @@ def render():
                     options = ["(Ignorar)"] + list(df.columns)
                     
                     for i, col in enumerate(options):
-                        if col in candidates:
+                        if str(col) in candidates:
                             default_idx = i
                             break
                         # Fuzzy match simple
-                        if i > 0 and col.upper() in [c.upper() for c in candidates]:
+                        if i > 0 and str(col).upper() in [str(c).upper() for c in candidates]:
                             default_idx = i
                             break
                     

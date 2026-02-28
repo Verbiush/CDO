@@ -106,13 +106,15 @@ def init_db():
         CREATE TABLE IF NOT EXISTS atenciones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             paciente_id INTEGER NOT NULL,
+            factura_id INTEGER,
             nro_estudio TEXT,
             descripcion_cups TEXT,
             fecha_ingreso TEXT,
             fecha_salida TEXT,
             autorizacion TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(paciente_id) REFERENCES pacientes(id)
+            FOREIGN KEY(paciente_id) REFERENCES pacientes(id),
+            FOREIGN KEY(factura_id) REFERENCES facturas(id)
         )
         ''')
 
@@ -120,7 +122,6 @@ def init_db():
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS facturas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            atencion_id INTEGER NOT NULL,
             no_factura TEXT UNIQUE,
             fecha_factura TEXT,
             tipo_pago TEXT,
@@ -130,7 +131,8 @@ def init_db():
             total TEXT,
             status TEXT DEFAULT 'PENDING',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(atencion_id) REFERENCES atenciones(id)
+            fecha_radicado TEXT,
+            tipo_servicio TEXT
         )
         ''')
         
@@ -446,8 +448,9 @@ def get_all_invoices():
     query = """
         SELECT f.*, p.eps, p.regimen, p.nombre_completo, p.no_doc
         FROM facturas f
-        LEFT JOIN atenciones a ON f.atencion_id = a.id
+        LEFT JOIN atenciones a ON a.factura_id = f.id
         LEFT JOIN pacientes p ON a.paciente_id = p.id
+        GROUP BY f.id
     """
     cursor.execute(query)
     rows = cursor.fetchall()
@@ -461,9 +464,10 @@ def get_pending_invoices():
     query = """
         SELECT f.*, p.eps, p.regimen, p.nombre_completo, p.no_doc
         FROM facturas f
-        LEFT JOIN atenciones a ON f.atencion_id = a.id
+        LEFT JOIN atenciones a ON a.factura_id = f.id
         LEFT JOIN pacientes p ON a.paciente_id = p.id
         WHERE f.status = 'PENDING'
+        GROUP BY f.id
     """
     cursor.execute(query)
     rows = cursor.fetchall()
@@ -477,9 +481,10 @@ def get_radicado_invoices():
     query = """
         SELECT f.*, p.eps, p.regimen, p.nombre_completo, p.no_doc
         FROM facturas f
-        LEFT JOIN atenciones a ON f.atencion_id = a.id
+        LEFT JOIN atenciones a ON a.factura_id = f.id
         LEFT JOIN pacientes p ON a.paciente_id = p.id
         WHERE f.radicado IS NOT NULL AND f.radicado != ''
+        GROUP BY f.id
     """
     cursor.execute(query)
     rows = cursor.fetchall()
