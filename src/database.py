@@ -14,6 +14,14 @@ except ImportError:
     # Define dummy Error class to avoid NameError if used in except blocks
     class Error(Exception): pass
 
+# Try to import psycopg2 for PostgreSQL (Supabase)
+try:
+    import psycopg2
+    from psycopg2 import extras as psycopg2_extras
+    HAS_POSTGRES_LIB = True
+except ImportError:
+    HAS_POSTGRES_LIB = False
+
 # Detect if we are running as a frozen executable (PyInstaller)
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
@@ -33,12 +41,38 @@ MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")
 
 USE_MYSQL = all([MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE])
 
+# PostgreSQL / Supabase Configuration
+POSTGRES_HOST = os.getenv("POSTGRES_HOST") or os.getenv("SUPABASE_HOST")
+POSTGRES_USER = os.getenv("POSTGRES_USER") or os.getenv("SUPABASE_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD") or os.getenv("SUPABASE_PASSWORD")
+POSTGRES_DB = os.getenv("POSTGRES_DB") or os.getenv("SUPABASE_DB")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+
+USE_POSTGRES = all([POSTGRES_HOST, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB])
+
 # Lock for thread safety within the same process
 _db_lock = threading.Lock()
 
 def get_connection():
-    """Returns a connection to the database (SQLite or MySQL)."""
-    if USE_MYSQL:
+    """Returns a connection to the database (SQLite, MySQL, or PostgreSQL)."""
+    if USE_POSTGRES:
+        if not HAS_POSTGRES_LIB:
+            raise ImportError("PostgreSQL/Supabase configuration found but 'psycopg2' or 'psycopg2-binary' library is not installed. Please run 'pip install psycopg2-binary'")
+        try:
+            conn = psycopg2.connect(
+                host=POSTGRES_HOST,
+                user=POSTGRES_USER,
+                password=POSTGRES_PASSWORD,
+                dbname=POSTGRES_DB,
+                port=POSTGRES_PORT
+            )
+            # Enable autocommit for consistency with other adapters if needed, 
+            # or handle commits manually. For now, we return the raw connection.
+            return conn
+        except Exception as e:
+            print(f"Error connecting to PostgreSQL: {e}")
+            raise e
+    elif USE_MYSQL:
         if not HAS_MYSQL_LIB:
             raise ImportError("MySQL configuration found (USE_MYSQL=True) but 'mysql-connector-python' library is not installed. Please run 'pip install mysql-connector-python'")
             
@@ -61,10 +95,20 @@ def get_connection():
         return conn
 
 def execute_query(conn, query, params=None):
-    """Executes a query handling differences between SQLite and MySQL placeholders."""
+    """Executes a query handling differences between SQLite, MySQL and PostgreSQL placeholders."""
     if params is None:
         params = ()
     
+    if USE_POSTGRES:
+        # Postgres uses %s just like MySQL
+        query = query.replace('?', '%s')
+        cursor = conn.cursor(cursor_factory=psycopg2_extras.RealDictCursor)
+        cursor.execute(query, params)
+        # In psycopg2, commit is often required for changes to take effect if autocommit is off
+        # However, this function just executes. The caller might need to commit.
+        # But for read queries it's fine.
+        return cursor
+
     if USE_MYSQL:
         # Convert ? to %s for MySQL
         query = query.replace('?', '%s')
@@ -82,7 +126,8 @@ def init_db():
         conn = get_connection()
         try:
             # Create users table
-            if USE_MYSQL:
+            if USE_MYSQL or USE_POSTGRES:
+                # Syntax is similar for basic create table
                 execute_query(conn, '''
                 CREATE TABLE IF NOT EXISTS users (
                     username VARCHAR(255) PRIMARY KEY,
@@ -295,30 +340,46 @@ def init_db():
 
             # Check for missing columns in document_records (Migration)
             # PRAGMA table_info is SQLite specific. MySQL uses SHOW COLUMNS or DESCRIBE
-            if USE_MYSQL:
+            if USE_MYSQL or USE_POSTGRES:
                 # Check document_records for regimen
-                cursor = execute_query(conn, "SHOW COLUMNS FROM document_records LIKE 'regimen'")
+                if USE_POSTGRES:
+                    cursor = execute_query(conn, "SELECT column_name FROM information_schema.columns WHERE table_name='document_records' AND column_name='regimen'")
+                else:
+                    cursor = execute_query(conn, "SHOW COLUMNS FROM document_records LIKE 'regimen'")
+
                 if not cursor.fetchone():
                     print("Migrating document_records: Adding 'regimen' column...")
                     execute_query(conn, "ALTER TABLE document_records ADD COLUMN regimen VARCHAR(50) DEFAULT 'SUBSIDIADO'")
                     conn.commit()
                 
                 # Check pacientes for categoria
-                cursor = execute_query(conn, "SHOW COLUMNS FROM pacientes LIKE 'categoria'")
+                if USE_POSTGRES:
+                    cursor = execute_query(conn, "SELECT column_name FROM information_schema.columns WHERE table_name='pacientes' AND column_name='categoria'")
+                else:
+                    cursor = execute_query(conn, "SHOW COLUMNS FROM pacientes LIKE 'categoria'")
+
                 if not cursor.fetchone():
                     print("Migrating pacientes: Adding 'categoria' column...")
                     execute_query(conn, "ALTER TABLE pacientes ADD COLUMN categoria VARCHAR(50) DEFAULT 'NIVEL 1'")
                     conn.commit()
                 
                 # Check facturas for tipo_servicio
-                cursor = execute_query(conn, "SHOW COLUMNS FROM facturas LIKE 'tipo_servicio'")
+                if USE_POSTGRES:
+                    cursor = execute_query(conn, "SELECT column_name FROM information_schema.columns WHERE table_name='facturas' AND column_name='tipo_servicio'")
+                else:
+                    cursor = execute_query(conn, "SHOW COLUMNS FROM facturas LIKE 'tipo_servicio'")
+
                 if not cursor.fetchone():
                     print("Migrating facturas: Adding 'tipo_servicio' column...")
                     execute_query(conn, "ALTER TABLE facturas ADD COLUMN tipo_servicio VARCHAR(255) DEFAULT 'EVENTO'")
                     conn.commit()
 
                 # Check facturas for fecha_radicado
-                cursor = execute_query(conn, "SHOW COLUMNS FROM facturas LIKE 'fecha_radicado'")
+                if USE_POSTGRES:
+                    cursor = execute_query(conn, "SELECT column_name FROM information_schema.columns WHERE table_name='facturas' AND column_name='fecha_radicado'")
+                else:
+                    cursor = execute_query(conn, "SHOW COLUMNS FROM facturas LIKE 'fecha_radicado'")
+
                 if not cursor.fetchone():
                     print("Migrating facturas: Adding 'fecha_radicado' column...")
                     execute_query(conn, "ALTER TABLE facturas ADD COLUMN fecha_radicado VARCHAR(50)")
