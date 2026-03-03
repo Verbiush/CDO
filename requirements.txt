@@ -23,3 +23,5 @@ fastapi
 uvicorn
 python-multipart
 xlsxwriter
+xlrd
+lxml

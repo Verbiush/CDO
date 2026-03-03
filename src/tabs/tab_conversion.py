@@ -99,6 +99,26 @@ def _xlsx_a_txt(input_path, output_path, sep=','):
     except Exception as e:
         raise Exception(f"Error convirtiendo Excel a TXT: {e}")
 
+def _xls_a_xlsx(input_path, output_path):
+    try:
+        # Verificar si es HTML camuflado como XLS (lógica del referente)
+        with open(input_path, 'r', encoding='utf-8', errors='ignore') as f:
+            contenido = f.read()
+        
+        if contenido.strip().lower().startswith('<!doctype html') or '<table' in contenido.lower():
+            # Es una tabla HTML
+            dfs = pd.read_html(input_path)
+            if not dfs:
+                raise Exception("No se encontraron tablas en el archivo HTML/XLS.")
+            df = dfs[0]
+        else:
+            # Es un archivo XLS real (requiere xlrd)
+            df = pd.read_excel(input_path, engine='xlrd')
+            
+        df.to_excel(output_path, index=False)
+    except Exception as e:
+        raise Exception(f"Error convirtiendo XLS a XLSX: {e}")
+
 def _pdf_escala_grises(input_path, output_path):
     doc = fitz.open(input_path)
     doc_final = fitz.open()
@@ -147,6 +167,9 @@ def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=','):
         elif tipo == "XLSX2TXT":
             out = os.path.join(folder, f"{name_no_ext}.txt")
             _xlsx_a_txt(file_path, out, sep=sep)
+        elif tipo == "XLS2XLSX":
+            out = os.path.join(folder, f"{name_no_ext}.xlsx")
+            _xls_a_xlsx(file_path, out)
         elif tipo == "PDF_GRAY":
             temp_out = os.path.join(folder, f"{name_no_ext}_temp_gray.pdf")
             _pdf_escala_grises(file_path, temp_out)
@@ -195,6 +218,7 @@ def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=','):
         elif tipo == "PNG2JPG" and f_lower.endswith(".png"): process = True
         elif tipo == "TXT2JSON" and f_lower.endswith(".txt"): process = True
         elif tipo == "XLSX2TXT" and (f_lower.endswith(".xlsx") or f_lower.endswith(".xls")): process = True
+        elif tipo == "XLS2XLSX" and f_lower.endswith(".xls"): process = True
         elif tipo == "PDF_GRAY" and f_lower.endswith(".pdf"): process = True
         
         if process:
@@ -226,6 +250,7 @@ def render(container=None):
             "PNG → JPG": "PNG2JPG",
             "TXT → JSON": "TXT2JSON",
             "Excel → TXT": "XLSX2TXT",
+            "XLS → XLSX": "XLS2XLSX",
             "PDF → PDF (Grises)": "PDF_GRAY"
         }
 
@@ -283,6 +308,7 @@ def render(container=None):
                 elif conv_type_code.startswith("DOCX"): valid_exts = [".docx"]
                 elif conv_type_code.startswith("PNG"): valid_exts = [".png"]
                 elif conv_type_code.startswith("TXT"): valid_exts = [".txt"]
+                elif conv_type_code == "XLS2XLSX": valid_exts = [".xls"]
                 elif conv_type_code.startswith("XLSX"): valid_exts = [".xlsx", ".xls"]
 
                 try:
