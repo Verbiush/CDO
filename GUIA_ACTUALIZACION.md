@@ -91,3 +91,46 @@ nano docker-compose-aws.yml
 Descomenta o agrega las variables de entorno `MYSQL_HOST`, `MYSQL_USER`, etc., en la sección `environment`.
 
 Guarda con `Ctrl+O`, `Enter`, y sal con `Ctrl+X`. Luego ejecuta la **Opción A** del Paso 3.
+
+---
+
+## 5. Actualizar tu Entorno Local (Windows)
+
+Si has reinstalado el proyecto, clonado en otro PC, o descargado cambios de un compañero, sigue estos pasos para actualizar tu entorno de desarrollo local:
+
+1.  **Descargar Cambios**:
+    ```powershell
+    git pull origin main
+    ```
+
+2.  **Actualizar Librerías**:
+    Siempre es bueno verificar si hay nuevas dependencias.
+    ```powershell
+    pip install -r requirements.txt
+    ```
+
+3.  **Reiniciar la Aplicación**:
+    Si tienes Streamlit corriendo, detenlo (`Ctrl+C`) y vuelve a iniciarlo:
+    ```powershell
+    streamlit run src/app_web.py
+    ```
+
+---
+
+## 6. Tip Pro: Actualizar Servidor Remoto desde tu PC
+
+Si no quieres entrar manualmente al servidor cada vez, puedes ejecutar el comando de actualización remotamente usando SSH desde tu PowerShell.
+
+Reemplaza `usuario` e `IP_SERVIDOR` con tus datos reales (y asegúrate de tener tu clave `.pem` a mano si la usas).
+
+**Comando (una sola línea):**
+```powershell
+ssh -i "ruta/a/tu-clave.pem" ubuntu@IP_DEL_SERVIDOR "cd CDO && git pull origin main && docker-compose -f docker-compose-aws.yml up -d --build"
+```
+
+Este comando:
+1.  Se conecta al servidor.
+2.  Entra a la carpeta `CDO`.
+3.  Descarga los cambios de Git.
+4.  Reconstruye y reinicia los contenedores Docker.
+
