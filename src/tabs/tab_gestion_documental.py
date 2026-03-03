@@ -721,7 +721,8 @@ def render():
         base_path = render_path_selector(
             label="Carpeta Raíz de Salida",
             key="gd_base_path_struct",
-            default_path=st.session_state.get("gd_base_path", st.session_state.get("current_path", os.getcwd()))
+            default_path=st.session_state.get("gd_base_path", st.session_state.get("current_path", os.getcwd())),
+            omit_checkbox=False
         )
         st.session_state.input_base_path_struct = base_path
 
@@ -807,7 +808,7 @@ def render():
             label="Carpeta Origen de Archivos",
             key="gd_source_path",
             default_path=current_global_path,
-            omit_checkbox=True
+            omit_checkbox=False
         )
             
         if not records:
@@ -900,7 +901,8 @@ def render():
                 source_path_mov = render_path_selector(
                     label="Origen (Mover)",
                     key="gd_source_path_mov",
-                    default_path=st.session_state.get("current_path", os.getcwd())
+                    default_path=st.session_state.get("current_path", os.getcwd()),
+                    omit_checkbox=False
                 )
 
                 # Reuse keys from above
@@ -914,7 +916,8 @@ def render():
                 base_dest = render_path_selector(
                     label="Destino Base",
                     key="gd_dest_path_mov_selector",
-                    default_path=st.session_state.get("input_base_path_struct_mov", st.session_state.get("current_path", os.getcwd()))
+                    default_path=st.session_state.get("input_base_path_struct_mov", st.session_state.get("current_path", os.getcwd())),
+                    omit_checkbox=False
                 )
                 st.session_state.input_base_path_struct_mov = base_dest
                 
@@ -1127,7 +1130,8 @@ def render():
         base_path_content = render_path_selector(
             label="Carpeta Raíz",
             key="input_base_path_content",
-            default_path=st.session_state.get("gd_base_path", default_hardcoded)
+            default_path=st.session_state.get("gd_base_path", default_hardcoded),
+            omit_checkbox=False
         )
         
         st.caption("Patrón de Carpetas (Debe coincidir con la estructura creada)")
@@ -1634,7 +1638,8 @@ def render():
             label="Carpeta Base para Descargas OVIDA",
             key="ovida_base_path",
             default_path=base_path_content,
-            help_text="Ruta donde se guardarán las historias clínicas. Si se deja vacía, usará la configuración general."
+            help_text="Ruta donde se guardarán las historias clínicas. Si se deja vacía, usará la configuración general.",
+            omit_checkbox=False
         )
 
         col_ovida_1, col_ovida_2 = st.columns([0.3, 0.7])

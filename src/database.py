@@ -64,7 +64,8 @@ def get_connection():
                 user=POSTGRES_USER,
                 password=POSTGRES_PASSWORD,
                 dbname=POSTGRES_DB,
-                port=POSTGRES_PORT
+                port=POSTGRES_PORT,
+                cursor_factory=psycopg2_extras.RealDictCursor
             )
             # Enable autocommit for consistency with other adapters if needed, 
             # or handle commits manually. For now, we return the raw connection.
@@ -99,94 +100,102 @@ def execute_query(conn, query, params=None):
     if params is None:
         params = ()
     
-    if USE_POSTGRES:
-        # Postgres uses %s just like MySQL
+    # SQLite uses ?, MySQL/Postgres use %s
+    if USE_MYSQL or USE_POSTGRES:
         query = query.replace('?', '%s')
-        cursor = conn.cursor(cursor_factory=psycopg2_extras.RealDictCursor)
-        cursor.execute(query, params)
-        # In psycopg2, commit is often required for changes to take effect if autocommit is off
-        # However, this function just executes. The caller might need to commit.
-        # But for read queries it's fine.
-        return cursor
-
+        
     if USE_MYSQL:
-        # Convert ? to %s for MySQL
-        query = query.replace('?', '%s')
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(query, params)
-        return cursor
     else:
         cursor = conn.cursor()
+    try:
         cursor.execute(query, params)
         return cursor
+    except Exception as e:
+        print(f"Query Error: {e}")
+        print(f"Query: {query}")
+        print(f"Params: {params}")
+        raise e
 
 def init_db():
-    """Initializes the database table and migrates from JSON if needed."""
+    """Initializes the database tables."""
     with _db_lock:
         conn = get_connection()
         try:
-            # Create users table
-            if USE_MYSQL or USE_POSTGRES:
-                # Syntax is similar for basic create table
+            # Create Users table
+            if USE_MYSQL:
                 execute_query(conn, '''
                 CREATE TABLE IF NOT EXISTS users (
-                    username VARCHAR(255) PRIMARY KEY,
-                    password TEXT NOT NULL,
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(255) UNIQUE NOT NULL,
+                    password VARCHAR(255) NOT NULL,
                     role VARCHAR(50) DEFAULT 'user',
-                    last_path TEXT,
-                    permissions TEXT,
-                    favorites TEXT,
-                    config TEXT
+                    last_path VARCHAR(255),
+                    permissions JSON,
+                    favorites JSON,
+                    config JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                ''')
+            elif USE_POSTGRES:
+                execute_query(conn, '''
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(255) UNIQUE NOT NULL,
+                    password VARCHAR(255) NOT NULL,
+                    role VARCHAR(50) DEFAULT 'user',
+                    last_path VARCHAR(255),
+                    permissions JSON,
+                    favorites JSON,
+                    config JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 ''')
             else:
                 execute_query(conn, '''
                 CREATE TABLE IF NOT EXISTS users (
-                    username TEXT PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
                     password TEXT NOT NULL,
                     role TEXT DEFAULT 'user',
                     last_path TEXT,
                     permissions TEXT,
                     favorites TEXT,
-                    config TEXT
+                    config TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 ''')
-            conn.commit()
-            
-            # Create tasks table
-            if USE_MYSQL:
-                 execute_query(conn, '''
-                CREATE TABLE IF NOT EXISTS tasks (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    username VARCHAR(255) NOT NULL,
-                    command TEXT NOT NULL,
-                    params TEXT,
-                    status VARCHAR(50) DEFAULT 'PENDING',
-                    result TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                )
-                ''')
-            else:
-                execute_query(conn, '''
-                CREATE TABLE IF NOT EXISTS tasks (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT NOT NULL,
-                    command TEXT NOT NULL,
-                    params TEXT,
-                    status TEXT DEFAULT 'PENDING',
-                    result TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-                ''')
-            conn.commit()
 
-            # Create document records table (Gestión Documental)
+            # Create Document Records table
             if USE_MYSQL:
                 execute_query(conn, '''
                 CREATE TABLE IF NOT EXISTS document_records (
                     id INT AUTO_INCREMENT PRIMARY KEY,
+                    nro_estudio VARCHAR(255),
+                    descripcion TEXT,
+                    eps VARCHAR(255),
+                    tipo_doc VARCHAR(50),
+                    no_doc VARCHAR(255),
+                    nombre_completo VARCHAR(255),
+                    nombre_tercero VARCHAR(255),
+                    fecha_ingreso VARCHAR(50),
+                    fecha_salida VARCHAR(50),
+                    autorizacion VARCHAR(255),
+                    no_factura VARCHAR(255),
+                    fecha_factura VARCHAR(50),
+                    tipo_pago VARCHAR(50),
+                    valor_servicio VARCHAR(255),
+                    copago VARCHAR(255),
+                    total VARCHAR(255),
+                    regimen VARCHAR(50) DEFAULT 'SUBSIDIADO',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status VARCHAR(50) DEFAULT 'PENDING'
+                )
+                ''')
+            elif USE_POSTGRES:
+                execute_query(conn, '''
+                CREATE TABLE IF NOT EXISTS document_records (
+                    id SERIAL PRIMARY KEY,
                     nro_estudio VARCHAR(255),
                     descripcion TEXT,
                     eps VARCHAR(255),
@@ -251,6 +260,20 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 ''')
+            elif USE_POSTGRES:
+                execute_query(conn, '''
+                CREATE TABLE IF NOT EXISTS pacientes (
+                    id SERIAL PRIMARY KEY,
+                    tipo_doc VARCHAR(50),
+                    no_doc VARCHAR(255) UNIQUE,
+                    nombre_completo VARCHAR(255),
+                    nombre_tercero VARCHAR(255),
+                    eps VARCHAR(255),
+                    regimen VARCHAR(50) DEFAULT 'SUBSIDIADO',
+                    categoria VARCHAR(50) DEFAULT 'NIVEL 1',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                ''')
             else:
                 execute_query(conn, '''
                 CREATE TABLE IF NOT EXISTS pacientes (
@@ -271,6 +294,23 @@ def init_db():
                 execute_query(conn, '''
                 CREATE TABLE IF NOT EXISTS facturas (
                     id INT AUTO_INCREMENT PRIMARY KEY,
+                    no_factura VARCHAR(255) UNIQUE,
+                    fecha_factura VARCHAR(50),
+                    tipo_pago VARCHAR(50),
+                    valor_servicio VARCHAR(255),
+                    copago VARCHAR(255),
+                    radicado VARCHAR(255),
+                    total VARCHAR(255),
+                    status VARCHAR(50) DEFAULT 'PENDING',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_radicado VARCHAR(50),
+                    tipo_servicio VARCHAR(255)
+                )
+                ''')
+            elif USE_POSTGRES:
+                execute_query(conn, '''
+                CREATE TABLE IF NOT EXISTS facturas (
+                    id SERIAL PRIMARY KEY,
                     no_factura VARCHAR(255) UNIQUE,
                     fecha_factura VARCHAR(50),
                     tipo_pago VARCHAR(50),
@@ -319,6 +359,22 @@ def init_db():
                     FOREIGN KEY(factura_id) REFERENCES facturas(id)
                 )
                 ''')
+            elif USE_POSTGRES:
+                execute_query(conn, '''
+                CREATE TABLE IF NOT EXISTS atenciones (
+                    id SERIAL PRIMARY KEY,
+                    paciente_id INT NOT NULL,
+                    factura_id INT,
+                    nro_estudio VARCHAR(255),
+                    descripcion_cups TEXT,
+                    fecha_ingreso VARCHAR(50),
+                    fecha_salida VARCHAR(50),
+                    autorizacion VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(paciente_id) REFERENCES pacientes(id),
+                    FOREIGN KEY(factura_id) REFERENCES facturas(id)
+                )
+                ''')
             else:
                 execute_query(conn, '''
                 CREATE TABLE IF NOT EXISTS atenciones (
@@ -336,6 +392,47 @@ def init_db():
                 )
                 ''')
             
+            # Create Tasks table (for Agent)
+            if USE_MYSQL:
+                execute_query(conn, '''
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(255),
+                    command VARCHAR(255),
+                    params TEXT,
+                    status VARCHAR(50) DEFAULT 'PENDING',
+                    result TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+                ''')
+            elif USE_POSTGRES:
+                 execute_query(conn, '''
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id SERIAL PRIMARY KEY,
+                    username VARCHAR(255),
+                    command VARCHAR(255),
+                    params TEXT,
+                    status VARCHAR(50) DEFAULT 'PENDING',
+                    result TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                ''')
+            else:
+                execute_query(conn, '''
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT,
+                    command TEXT,
+                    params TEXT,
+                    status TEXT DEFAULT 'PENDING',
+                    result TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                ''')
+
             conn.commit()
 
             # Check for missing columns in document_records (Migration)
@@ -645,99 +742,77 @@ def delete_user(username):
         finally:
             conn.close()
 
-def get_all_users():
-    """Returns a dictionary of all users (similar to load_users structure)."""
-    conn = get_connection()
-    try:
-        cursor = execute_query(conn, "SELECT * FROM users")
-        rows = cursor.fetchall()
-        
-        users = {}
-        for row in rows:
-            user_dict = dict(row)
-            try: user_dict["permissions"] = json.loads(user_dict["permissions"]) if user_dict["permissions"] else {}
-            except: user_dict["permissions"] = {}
-            
-            try: user_dict["favorites"] = json.loads(user_dict["favorites"]) if user_dict["favorites"] else []
-            except: user_dict["favorites"] = []
-            
-            try: user_dict["config"] = json.loads(user_dict["config"]) if user_dict["config"] else {}
-            except: user_dict["config"] = {}
-            
-            users[row["username"]] = user_dict
-        return users
-    finally:
-        conn.close()
-
-def update_user_role(username, role):
-    """Updates the role of a user."""
-    with _db_lock:
-        conn = get_connection()
-        try:
-            execute_query(conn, "UPDATE users SET role = ? WHERE username = ?", (role, username))
-            conn.commit()
-        finally:
-            conn.close()
-
-def update_user_permissions(username, permissions_dict):
-    """Updates the permissions JSON for a user."""
-    with _db_lock:
-        conn = get_connection()
-        try:
-            execute_query(conn, "UPDATE users SET permissions = ? WHERE username = ?", (json.dumps(permissions_dict), username))
-            conn.commit()
-        finally:
-            conn.close()
-
-# --- Task Queue Management ---
-
 def create_task(username, command, params=None):
-    """Creates a new task for the agent."""
-    if params is None:
-        params = {}
-    
+    """Creates a new task for the agent. Returns (success, task_id)."""
+    if params is None: params = {}
     with _db_lock:
         conn = get_connection()
         try:
-            cursor = execute_query(conn,
-                "INSERT INTO tasks (username, command, params, status) VALUES (?, ?, ?, ?)",
-                (username, command, json.dumps(params), 'PENDING')
-            )
-            task_id = cursor.lastrowid
+            if USE_POSTGRES:
+                cursor = execute_query(conn, 
+                    "INSERT INTO tasks (username, command, params, status) VALUES (?, ?, ?, 'PENDING') RETURNING id",
+                    (username, command, json.dumps(params))
+                )
+                task_id = cursor.fetchone()['id']
+            else:
+                cursor = execute_query(conn, 
+                    "INSERT INTO tasks (username, command, params, status) VALUES (?, ?, ?, 'PENDING')",
+                    (username, command, json.dumps(params))
+                )
+                task_id = cursor.lastrowid
+                
             conn.commit()
-            return task_id
+            return True, task_id
+        except Exception as e:
+            print(f"Error creating task: {e}")
+            return False, None
         finally:
             conn.close()
 
-def get_pending_tasks(username, limit=1):
-    """Retrieves pending tasks for a user and marks them as PROCESSING."""
+def get_task_result(task_id):
+    """Retrieves the status and result of a specific task."""
     with _db_lock:
         conn = get_connection()
         try:
-            # Select pending tasks
-            if USE_MYSQL:
-                cursor = execute_query(conn,
-                    "SELECT * FROM tasks WHERE username = ? AND status = 'PENDING' ORDER BY created_at ASC LIMIT %s",
-                    (username, limit)
-                )
-            else:
-                 cursor = execute_query(conn,
-                    "SELECT * FROM tasks WHERE username = ? AND status = 'PENDING' ORDER BY created_at ASC LIMIT ?",
-                    (username, limit)
-                )
+            cursor = execute_query(conn, "SELECT status, result FROM tasks WHERE id = ?", (task_id,))
+            row = cursor.fetchone()
+            if row:
+                result_data = dict(row)
+                try:
+                    result_data["result"] = json.loads(result_data["result"]) if result_data["result"] else None
+                except:
+                    result_data["result"] = None
+                return result_data
+            return None
+        finally:
+            conn.close()
+
+def get_pending_tasks(username):
+    """Retrieves pending tasks for a user and marks them as DISPATCHED."""
+    with _db_lock:
+        conn = get_connection()
+        try:
+            cursor = execute_query(conn, "SELECT * FROM tasks WHERE username = ? AND status = 'PENDING'", (username,))
             rows = cursor.fetchall()
-            
             tasks = []
-            for row in rows:
-                task = dict(row)
-                try: task["params"] = json.loads(task["params"]) if task["params"] else {}
-                except: task["params"] = {}
-                tasks.append(task)
+            if rows:
+                ids = []
+                for row in rows:
+                    task = dict(row)
+                    # Handle Row object (sqlite3) vs dictionary (mysql/postgres)
+                    if hasattr(task, 'keys'): # It's likely a Row or dict-like
+                        task = dict(task)
+                    
+                    try: task["params"] = json.loads(task["params"]) if task["params"] else {}
+                    except: task["params"] = {}
+                    tasks.append(task)
+                    ids.append(task['id'])
                 
-                # Mark as processing
-                execute_query(conn, "UPDATE tasks SET status = 'PROCESSING', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (task["id"],))
-            
-            conn.commit()
+                # Mark as DISPATCHED
+                if ids:
+                    for tid in ids:
+                        execute_query(conn, "UPDATE tasks SET status = 'DISPATCHED' WHERE id = ?", (tid,))
+                    conn.commit()
             return tasks
         finally:
             conn.close()
@@ -747,90 +822,11 @@ def update_task_result(task_id, status, result=None):
     with _db_lock:
         conn = get_connection()
         try:
-            result_json = json.dumps(result) if result is not None else None
-            
-            execute_query(conn,
-                "UPDATE tasks SET status = ?, result = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            result_json = json.dumps(result) if result else None
+            execute_query(conn, 
+                "UPDATE tasks SET status = ?, result = ? WHERE id = ?",
                 (status, result_json, task_id)
             )
             conn.commit()
         finally:
             conn.close()
-
-def get_task_status(task_id):
-    """Checks the status of a specific task."""
-    conn = get_connection()
-    try:
-        cursor = execute_query(conn, "SELECT * FROM tasks WHERE id = ?", (task_id,))
-        row = cursor.fetchone()
-        
-        if row:
-            task = dict(row)
-            try: task["result"] = json.loads(task["result"]) if task["result"] else None
-            except: task["result"] = None
-            return task
-        return None
-    finally:
-        conn.close()
-
-# --- ADMIN REPORTS & BACKUP ---
-
-def get_db_path():
-    """Returns the absolute path to the database file."""
-    return DB_FILE
-
-def get_all_invoices():
-    """Returns all invoices with patient details."""
-    conn = get_connection()
-    try:
-        query = """
-            SELECT f.*, p.eps, p.regimen, p.nombre_completo, p.no_doc
-            FROM facturas f
-            LEFT JOIN atenciones a ON a.factura_id = f.id
-            LEFT JOIN pacientes p ON a.paciente_id = p.id
-            GROUP BY f.id
-        """
-        cursor = execute_query(conn, query)
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
-    finally:
-        conn.close()
-
-def get_pending_invoices():
-    """Returns pending invoices with patient details."""
-    conn = get_connection()
-    try:
-        query = """
-            SELECT f.*, p.eps, p.regimen, p.nombre_completo, p.no_doc
-            FROM facturas f
-            LEFT JOIN atenciones a ON a.factura_id = f.id
-            LEFT JOIN pacientes p ON a.paciente_id = p.id
-            WHERE f.status = 'PENDING'
-            GROUP BY f.id
-        """
-        cursor = execute_query(conn, query)
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
-    finally:
-        conn.close()
-
-def get_radicado_invoices():
-    """Returns invoices with radicado with patient details."""
-    conn = get_connection()
-    try:
-        query = """
-            SELECT f.*, p.eps, p.regimen, p.nombre_completo, p.no_doc
-            FROM facturas f
-            LEFT JOIN atenciones a ON a.factura_id = f.id
-            LEFT JOIN pacientes p ON a.paciente_id = p.id
-            WHERE f.radicado IS NOT NULL AND f.radicado != ''
-            GROUP BY f.id
-        """
-        cursor = execute_query(conn, query)
-        rows = cursor.fetchall()
-        return [dict(row) for row in rows]
-    finally:
-        conn.close()
-
-# Initialize DB on module load
-init_db()

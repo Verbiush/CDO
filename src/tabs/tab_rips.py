@@ -10,7 +10,16 @@ try:
     from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector
 except ImportError:
     abrir_dialogo_carpeta_nativo = None
-    render_path_selector = None
+    # Fallback implementation if import fails
+    def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
+        st.warning("Componente de selección de rutas no disponible. Usando entrada de texto simple.")
+        return st.text_input(label, value=default_path or "", key=key, help=help_text)
+
+# Ensure render_path_selector is callable (defensive check for potential import issues)
+if not callable(render_path_selector):
+    def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
+        return st.text_input(label, value=default_path or "", key=key, help=help_text)
+
 
 # --- HELPERS ---
 

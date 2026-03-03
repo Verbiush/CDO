@@ -5,24 +5,6 @@ import xml.dom.minidom
 import io
 import time
 import re
-try:
-    from src.tabs.tab_automated_actions import recursive_update_notes
-except ImportError:
-    # Fallback if import fails (e.g. during testing or different path structure)
-    def recursive_update_notes(data, target_text, new_note):
-        count = 0
-        if isinstance(data, dict):
-            for k, v in data.items():
-                if isinstance(v, str) and target_text in v:
-                    data[k] = new_note
-                    count += 1
-                elif isinstance(v, (dict, list)):
-                    count += recursive_update_notes(v, target_text, new_note)
-        elif isinstance(data, list):
-            for item in data:
-                count += recursive_update_notes(item, target_text, new_note)
-        return count
-
 
 # Try to import code_editor
 try:
@@ -123,37 +105,9 @@ def render(container=None):
                 else:
                     st.write("") # Spacer
 
-            # --- NOTAS DE AJUSTE ---
-            with st.expander("🛠️ Notas de Ajuste (Actualización Masiva)", expanded=False):
-                st.info("Esta herramienta permite actualizar notas masivamente en estructuras JSON recursivas.")
-                na_col1, na_col2, na_col3 = st.columns([0.4, 0.4, 0.2])
-                with na_col1:
-                    target_note_text = st.text_input("Texto a buscar en notas:", key="visor_na_target")
-                with na_col2:
-                    new_note_text = st.text_input("Nueva nota:", key="visor_na_new")
-                with na_col3:
-                    st.write("") # Spacer for alignment
-                    st.write("") 
-                    if st.button("Actualizar Notas", key="visor_na_btn"):
-                        if file_type != "json":
-                            st.error("Esta función solo está disponible para archivos JSON.")
-                        elif not target_note_text:
-                            st.warning("Debe ingresar el texto a buscar.")
-                        else:
-                            try:
-                                json_data = json.loads(content)
-                                count = recursive_update_notes(json_data, target_note_text, new_note_text)
-                                if count > 0:
-                                    st.session_state.visor_file_content = json.dumps(json_data, indent=4, ensure_ascii=False)
-                                    st.success(f"Se actualizaron {count} notas correctamente.")
-                                    time.sleep(1) # Give time to read message
-                                    st.rerun()
-                                else:
-                                    st.warning("No se encontraron coincidencias para actualizar.")
-                            except json.JSONDecodeError:
-                                st.error("El contenido actual no es un JSON válido.")
-                            except Exception as e:
-                                st.error(f"Error al actualizar notas: {e}")
+            # --- NOTAS DE AJUSTE (Eliminado por solicitud) ---
+            # with st.expander("🛠️ Notas de Ajuste (Actualización Masiva)", expanded=False):
+            #     pass
 
             # Custom buttons for editor (only for right side)
             editor_buttons = [{

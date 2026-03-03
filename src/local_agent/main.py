@@ -110,6 +110,42 @@ class PollingClient(threading.Thread):
                 result["success"] = True
                 result["data"] = "PONG"
             
+            elif command == "SELECT_FOLDER":
+                try:
+                    root = tk.Tk()
+                    root.withdraw()
+                    root.attributes('-topmost', True)
+                    folder_path = filedialog.askdirectory()
+                    root.destroy()
+                    
+                    if folder_path:
+                        result["success"] = True
+                        result["data"] = folder_path
+                    else:
+                        result["success"] = False
+                        result["data"] = None # Cancelled
+                except Exception as e:
+                    result["error"] = str(e)
+                    status_code = "ERROR"
+
+            elif command == "SELECT_FILE":
+                try:
+                    root = tk.Tk()
+                    root.withdraw()
+                    root.attributes('-topmost', True)
+                    file_path = filedialog.askopenfilename()
+                    root.destroy()
+                    
+                    if file_path:
+                        result["success"] = True
+                        result["data"] = file_path
+                    else:
+                        result["success"] = False
+                        result["data"] = None
+                except Exception as e:
+                    result["error"] = str(e)
+                    status_code = "ERROR"
+
             elif command == "LIST_FILES":
                 path = params.get("path")
                 if os.path.exists(path) and os.path.isdir(path):
@@ -232,7 +268,13 @@ def list_files(path: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+import multiprocessing
+
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    
+    logger.info(f"Agent starting. Config file: {config_file}")
+    
     if os.path.exists(config_file):
         try:
             with open(config_file, "r") as f:
@@ -240,10 +282,22 @@ if __name__ == "__main__":
             server_url = config.get("server_url")
             username = config.get("username")
             password = config.get("password")
+            
+            # --- Auto-fix port 8501 to 8000 ---
+            if server_url and ":8501" in server_url:
+                logger.warning(f"Detected incorrect port 8501 in server_url: {server_url}. Switching to port 8000 for API connection.")
+                server_url = server_url.replace(":8501", ":8000")
+            
+            logger.info(f"Loaded config for user: {username} at {server_url}")
+            
             if server_url and username and password:
                 polling_client = PollingClient(server_url, username, password)
                 polling_client.start()
+            else:
+                logger.warning("Config missing server_url, username or password")
         except Exception as e:
             logger.error(f"Error loading config: {e}")
+    else:
+        logger.warning(f"Config file not found at {config_file}. Run setup or create file manually.")
             
     uvicorn.run(app, host="127.0.0.1", port=8989)

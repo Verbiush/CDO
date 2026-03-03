@@ -25,7 +25,7 @@ except ImportError:
     try:
         from src.gui_utils import render_path_selector
     except ImportError:
-        def render_path_selector(label, key, default_path=None, help_text=None):
+        def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
             st.error("render_path_selector no disponible")
             return default_path
 
@@ -212,7 +212,11 @@ with col_header_bell:
 
 # --- USER PREFERENCES ---
 # Use absolute path to ensure persistence across different working directories
-USER_PREFS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_preferences.json")
+# Check if /data volume is available and writable (Docker/AWS environment)
+if os.path.exists("/data") and os.access("/data", os.W_OK):
+    USER_PREFS_FILE = "/data/user_preferences.json"
+else:
+    USER_PREFS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "user_preferences.json")
 
 def load_user_prefs():
     if os.path.exists(USER_PREFS_FILE):
@@ -229,8 +233,10 @@ def save_user_prefs(data):
         current.update(data)
         with open(USER_PREFS_FILE, "w") as f:
             json.dump(current, f)
+        return True
     except Exception as e:
         print(f"Error saving prefs: {e}")
+        return False
 
 # --- AUTHENTICATION ---
 if "logged_in" not in st.session_state:
@@ -374,27 +380,36 @@ else:
                 if "force_native_mode" not in st.session_state:
                     st.session_state.force_native_mode = True # Default to Native if not set
                 
+                def on_mode_change():
+                    val = st.session_state.sb_mode_selector
+                    new_mode = (val == "Nativo (Local)")
+                    st.session_state.force_native_mode = new_mode
+                    print(f"DEBUG: Mode changed to {'Native' if new_mode else 'Web'}")
+                    
+                    # Save preference immediately
+                    if save_user_prefs({"force_native_mode": new_mode}):
+                         msg = "Modo Nativo Activado" if new_mode else "Modo Web Activado"
+                         st.toast(msg, icon="✅")
+                    else:
+                         st.toast("Advertencia: No se pudo guardar la preferencia en disco.", icon="⚠️")
+                    
+                    # Force rerun to ensure all UI components update their state immediately
+                    # This is crucial for switching between Native and Web rendering in tabs
+                    time.sleep(0.5)
+                    st.rerun()
+                
                 current_mode_idx = 0 if st.session_state.force_native_mode else 1
                 mode_options = ["Nativo (Local)", "Web (Nube)"]
                 
-                selected_mode_sb = st.radio(
+                st.radio(
                     "Modo de Operación:",
                     mode_options,
                     index=current_mode_idx,
                     key="sb_mode_selector",
+                    on_change=on_mode_change,
                     help="Seleccione 'Nativo' si está ejecutando la aplicación en su propia máquina."
                 )
                 
-                new_mode = (selected_mode_sb == "Nativo (Local)")
-                if new_mode != st.session_state.force_native_mode:
-                    st.session_state.force_native_mode = new_mode
-                    # Update prefs immediately
-                    try:
-                        save_user_prefs({"force_native_mode": new_mode})
-                    except:
-                        pass
-                    st.rerun()
-
                 if st.session_state.force_native_mode:
                     st.success("✅ Modo Nativo Activo")
                 else:

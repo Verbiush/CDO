@@ -29,7 +29,7 @@ except ImportError:
     except ImportError:
         abrir_dialogo_carpeta_nativo = None
         
-        def render_path_selector(label, key, default_path=None, help_text=None):
+        def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
             st.warning("render_path_selector no disponible")
             return default_path
             

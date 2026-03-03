@@ -12,6 +12,33 @@ services:
       - PORT=8501
       - DB_PATH=/data/users.db
       - TZ=America/Bogota
+      # Supabase connection (optional if using SQLite)
+      - SUPABASE_HOST=${SUPABASE_HOST}
+      - SUPABASE_USER=${SUPABASE_USER}
+      - SUPABASE_PASSWORD=${SUPABASE_PASSWORD}
+      - SUPABASE_DB=${SUPABASE_DB}
+      - SUPABASE_PORT=${SUPABASE_PORT}
+    volumes:
+      - ./data:/data
+    restart: always
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile_AWS
+    container_name: cdo_api
+    command: uvicorn src.server_api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_PATH=/data/users.db
+      - TZ=America/Bogota
+      # Supabase connection (optional if using SQLite)
+      - SUPABASE_HOST=${SUPABASE_HOST}
+      - SUPABASE_USER=${SUPABASE_USER}
+      - SUPABASE_PASSWORD=${SUPABASE_PASSWORD}
+      - SUPABASE_DB=${SUPABASE_DB}
+      - SUPABASE_PORT=${SUPABASE_PORT}
     volumes:
       - ./data:/data
     restart: always
