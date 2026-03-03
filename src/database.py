@@ -150,29 +150,74 @@ def init_db():
         cursor.execute("SELECT count(*) FROM users")
         count = cursor.fetchone()[0]
         
-        if count == 0 and os.path.exists(USERS_JSON):
-            print("Migrating users from JSON to SQLite...")
-            try:
-                with open(USERS_JSON, "r", encoding='utf-8') as f:
-                    users_data = json.load(f)
-                
-                for username, data in users_data.items():
-                    cursor.execute(
-                        "INSERT INTO users (username, password, role, last_path, permissions, favorites, config) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            username,
-                            data.get("password", ""),
-                            data.get("role", "user"),
-                            data.get("last_path", ""),
-                            json.dumps(data.get("permissions", {})),
-                            json.dumps(data.get("favorites", [])),
-                            json.dumps(data.get("config", {}))
+        if count == 0:
+            # Try to migrate from users.json first
+            if os.path.exists(USERS_JSON):
+                print("Migrating users from JSON to SQLite...")
+                try:
+                    with open(USERS_JSON, "r", encoding='utf-8') as f:
+                        users_data = json.load(f)
+                    
+                    for username, data in users_data.items():
+                        cursor.execute(
+                            "INSERT INTO users (username, password, role, last_path, permissions, favorites, config) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                username,
+                                data.get("password", ""),
+                                data.get("role", "user"),
+                                data.get("last_path", ""),
+                                json.dumps(data.get("permissions", {})),
+                                json.dumps(data.get("favorites", [])),
+                                json.dumps(data.get("config", {}))
+                            )
                         )
-                    )
+                    conn.commit()
+                    print("Migration successful.")
+                except Exception as e:
+                    print(f"Error during migration: {e}")
+            
+            # Check again if still empty (maybe migration failed or file didn't exist)
+            cursor.execute("SELECT count(*) FROM users")
+            count = cursor.fetchone()[0]
+            
+            if count == 0:
+                # Try backup file
+                json_bak = os.path.join(BASE_DIR, "users.json.bak")
+                if os.path.exists(json_bak):
+                    print("Migrating users from JSON backup...")
+                    try:
+                        with open(json_bak, "r", encoding='utf-8') as f:
+                            users_data = json.load(f)
+                        
+                        for username, data in users_data.items():
+                            cursor.execute(
+                                "INSERT INTO users (username, password, role, last_path, permissions, favorites, config) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                (
+                                    username,
+                                    data.get("password", ""),
+                                    data.get("role", "user"),
+                                    data.get("last_path", ""),
+                                    json.dumps(data.get("permissions", {})),
+                                    json.dumps(data.get("favorites", [])),
+                                    json.dumps(data.get("config", {}))
+                                )
+                            )
+                        conn.commit()
+                        print("Backup migration successful.")
+                    except Exception as e:
+                        print(f"Error during backup migration: {e}")
+
+            # Check again, if still empty, create default admin
+            cursor.execute("SELECT count(*) FROM users")
+            count = cursor.fetchone()[0]
+            
+            if count == 0:
+                print("Creating default admin user...")
+                cursor.execute(
+                    "INSERT INTO users (username, password, role, last_path, permissions, favorites, config) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    ("admin", "admin", "admin", "", "{}", "[]", "{}")
+                )
                 conn.commit()
-                print("Migration successful.")
-            except Exception as e:
-                print(f"Error during migration: {e}")
         
         conn.close()
 
