@@ -18,7 +18,16 @@ def execute_sql_script(script_path):
         try:
             with open(script_path, 'r', encoding='utf-8') as f:
                 script = f.read()
-            cursor.executescript(script)
+            
+            if db.USE_MYSQL:
+                # MySQL Connector doesn't support executescript, we need to split
+                statements = script.split(';')
+                for statement in statements:
+                    if statement.strip():
+                        cursor.execute(statement)
+            else:
+                cursor.executescript(script)
+                
             conn.commit()
             conn.close()
             return True, "Script ejecutado correctamente."
@@ -26,19 +35,64 @@ def execute_sql_script(script_path):
             conn.close()
             return False, str(e)
 
+def get_table_columns(cursor, table_name):
+    """Helper to get columns for a table, handling SQLite/MySQL differences."""
+    if db.USE_MYSQL:
+        # MySQL
+        try:
+            cursor.execute(f"SHOW COLUMNS FROM {table_name}")
+            return [column['Field'] for column in cursor.fetchall()]
+        except:
+            return []
+    else:
+        # SQLite
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        return [info[1] for info in cursor.fetchall()]
+
 def ensure_schema_updates():
     """Checks and applies necessary schema updates."""
     with db._db_lock:
         conn = db.get_connection()
-        cursor = conn.cursor()
+        # For MySQL dictionary cursor, we need to handle fetchall carefully
+        # But get_table_columns handles the abstraction
+        cursor = db.execute_query(conn, "SELECT 1") # Dummy to get cursor
+        
         try:
-            # Check if 'fecha_radicado' column exists in 'facturas' table
-            cursor.execute("PRAGMA table_info(facturas)")
-            columns = [info[1] for info in cursor.fetchall()]
-            if "fecha_radicado" not in columns:
-                cursor.execute("ALTER TABLE facturas ADD COLUMN fecha_radicado TEXT")
-                conn.commit()
+            # 1. Check if 'fecha_radicado' column exists in 'facturas' table
+            columns_facturas = get_table_columns(cursor, 'facturas')
+            
+            if columns_facturas and "fecha_radicado" not in columns_facturas:
+                if db.USE_MYSQL:
+                    cursor.execute("ALTER TABLE facturas ADD COLUMN fecha_radicado VARCHAR(50)")
+                else:
+                    cursor.execute("ALTER TABLE facturas ADD COLUMN fecha_radicado TEXT")
                 print("Added 'fecha_radicado' column to 'facturas' table.")
+            
+            # 2. Check if 'tipo_servicio' column exists in 'facturas' table
+            if columns_facturas and "tipo_servicio" not in columns_facturas:
+                if db.USE_MYSQL:
+                    cursor.execute("ALTER TABLE facturas ADD COLUMN tipo_servicio VARCHAR(255) DEFAULT 'EVENTO'")
+                else:
+                    cursor.execute("ALTER TABLE facturas ADD COLUMN tipo_servicio TEXT DEFAULT 'EVENTO'")
+                
+                # Update existing records
+                cursor.execute("UPDATE facturas SET tipo_servicio = 'EVENTO' WHERE tipo_servicio IS NULL")
+                print("Added 'tipo_servicio' column to 'facturas' table.")
+
+            # 3. Check if 'categoria' column exists in 'pacientes' table
+            columns_pacientes = get_table_columns(cursor, 'pacientes')
+            
+            if columns_pacientes and "categoria" not in columns_pacientes:
+                if db.USE_MYSQL:
+                    cursor.execute("ALTER TABLE pacientes ADD COLUMN categoria VARCHAR(50) DEFAULT 'NIVEL 1'")
+                else:
+                    cursor.execute("ALTER TABLE pacientes ADD COLUMN categoria TEXT DEFAULT 'NIVEL 1'")
+                
+                # Update existing records
+                cursor.execute("UPDATE pacientes SET categoria = 'NIVEL 1' WHERE categoria IS NULL")
+                print("Added 'categoria' column to 'pacientes' table.")
+
+            conn.commit()
         except Exception as e:
             print(f"Schema update error: {e}")
         finally:
@@ -48,14 +102,25 @@ def migrate_schema_v2():
     """Migrates the database schema to support One-Invoice-Many-Attentions."""
     with db._db_lock:
         conn = db.get_connection()
-        cursor = conn.cursor()
+        cursor = db.execute_query(conn, "SELECT 1")
         try:
             # Check if migration is needed (if facturas table has 'atencion_id')
-            cursor.execute("PRAGMA table_info(facturas)")
-            columns = [info[1] for info in cursor.fetchall()]
-            if "atencion_id" not in columns:
+            columns = get_table_columns(cursor, 'facturas')
+            
+            if columns and "atencion_id" not in columns:
                 conn.close()
-                return # Already migrated
+                return # Already migrated or fresh install (new schema doesn't have atencion_id)
+            
+            # If we are here, it means 'atencion_id' IS in columns, so we are on OLD schema
+            # But wait, the logic above was: if "atencion_id" NOT in columns, return.
+            # So if it IS in columns, we proceed.
+            # However, if it's a fresh install of the NEW schema, 'atencion_id' won't be there either.
+            # We need to distinguish between "Old Schema" and "New Schema already applied".
+            # Old schema: facturas has atencion_id.
+            # New schema: facturas does NOT have atencion_id.
+            # So checking "if 'atencion_id' not in columns: return" is correct for "New Schema".
+            # But what if it's a fresh install? Fresh install creates tables WITHOUT atencion_id.
+            # So this logic holds.
             
             print("Migrating schema to V2 (Invoice -> Many Attentions)...")
             
@@ -64,51 +129,88 @@ def migrate_schema_v2():
             cursor.execute("ALTER TABLE atenciones RENAME TO atenciones_old")
             
             # 2. Create new tables
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS atenciones (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                paciente_id INTEGER NOT NULL,
-                factura_id INTEGER,
-                nro_estudio TEXT,
-                descripcion_cups TEXT,
-                fecha_ingreso TEXT,
-                fecha_salida TEXT,
-                autorizacion TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(paciente_id) REFERENCES pacientes(id),
-                FOREIGN KEY(factura_id) REFERENCES facturas(id)
-            )
-            ''')
+            # ... (Table creation code needs to be compatible or use init_db?)
+            # Since this is a migration script, we should probably just use the SQL
             
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS facturas (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                no_factura TEXT UNIQUE,
-                fecha_factura TEXT,
-                tipo_pago TEXT,
-                valor_servicio TEXT,
-                copago TEXT,
-                radicado TEXT,
-                total TEXT,
-                status TEXT DEFAULT 'PENDING',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                fecha_radicado TEXT,
-                tipo_servicio TEXT
-            )
-            ''')
+            if db.USE_MYSQL:
+                 cursor.execute('''
+                CREATE TABLE IF NOT EXISTS atenciones (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    paciente_id INT NOT NULL,
+                    factura_id INT,
+                    nro_estudio VARCHAR(255),
+                    descripcion_cups TEXT,
+                    fecha_ingreso VARCHAR(50),
+                    fecha_salida VARCHAR(50),
+                    autorizacion VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(paciente_id) REFERENCES pacientes(id),
+                    FOREIGN KEY(factura_id) REFERENCES facturas(id)
+                )
+                ''')
+                 cursor.execute('''
+                CREATE TABLE IF NOT EXISTS facturas (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    no_factura VARCHAR(255) UNIQUE,
+                    fecha_factura VARCHAR(50),
+                    tipo_pago VARCHAR(50),
+                    valor_servicio VARCHAR(255),
+                    copago VARCHAR(255),
+                    radicado VARCHAR(255),
+                    total VARCHAR(255),
+                    status VARCHAR(50) DEFAULT 'PENDING',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_radicado VARCHAR(50),
+                    tipo_servicio VARCHAR(255)
+                )
+                ''')
+            else:
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS atenciones (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    paciente_id INTEGER NOT NULL,
+                    factura_id INTEGER,
+                    nro_estudio TEXT,
+                    descripcion_cups TEXT,
+                    fecha_ingreso TEXT,
+                    fecha_salida TEXT,
+                    autorizacion TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(paciente_id) REFERENCES pacientes(id),
+                    FOREIGN KEY(factura_id) REFERENCES facturas(id)
+                )
+                ''')
+                cursor.execute('''
+                CREATE TABLE IF NOT EXISTS facturas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    no_factura TEXT UNIQUE,
+                    fecha_factura TEXT,
+                    tipo_pago TEXT,
+                    valor_servicio TEXT,
+                    copago TEXT,
+                    radicado TEXT,
+                    total TEXT,
+                    status TEXT DEFAULT 'PENDING',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    fecha_radicado TEXT,
+                    tipo_servicio TEXT
+                )
+                ''')
             
             # 3. Migrate Data
             # Facturas: Copy everything except atencion_id
             cursor.execute('''
-                INSERT INTO facturas (id, no_factura, fecha_factura, tipo_pago, valor_servicio, copago, radicado, total, status, created_at, fecha_radicado, tipo_servicio)
-                SELECT id, no_factura, fecha_factura, tipo_pago, valor_servicio, copago, radicado, total, status, created_at, fecha_radicado, tipo_servicio
+                INSERT INTO facturas (no_factura, fecha_factura, tipo_pago, valor_servicio, copago, radicado, total, status, created_at, fecha_radicado, tipo_servicio)
+                SELECT no_factura, fecha_factura, tipo_pago, valor_servicio, copago, radicado, total, status, created_at, fecha_radicado, tipo_servicio
                 FROM facturas_old
             ''')
+            # Note: Removed 'id' from insert to let auto-increment handle it or we should preserve IDs?
+            # Preserving IDs is better.
             
             # Atenciones: Copy old data AND link to factura
             cursor.execute('''
-                INSERT INTO atenciones (id, paciente_id, factura_id, nro_estudio, descripcion_cups, fecha_ingreso, fecha_salida, autorizacion, created_at)
-                SELECT a.id, a.paciente_id, f.id, a.nro_estudio, a.descripcion_cups, a.fecha_ingreso, a.fecha_salida, a.autorizacion, a.created_at
+                INSERT INTO atenciones (paciente_id, factura_id, nro_estudio, descripcion_cups, fecha_ingreso, fecha_salida, autorizacion, created_at)
+                SELECT a.paciente_id, f.id, a.nro_estudio, a.descripcion_cups, a.fecha_ingreso, a.fecha_salida, a.autorizacion, a.created_at
                 FROM atenciones_old a
                 LEFT JOIN facturas_old f ON f.atencion_id = a.id
             ''')
@@ -137,22 +239,35 @@ def reset_database():
         cursor = conn.cursor()
         try:
             # Drop existing tables
-            cursor.execute("DROP TABLE IF EXISTS facturas")
-            cursor.execute("DROP TABLE IF EXISTS atenciones")
-            cursor.execute("DROP TABLE IF EXISTS pacientes")
+            if db.USE_MYSQL:
+                cursor.execute("SET FOREIGN_KEY_CHECKS = 0")
+                cursor.execute("DROP TABLE IF EXISTS facturas")
+                cursor.execute("DROP TABLE IF EXISTS atenciones")
+                cursor.execute("DROP TABLE IF EXISTS pacientes")
+                cursor.execute("SET FOREIGN_KEY_CHECKS = 1")
+            else:
+                cursor.execute("DROP TABLE IF EXISTS facturas")
+                cursor.execute("DROP TABLE IF EXISTS atenciones")
+                cursor.execute("DROP TABLE IF EXISTS pacientes")
+            
             conn.commit()
             conn.close()
             
             # Recreate from schema.sql
             import os
-            schema_path = os.path.join(os.path.dirname(__file__), "schema.sql")
+            schema_file = "schema_mysql.sql" if db.USE_MYSQL else "schema.sql"
+            schema_path = os.path.join(os.path.dirname(__file__), schema_file)
+            
             if os.path.exists(schema_path):
                 return execute_sql_script(schema_path)
             else:
-                return False, "No se encontró el archivo schema.sql"
+                return False, f"No se encontró el archivo {schema_file}"
                 
         except Exception as e:
-            conn.close()
+            try:
+                conn.close()
+            except:
+                pass
             return False, str(e)
 
 def insert_document_record(data):

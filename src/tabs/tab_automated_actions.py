@@ -1311,34 +1311,7 @@ def worker_dividir_pdfs_masivamente(carpeta_base, silent_mode=False):
         
     return f"Divididos {count} PDFs masivamente."
 
-def worker_pdf_a_escala_grises(files, replace_original=False, silent_mode=False):
-    # files: list of file paths
-    count = 0
-    for entrada in files:
-        try:
-            ruta_salida = entrada
-            ruta_temporal = entrada + "._tmp_grayscale" if replace_original else None
-            
-            with fitz.open(entrada) as doc_origen:
-                if doc_origen.is_encrypted: continue
-                doc_final = fitz.open()
-                for page in doc_origen:
-                    pix = page.get_pixmap(dpi=300, colorspace=fitz.csGRAY)
-                    pagina_nueva = doc_final.new_page(width=pix.width, height=pix.height)
-                    pagina_nueva.insert_image(pagina_nueva.rect, pixmap=pix)
-                
-                target = ruta_temporal if replace_original else ruta_salida.replace(".pdf", "_gray.pdf")
-                doc_final.save(target, garbage=4, deflate=True)
-                doc_final.close()
-            
-            if replace_original:
-                os.replace(ruta_temporal, entrada)
-            count += 1
-        except Exception:
-            if replace_original and ruta_temporal and os.path.exists(ruta_temporal):
-                os.remove(ruta_temporal)
-                
-    return f"Convertidos {count} archivos a escala de grises."
+
 
 # --- WORKERS: RIPS ---
 
@@ -5834,59 +5807,6 @@ def dialog_organizar_feov():
         else:
             st.warning("Seleccione ambas carpetas.")
 
-@st.dialog("Convertir PDF a Escala de Grises")
-def dialog_escala_grises():
-    st.write("Convierte PDFs a escala de grises para reducir tamaño.")
-    
-    # Validación de Modo
-    if not st.session_state.get("force_native_mode", True):
-        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
-
-    tab1, tab2 = st.tabs(["Individual/Manual", "Resultados de Búsqueda"])
-    
-    with tab1:
-        st.write("Procesar carpeta completa:")
-        folder = render_path_selector(
-            key="gray_folder",
-            label="Carpeta"
-        )
-        
-        replace = st.checkbox("Reemplazar originales", value=True, key="gray_manual_replace")
-
-        if st.button("Convertir Carpeta"):
-            if folder:
-                pdfs = [os.path.join(folder, f) for f in os.listdir(folder) if f.lower().endswith('.pdf')]
-                if pdfs:
-                    try:
-                        with st.spinner("Convirtiendo a escala de grises..."):
-                            result = worker_pdf_a_escala_grises(pdfs, replace)
-                            st.success(result)
-                            time.sleep(2)
-                            # st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-                else:
-                    st.warning("No hay PDFs en la carpeta.")
-
-    with tab2:
-        results = st.session_state.get('search_results', [])
-        pdfs_res = [f for f in results if f.lower().endswith('.pdf')] if results else []
-        
-        st.write(f"PDFs encontrados en última búsqueda: {len(pdfs_res)}")
-        replace_res = st.checkbox("Reemplazar originales", value=True, key="gray_res_replace")
-        
-        if st.button("Convertir Resultados"):
-            if pdfs_res:
-                try:
-                    with st.spinner("Convirtiendo resultados..."):
-                        result = worker_pdf_a_escala_grises(pdfs_res, replace_res)
-                        st.success(result)
-                        time.sleep(2)
-                        # st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
-            else:
-                st.warning("No hay resultados PDF disponibles.")
 
 # --- RENDER MAIN TAB ---
 
@@ -6020,8 +5940,7 @@ def render():
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
-            if st.button("⚫⚪ PDF a Escala de Grises", key="btn_org_gray"):
-                dialog_escala_grises()
+
 
         with col_o2:
             if st.button("🗺️ Copiar Archivos (Mapeo Sub)", key="btn_org_map_sub"):

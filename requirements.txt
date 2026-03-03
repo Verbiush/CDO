@@ -25,3 +25,4 @@ python-multipart
 xlsxwriter
 xlrd
 lxml
+mysql-connector-python

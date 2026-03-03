@@ -57,8 +57,14 @@ def render(*args, **kwargs):
             conn = db.get_connection()
             
             # Get tables
-            tables_df = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name", conn)
-            table_list = tables_df['name'].tolist() if not tables_df.empty else []
+            if db.USE_MYSQL:
+                cursor = conn.cursor()
+                cursor.execute("SHOW TABLES")
+                # fetchall returns list of tuples (table_name,)
+                table_list = [row[0] for row in cursor.fetchall()]
+            else:
+                tables_df = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name", conn)
+                table_list = tables_df['name'].tolist() if not tables_df.empty else []
             
             selected_table = st.selectbox("Seleccionar Tabla", table_list, index=0 if table_list else None)
             
@@ -70,53 +76,17 @@ def render(*args, **kwargs):
                 st.dataframe(df, use_container_width=True)
                 
                 st.divider()
-                col_d1, col_d2 = st.columns(2)
                 
-                with col_d1:
-                    st.markdown("**📥 Exportar Datos**")
-                    # CSV
-                    csv = df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        "⬇️ Descargar como CSV",
-                        csv,
-                        f"{selected_table}_export.csv",
-                        "text/csv",
-                        key=f"dl_csv_{selected_table}"
-                    )
-                    
-                with col_d2:
-                    st.markdown("**🗑️ Gestión de Registros**")
-                    
-                    # Delete by ID (if applicable)
-                    if 'id' in df.columns:
-                        with st.expander("Eliminar Registro por ID"):
-                            id_to_del = st.number_input("ID a eliminar", min_value=0, step=1, key=f"del_id_{selected_table}")
-                            if st.button("❌ Eliminar Registro", key=f"btn_del_id_{selected_table}", type="primary"):
-                                try:
-                                    cursor = conn.cursor()
-                                    cursor.execute(f"DELETE FROM {selected_table} WHERE id = ?", (id_to_del,))
-                                    conn.commit()
-                                    st.success(f"Registro ID {id_to_del} eliminado.")
-                                    time.sleep(1)
-                                    # st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error al eliminar: {e}")
-                    
-                    # Delete All (Dangerous)
-                    with st.expander("⚠️ Zona de Peligro (Eliminar Todo)"):
-                        st.warning("Esta acción eliminará TODOS los registros de la tabla y no se puede deshacer.")
-                        confirm_del = st.checkbox(f"Confirmar vaciado de tabla '{selected_table}'", key=f"chk_del_{selected_table}")
-                        if confirm_del:
-                            if st.button("🔥 VACIAR TABLA COMPLETA", key=f"btn_truncate_{selected_table}", type="primary"):
-                                try:
-                                    cursor = conn.cursor()
-                                    cursor.execute(f"DELETE FROM {selected_table}")
-                                    conn.commit()
-                                    st.success(f"Tabla {selected_table} vaciada completamente.")
-                                    time.sleep(1)
-                                    # st.rerun()
-                                except Exception as e:
-                                    st.error(f"Error al vaciar tabla: {e}")
+                st.markdown("**📥 Exportar Datos**")
+                # CSV
+                csv = df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    "⬇️ Descargar como CSV",
+                    csv,
+                    f"{selected_table}_export.csv",
+                    "text/csv",
+                    key=f"dl_csv_{selected_table}"
+                )
 
         except Exception as e:
             st.error(f"Error accediendo a la base de datos: {e}")
@@ -126,26 +96,31 @@ def render(*args, **kwargs):
 
     with tab_backup:
         st.subheader("📦 Respaldo de Base de Datos")
-        st.info("Descargue una copia de seguridad de la base de datos actual (users.db).")
         
-        db_path = db.get_db_path()
-        if os.path.exists(db_path):
-            with open(db_path, "rb") as f:
-                db_bytes = f.read()
-            
-            # Filename with timestamp
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            file_name = f"backup_users_db_{timestamp}.db"
-            
-            st.download_button(
-                label="⬇️ Descargar Copia de Seguridad",
-                data=db_bytes,
-                file_name=file_name,
-                mime="application/x-sqlite3",
-                key="btn_backup_db"
-            )
+        if db.USE_MYSQL:
+            st.warning("⚠️ El respaldo automático no está disponible en modo MySQL.")
+            st.info("Por favor, utilice herramientas de administración de MySQL (como mysqldump o Workbench) para realizar copias de seguridad.")
         else:
-            st.error("No se encontró el archivo de base de datos.")
+            st.info("Descargue una copia de seguridad de la base de datos actual (users.db).")
+            
+            db_path = db.get_db_path() if hasattr(db, 'get_db_path') else db.DB_FILE
+            if os.path.exists(db_path):
+                with open(db_path, "rb") as f:
+                    db_bytes = f.read()
+                
+                # Filename with timestamp
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                file_name = f"backup_users_db_{timestamp}.db"
+                
+                st.download_button(
+                    label="⬇️ Descargar Copia de Seguridad",
+                    data=db_bytes,
+                    file_name=file_name,
+                    mime="application/x-sqlite3",
+                    key="btn_backup_db"
+                )
+            else:
+                st.error("No se encontró el archivo de base de datos.")
 
     with tab_reports:
         st.subheader("📊 Informes y Estadísticas")
