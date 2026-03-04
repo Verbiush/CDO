@@ -8,10 +8,10 @@ import tempfile
 import pandas as pd
 
 try:
-    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector
+    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button
 except ImportError:
     try:
-        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button
     except ImportError:
         abrir_dialogo_carpeta_nativo = None
         def update_path_key(key, new_path, widget_key=None):
@@ -23,6 +23,9 @@ except ImportError:
         def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
             st.warning("render_path_selector no disponible")
             return default_path
+            
+        def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
+            pass
 
 try:
     from pdf2docx import Converter
@@ -371,6 +374,57 @@ def render(container=None):
                             st.success(f"✅ {msg}")
                             if is_uploaded:
                                 st.info(f"Archivo guardado en: {actual_output_folder}")
+                            
+                            # --- Download Logic ---
+                            filename = os.path.basename(actual_input_path)
+                            name_no_ext = os.path.splitext(filename)[0]
+                            out_file_name = None
+                            
+                            if conv_type_code == "PDF2DOCX": out_file_name = f"{name_no_ext}.docx"
+                            elif conv_type_code == "JPG2PDF": out_file_name = f"{name_no_ext}.pdf"
+                            elif conv_type_code == "DOCX2PDF": out_file_name = f"{name_no_ext}.pdf"
+                            elif conv_type_code == "PNG2JPG": out_file_name = f"{name_no_ext}.jpg"
+                            elif conv_type_code == "TXT2JSON": out_file_name = f"{name_no_ext}.json"
+                            elif conv_type_code == "XLSX2TXT": out_file_name = f"{name_no_ext}.txt"
+                            elif conv_type_code == "XLS2XLSX": out_file_name = f"{name_no_ext}.xlsx"
+                            elif conv_type_code == "PDF_GRAY": out_file_name = filename # Overwrites or same name
+                            
+                            if out_file_name:
+                                # For PDF_GRAY with uploaded file, the file is modified in place at actual_input_path
+                                # For others, it is at actual_output_folder/out_file_name
+                                
+                                target_file_path = os.path.join(actual_output_folder, out_file_name)
+                                
+                                # Special case for PDF_GRAY which overwrites input
+                                if conv_type_code == "PDF_GRAY":
+                                    target_file_path = actual_input_path
+                                
+                                if os.path.exists(target_file_path):
+                                    render_download_button(target_file_path, "dl_ind_conv", f"📥 Descargar {out_file_name}")
+                            
+                            elif conv_type_code == "PDF2JPG":
+                                # Find generated JPGs
+                                import glob
+                                pattern = os.path.join(actual_output_folder, f"{name_no_ext}_page*.jpg")
+                                jpgs = glob.glob(pattern)
+                                if jpgs:
+                                    # Create a temp zip file
+                                    try:
+                                        import zipfile
+                                        timestamp = int(time.time())
+                                        temp_dl_dir = "temp_downloads"
+                                        os.makedirs(temp_dl_dir, exist_ok=True)
+                                        zip_path = os.path.join(temp_dl_dir, f"{name_no_ext}_images_{timestamp}.zip")
+                                        
+                                        with zipfile.ZipFile(zip_path, "w") as zf:
+                                            for jpg in jpgs:
+                                                zf.write(jpg, os.path.basename(jpg))
+                                        
+                                        render_download_button(zip_path, "dl_ind_jpgs", "📦 Descargar Imágenes (ZIP)")
+                                    except Exception as e:
+                                        st.error(f"Error preparando ZIP: {e}")
+                            # ----------------------
+
                         else:
                             st.error(f"❌ Error: {msg}")
 
@@ -436,6 +490,10 @@ def render(container=None):
                     count, msg = worker_convertir_masivo(target_folder, mass_conv_type_code, output_folder=final_output, sep=mass_sep)
                     if count > 0:
                         st.success(msg)
+                        
+                        dl_folder = final_output if final_output else target_folder
+                        render_download_button(dl_folder, "dl_mass_conv", "📦 Descargar Archivos Convertidos (ZIP)")
+                        
                     else:
                         st.warning(msg)
                 else:

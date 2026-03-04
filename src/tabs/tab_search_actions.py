@@ -22,10 +22,10 @@ except ImportError:
 
 
 try:
-    from gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key
+    from gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key, render_download_button
 except ImportError:
     try:
-        from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key, render_download_button
     except ImportError:
         abrir_dialogo_carpeta_nativo = None
         
@@ -35,6 +35,9 @@ except ImportError:
             
         def update_path_key(key, new_path, widget_key=None):
              pass
+
+        def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
+            pass
 
 # --- HELPER FUNCTIONS ---
 
@@ -328,9 +331,15 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
         msg = f"✅ Renombrados {count} archivos exitosamente."
         if not silent_mode:
             st.success(msg)
+            
+            # Offer download of the root folder
+            root_path = st.session_state.get("current_path")
+            if root_path and os.path.exists(root_path):
+                 render_download_button(root_path, "dl_rename_mass", "📦 Descargar Carpeta Completa (ZIP)")
+                 
             log(f"Renombrado masivo completado. Total: {count}")
-            time.sleep(1) # Pausa breve para ver el mensaje
-            st.rerun()
+            # time.sleep(1) # Pausa breve para ver el mensaje - Removed to allow interaction with download button
+            # st.rerun() # Rerun prevents clicking the download button
         return msg
     else:
         msg = "No se realizaron cambios (verifique los parámetros o nombres de archivo)."
@@ -424,8 +433,14 @@ def worker_editar_texto(file_list, search_text, replace_text, silent_mode=False)
     if not silent_mode:
         progress_bar.progress(1.0, text="Finalizado.")
         st.success(msg)
-        time.sleep(2)
-        st.rerun()
+        
+        # Offer download of the root folder
+        root_path = st.session_state.get("current_path")
+        if root_path and os.path.exists(root_path):
+             render_download_button(root_path, "dl_text_edit", "📦 Descargar Carpeta Completa (ZIP)")
+             
+        # time.sleep(2)
+        # st.rerun()
     return msg
 
 def run_editar_texto_task(file_list, search_text, replace_text):
@@ -475,8 +490,11 @@ def worker_copiar_lista(file_list, target_folder, silent_mode=False):
     if not silent_mode:
         progress_bar.progress(1.0, text="Finalizado.")
         st.success(msg)
-        time.sleep(1.5)
-        st.rerun()
+        
+        render_download_button(target_folder, "dl_copy_list", "📦 Descargar Archivos Copiados (ZIP)")
+        
+        # time.sleep(1.5)
+        # st.rerun()
     return msg
 
 def run_copiar_lista_task(file_list, target_folder):
@@ -520,7 +538,7 @@ def worker_mover_lista(file_list, target_folder, silent_mode=False):
             changes_made.append((dest_path, src_path)) # Guardar para deshacer
 
             # Actualizar ruta en lista (aunque se va a limpiar o rerun)
-            item["Ruta completa"] = dest_path 
+            item["Ruta completa"] = dest_path
         except Exception as e:
             log(f"Error moviendo {src_path}: {e}")
             errors += 1
@@ -531,8 +549,11 @@ def worker_mover_lista(file_list, target_folder, silent_mode=False):
         if count > 0:
             record_action("Mover Lista", changes_made)
         st.success(msg)
-        time.sleep(1.5)
-        st.rerun()
+        
+        render_download_button(target_folder, "dl_move_list", "📦 Descargar Archivos Movidos (ZIP)")
+        
+        # time.sleep(1.5)
+        # st.rerun()
     return msg
 
 def run_mover_lista_task(file_list, target_folder):

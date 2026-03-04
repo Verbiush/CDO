@@ -37,10 +37,10 @@ except ImportError:
 
 try:
     from src import db_gestion
-    from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key as update_path_key_gui, render_path_selector
+    from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key as update_path_key_gui, render_path_selector, render_download_button
 except ImportError:
     import db_gestion
-    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key as update_path_key_gui, render_path_selector
+    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key as update_path_key_gui, render_path_selector, render_download_button
 
 # Force reload to ensure latest DB logic is used
 importlib.reload(db_gestion)
@@ -769,6 +769,9 @@ def render():
                 progress_bar.progress((i + 1) / len(filtered_records))
             
             st.success(f"✅ Proceso finalizado. Carpetas Creadas: {count_created}")
+            
+            # --- DOWNLOAD BUTTON (WEB MODE) ---
+            render_download_button(base_path, "dl_struct", "📦 Descargar Estructura (ZIP)")
 
     # --- TAB ORGANIZAR (Renombrar/Mover) ---
     with tab_organize:
@@ -890,6 +893,9 @@ def render():
                             progress_bar.progress((i + 1) / len(dirs))
                             
                         st.success(f"Carpetas Renombradas: {count_ren}. Errores/Omis: {errors_ren}")
+                        
+                        # --- DOWNLOAD BUTTON (WEB MODE) ---
+                        render_download_button(source_path, "dl_ren", "📦 Descargar Carpetas Renombradas (ZIP)")
                     except Exception as e:
                         st.error(f"Error accediendo a la carpeta: {e}")
 
@@ -965,6 +971,9 @@ def render():
                             progress_bar.progress((i + 1) / len(items))
                             
                         st.success(f"Items Movidos: {count_mov}. Errores: {errors_mov}")
+                        
+                        # --- DOWNLOAD BUTTON (WEB MODE) ---
+                        render_download_button(base_dest, "dl_mov", "📦 Descargar Archivos Organizados (ZIP)")
                     except Exception as e:
                          st.error(f"Error accediendo a la carpeta: {e}")
 
@@ -1112,6 +1121,9 @@ def render():
                         progress_bar.progress((i + 1) / total_records)
                         
                     st.success(f"Archivos renombrados con sufijo: {count_suf}. Errores/Omitidos: {errors_suf}")
+                    
+                    # --- DOWNLOAD BUTTON (WEB MODE) ---
+                    render_download_button(source_path, "dl_suf", "📦 Descargar Archivos con Sufijo (ZIP)")
                 except Exception as e:
                      st.error(f"Error general: {e}")
 
@@ -1522,6 +1534,9 @@ def render():
                         with st.expander(f"⚠️ Errores ({len(errors_template)})", expanded=True):
                             for err in errors_template:
                                 st.error(err)
+                                
+                    # --- DOWNLOAD BUTTON (WEB MODE) ---
+                    render_download_button(base_path_content, "dl_docs", "📦 Descargar Documentos Generados (ZIP)")
 
         # ACTION 3: DOWNLOAD SIGNATURES
         with col_act3:
@@ -1561,6 +1576,9 @@ def render():
                     status_text.text(f"Descargando Firmas {i+1}/{len(filtered_records_content)}...")
                     
                 st.success(f"✅ Firmas Descargadas: {count_sign_download}")
+                
+                # --- DOWNLOAD BUTTON (WEB MODE) ---
+                render_download_button(base_path_content, "dl_sign_dl", "📦 Descargar Firmas (ZIP)")
 
         # ACTION 4: CREATE DIGITAL SIGNATURES
         with col_act4:
@@ -1627,6 +1645,9 @@ def render():
                     status_text.text(f"Creando Firmas {i+1}/{len(filtered_records_content)}...")
                     
                 st.success(f"✅ Firmas Creadas: {count_sign_create}")
+                
+                # --- DOWNLOAD BUTTON (WEB MODE) ---
+                render_download_button(base_path_content, "dl_sign_cr", "📦 Descargar Firmas Digitales (ZIP)")
 
         # --- ACTION 5: DOWNLOAD OVIDA HISTORY ---
         st.divider()
@@ -1670,6 +1691,9 @@ def render():
                          st.error(result_msg)
                      else:
                          st.success(result_msg)
+                         
+                         # --- DOWNLOAD BUTTON (WEB MODE) ---
+                         render_download_button(final_ovida_path, "dl_ovida", "📦 Descargar Historias OVIDA (ZIP)")
 
     # --- TAB 5: ADMIN BD (MOVED TO TAB_ADMIN.PY) ---
     # Logic moved to main admin tab.

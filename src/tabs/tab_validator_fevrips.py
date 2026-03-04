@@ -8,6 +8,7 @@ import io
 import subprocess
 import socket
 import urllib.parse
+import shutil
 import time
 
 try:
@@ -16,10 +17,10 @@ except ImportError:
     from src import database as db
 
 try:
-    from gui_utils import abrir_dialogo_carpeta_nativo, abrir_dialogo_archivo_nativo, update_path_key, render_path_selector, render_file_selector
+    from gui_utils import abrir_dialogo_carpeta_nativo, abrir_dialogo_archivo_nativo, update_path_key, render_path_selector, render_file_selector, render_download_button
 except ImportError:
     try:
-        from src.gui_utils import abrir_dialogo_carpeta_nativo, abrir_dialogo_archivo_nativo, update_path_key, render_path_selector, render_file_selector
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, abrir_dialogo_archivo_nativo, update_path_key, render_path_selector, render_file_selector, render_download_button
     except ImportError:
         abrir_dialogo_carpeta_nativo = None
         abrir_dialogo_archivo_nativo = None
@@ -36,6 +37,9 @@ except ImportError:
         def render_file_selector(label, key, default_path=None, help_text=None, file_types=None, omit_checkbox=False):
             st.warning("render_file_selector no disponible")
             return default_path
+            
+        def render_download_button(file_path, key, label="📥 Descargar"):
+            st.warning("render_download_button no disponible")
 
 # --- HELPERS ---
 
@@ -604,6 +608,7 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
             verify_ssl = False
             requests.packages.urllib3.disable_warnings()
 
+        generated_files = []
         for i, full_path in enumerate(files_to_process):
             fname = os.path.basename(full_path)
             res_row = {"Archivo": fname, "Estado": "Pendiente", "CUV": "", "Mensaje": ""}
@@ -627,13 +632,18 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
                         
                         # 1. ResultadosLocales
                         f_loc_name = f"ResultadosLocales_{factura_num}.json"
-                        with open(os.path.join(path_input, f_loc_name), "w", encoding="utf-8") as f_out:
+                        f_loc_path = os.path.join(path_input, f_loc_name)
+                        with open(f_loc_path, "w", encoding="utf-8") as f_out:
                             json.dump(r_json, f_out, indent=2, ensure_ascii=False)
+                        generated_files.append(f_loc_path)
                         
                         # 2. ResultadosMSPS
                         f_msps_name = f"ResultadosMSPS_{factura_num}_ID{provider_id}_R.json"
-                        with open(os.path.join(path_input, f_msps_name), "w", encoding="utf-8") as f_out:
+                        f_msps_path = os.path.join(path_input, f_msps_name)
+                        with open(f_msps_path, "w", encoding="utf-8") as f_out:
                             json.dump(r_json, f_out, indent=2, ensure_ascii=False)
+                        generated_files.append(f_msps_path)
+                        
                     except Exception as e:
                         print(f"Error guardando extras: {e}")
                         
@@ -648,6 +658,31 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
             progress_bar.progress((i + 1) / len(files_to_process))
             
         st.success("Validación completada.")
+        
+        # --- DESCARGA DE RESULTADOS ---
+        if generated_files:
+            try:
+                # Prepare a clean download folder
+                timestamp = int(time.time())
+                temp_dir = os.path.join("temp_downloads", f"fevrips_results_{timestamp}")
+                os.makedirs(temp_dir, exist_ok=True)
+                
+                # Copy generated files
+                count_copied = 0
+                for f_path in generated_files:
+                    if os.path.exists(f_path):
+                        shutil.copy2(f_path, temp_dir)
+                        count_copied += 1
+                
+                if count_copied > 0:
+                    render_download_button(temp_dir, "btn_download_fevrips", "📦 Descargar Resultados (ZIP)")
+                else:
+                    st.warning("No se pudieron copiar los archivos generados para descarga.")
+                    
+            except Exception as e:
+                st.error(f"Error preparando descarga: {e}")
+        # ------------------------------
+        
         df_res = pd.DataFrame(results)
         st.dataframe(df_res)
 

@@ -1,2 +1,11 @@
 7MCh0TJ3XsVYyOQc
 https://supabase.com/dashboard/project/xbnkmstqkascpvrrhxrn
+
+git clone https://github.com/Verbiush/CDO.git
+cd CDO
+git pull origin main
+sudo docker-compose -f docker-compose-aws.yml up -d --build
+sudo docker ps
+sudo docker-compose -f docker-compose-aws.yml logs -f
+
+sudo docker exec -it cdo_app python3 -c "import sqlite3; conn = sqlite3.connect('/app/data/users.db'); c = conn.cursor(); c.execute(\"SELECT name FROM sqlite_master WHERE type='table'\"); print(c.fetchall()); conn.close()"

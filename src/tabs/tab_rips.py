@@ -7,13 +7,19 @@ import time
 import shutil
 
 try:
-    from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector
+    from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, render_download_button, extract_uploaded_zip
 except ImportError:
     abrir_dialogo_carpeta_nativo = None
     # Fallback implementation if import fails
     def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
         st.warning("Componente de selección de rutas no disponible. Usando entrada de texto simple.")
         return st.text_input(label, value=default_path or "", key=key, help=help_text)
+
+    def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
+        pass
+
+    def extract_uploaded_zip(uploaded_file):
+        return None
 
 # Ensure render_path_selector is callable (defensive check for potential import issues)
 if not callable(render_path_selector):
@@ -471,6 +477,54 @@ def worker_update_notes_masivo(folder_path, target_text, new_note):
     
     return count_files, total_changes, errors
 
+def worker_limpiar_json_rips(folder_path):
+    count_files = 0
+    errors = []
+    
+    if not os.path.isdir(folder_path):
+        return 0, ["Carpeta no válida"]
+
+    progress_bar = st.progress(0, text="Limpiando JSONs...")
+    
+    files_to_process = []
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            if file.lower().endswith('.json'):
+                files_to_process.append(os.path.join(root, file))
+    
+    total = len(files_to_process)
+    
+    if total == 0:
+        progress_bar.empty()
+        return 0, ["No se encontraron archivos .json en la carpeta o subcarpetas."]
+
+    for i, file_path in enumerate(files_to_process):
+        if i % 5 == 0: progress_bar.progress(min(i/total, 1.0), text=f"Procesando {i}/{total}")
+        
+        filename = os.path.basename(file_path)
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        
+            # Apply recursive strip
+            cleaned_data = recursive_strip(data)
+            
+            # Save back (always, or check if changed? recursive_strip always returns new structure)
+            # To be safe and ensure cleaning, we write back.
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(cleaned_data, f, indent=4, ensure_ascii=False)
+            
+            count_files += 1
+        
+        except Exception as e:
+            errors.append(f"{filename}: {e}")
+    
+    progress_bar.progress(1.0, text="Finalizado.")
+    time.sleep(0.5)
+    progress_bar.empty()
+    
+    return count_files, errors
+
 def worker_flat_to_excel(uploaded_files):
     # 1. Identificar archivos por prefijo (US, AC, AP, etc.)
     files_map = {}
@@ -612,66 +666,53 @@ def render(container=None):
             - Organiza los datos en hojas separadas (Consultas, Procedimientos, etc.) listas para la conversión a JSON.
             """)
             
-            is_native = st.session_state.get("force_native_mode", True)
+            path_flat = render_path_selector("Carpeta con Archivos Planos (o subir ZIP)", key="path_rips_flat")
             
-            if is_native:
-                path_flat = render_path_selector("Carpeta con Archivos Planos", key="path_rips_flat")
-                
-                if st.button("🔄 Convertir a Excel", key="btn_convert_flat_native"):
-                    if path_flat and os.path.isdir(path_flat):
-                        with st.spinner("Procesando archivos en carpeta..."):
-                             files_to_close = []
-                             try:
-                                 files_list = []
-                                 # List files
-                                 for fname in os.listdir(path_flat):
-                                     if fname.lower().endswith(('.txt', '.csv')):
-                                         full_path = os.path.join(path_flat, fname)
-                                         f_obj = open(full_path, 'rb')
-                                         files_list.append(f_obj)
-                                         files_to_close.append(f_obj)
-                                 
-                                 if not files_list:
-                                     st.warning("No se encontraron archivos TXT/CSV en la carpeta.")
-                                 else:
-                                     excel_data, error_msg = worker_flat_to_excel(files_list)
-                                     
-                                     if excel_data:
-                                         st.success("✅ Conversión completada exitosamente.")
-                                         st.download_button(
-                                             label="📥 Descargar Excel Consolidado",
-                                             data=excel_data,
-                                             file_name="RIPS_Consolidado_NuevaRes.xlsx",
-                                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                         )
-                                     else:
-                                         st.error(error_msg)
-                             except Exception as e:
-                                 st.error(f"Error accediendo a archivos: {e}")
-                             finally:
-                                 for f in files_to_close:
-                                     try: f.close()
-                                     except: pass
-                    else:
-                        st.warning("Seleccione una carpeta válida.")
-            else:
-                uploaded_files = st.file_uploader("Seleccionar archivos planos (TXT/CSV):", accept_multiple_files=True, type=["txt", "csv"], key="rips_flat_files_org")
-                
-                if uploaded_files:
-                    if st.button("🔄 Convertir a Excel", key="btn_convert_flat_org"):
-                        with st.spinner("Procesando archivos y generando relaciones..."):
-                            excel_data, error_msg = worker_flat_to_excel(uploaded_files)
-                            
-                            if excel_data:
-                                st.success("✅ Conversión completada exitosamente.")
-                                st.download_button(
-                                    label="📥 Descargar Excel Consolidado",
-                                    data=excel_data,
-                                    file_name="RIPS_Consolidado_NuevaRes.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                )
-                            else:
-                                st.error(error_msg)
+            if st.button("🔄 Convertir a Excel", key="btn_convert_flat_native"):
+                if path_flat and os.path.isdir(path_flat):
+                    with st.spinner("Procesando archivos en carpeta..."):
+                            files_to_close = []
+                            try:
+                                files_list = []
+                                # List files
+                                for fname in os.listdir(path_flat):
+                                    if fname.lower().endswith(('.txt', '.csv')):
+                                        full_path = os.path.join(path_flat, fname)
+                                        f_obj = open(full_path, 'rb')
+                                        files_list.append(f_obj)
+                                        files_to_close.append(f_obj)
+                                
+                                if not files_list:
+                                    st.warning("No se encontraron archivos TXT/CSV en la carpeta.")
+                                else:
+                                    excel_data, error_msg = worker_flat_to_excel(files_list)
+                                    
+                                    if excel_data:
+                                        st.success("✅ Conversión completada exitosamente.")
+                                        
+                                        # Save to temp file for consistent download behavior
+                                        temp_dir = os.path.join("temp_downloads", f"rips_flat_{int(time.time())}")
+                                        os.makedirs(temp_dir, exist_ok=True)
+                                        out_file = os.path.join(temp_dir, "RIPS_Consolidado_NuevaRes.xlsx")
+                                        
+                                        with open(out_file, "wb") as f:
+                                            f.write(excel_data.getvalue())
+                                            
+                                        render_download_button(
+                                            folder_path=out_file,
+                                            key="dl_rips_flat_consolidado",
+                                            label="📥 Descargar Excel Consolidado"
+                                        )
+                                    else:
+                                        st.error(error_msg)
+                            except Exception as e:
+                                st.error(f"Error accediendo a archivos: {e}")
+                            finally:
+                                for f in files_to_close:
+                                    try: f.close()
+                                    except: pass
+                else:
+                    st.warning("Seleccione una carpeta válida.")
 
         with tab_ops[0]:
             st.subheader("Convertidor RIPS")
@@ -682,23 +723,53 @@ def render(container=None):
                     xlsx_data, err = worker_json_a_xlsx_ind(uploaded_json)
                     if xlsx_data:
                         st.success("Conversión exitosa.")
-                        st.download_button("Descargar Excel", xlsx_data, 
-                                           file_name=f"{os.path.splitext(uploaded_json.name)[0]}.xlsx",
-                                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        
+                        file_name = f"{os.path.splitext(uploaded_json.name)[0]}.xlsx"
+                        temp_dir = os.path.join("temp_downloads", f"json_xlsx_{int(time.time())}")
+                        os.makedirs(temp_dir, exist_ok=True)
+                        out_file = os.path.join(temp_dir, file_name)
+                        
+                        with open(out_file, "wb") as f:
+                            f.write(xlsx_data)
+                            
+                        render_download_button(out_file, f"dl_json_xlsx_{int(time.time())}", "📥 Descargar Excel")
                     else:
                         st.error(f"Error: {err}")
 
             with st.expander("XLSX a JSON (Individual)", expanded=False):
-                uploaded_xlsx = st.file_uploader("Subir Excel (RIPS)", type=["xlsx"], key="rips_xlsx_ind")
-                if uploaded_xlsx and st.button("Convertir a JSON", key="btn_xlsx_json"):
-                    json_data, err = worker_xlsx_a_json_ind(uploaded_xlsx)
-                    if json_data:
-                        st.success("Conversión exitosa.")
-                        st.download_button("Descargar JSON", json_data, 
-                                           file_name=f"{os.path.splitext(uploaded_xlsx.name)[0]}.json",
-                                           mime="application/json")
+                path_xls_to_json = render_path_selector("Seleccionar Excel (RIPS)", key="rips_xlsx_ind_path")
+                if st.button("Convertir a JSON", key="btn_xlsx_json"):
+                    if path_xls_to_json:
+                        with st.spinner("Generando JSON..."):
+                            target_file = path_xls_to_json
+                            # Check if input is file or folder (render_path_selector might return folder if zip uploaded)
+                            if os.path.isdir(path_xls_to_json):
+                                files = [f for f in os.listdir(path_xls_to_json) if f.lower().endswith('.xlsx')]
+                                if files:
+                                    target_file = os.path.join(path_xls_to_json, files[0])
+                                    st.info(f"Carpeta detectada. Usando: {files[0]}")
+                                else:
+                                    st.error("No se encontraron archivos .xlsx en la carpeta seleccionada.")
+                                    target_file = None
+                            
+                            if target_file:
+                                json_data, err = worker_xlsx_a_json_ind(target_file)
+                                if json_data:
+                                    st.success("Conversión exitosa.")
+                                    
+                                    file_name = f"{os.path.splitext(os.path.basename(target_file))[0]}.json"
+                                    temp_dir = os.path.join("temp_downloads", f"xlsx_json_{int(time.time())}")
+                                    os.makedirs(temp_dir, exist_ok=True)
+                                    out_file = os.path.join(temp_dir, file_name)
+                                    
+                                    with open(out_file, "w", encoding="utf-8") as f:
+                                        f.write(json_data)
+                                        
+                                    render_download_button(out_file, f"dl_xlsx_json_{int(time.time())}", "📥 Descargar JSON")
+                                else:
+                                    st.error(f"Error: {err}")
                     else:
-                        st.error(f"Error: {err}")
+                        st.warning("Seleccione un archivo.")
 
             with st.expander("JSON Evento a XLSX (Masivo - Consolidar)", expanded=False):
                 st.markdown("Consolida múltiples archivos JSON de una carpeta en un único Excel.")
@@ -708,9 +779,15 @@ def render(container=None):
                         xlsx_data, msg = worker_consolidar_json_xlsx(path_consol)
                         if xlsx_data:
                             st.success(msg)
-                            st.download_button("Descargar Consolidado", xlsx_data, 
-                                               file_name="RIPS_Consolidado.xlsx",
-                                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                            
+                            temp_dir = os.path.join("temp_downloads", f"consol_xlsx_{int(time.time())}")
+                            os.makedirs(temp_dir, exist_ok=True)
+                            out_file = os.path.join(temp_dir, "RIPS_Consolidado.xlsx")
+                            
+                            with open(out_file, "wb") as f:
+                                f.write(xlsx_data)
+                                
+                            render_download_button(out_file, f"dl_consol_xlsx_{int(time.time())}", "📥 Descargar Consolidado")
                         else:
                             st.error(msg)
                     else:
@@ -719,19 +796,22 @@ def render(container=None):
             with st.expander("XLSX Evento a JSONs (Masivo - Desconsolidar)", expanded=False):
                 st.markdown("Genera múltiples archivos JSON a partir de un Excel consolidado (requiere hoja Transaccion con 'archivo_origen').")
                 uploaded_consol = st.file_uploader("Subir Excel Consolidado", type=["xlsx"], key="rips_xlsx_consol")
-                path_desconsol = render_path_selector("Carpeta de Salida", key="path_rips_desconsol")
+                
                 if st.button("Desconsolidar", key="btn_desconsol_rips"):
-                    if uploaded_consol and path_desconsol:
-                        if not os.path.exists(path_desconsol):
-                            try:
-                                os.makedirs(path_desconsol)
-                            except:
-                                st.error("No se pudo crear la carpeta de salida.")
+                    if uploaded_consol:
+                        # Create a persistent temp directory for output
+                        timestamp = int(time.time())
+                        path_desconsol = os.path.join("temp_downloads", f"desconsol_{timestamp}")
+                        os.makedirs(path_desconsol, exist_ok=True)
                         
-                        if os.path.exists(path_desconsol):
-                            ok, msg = worker_desconsolidar_xlsx_json(uploaded_consol, path_desconsol)
-                            if ok: st.success(msg)
-                            else: st.error(msg)
+                        ok, msg = worker_desconsolidar_xlsx_json(uploaded_consol, path_desconsol)
+                        
+                        if ok: 
+                            st.success(msg)
+                            # Generate ZIP from the directory
+                            render_download_button(path_desconsol, "dl_desconsol", "📦 Descargar JSONs Generados (ZIP)")
+                        else: 
+                            st.error(msg)
                     else:
                         st.warning("Faltan datos.")
 
@@ -748,6 +828,10 @@ def render(container=None):
                 if path_cups and old_cup and new_cup:
                     count, changes, errors = worker_update_cups_masivo(path_cups, old_cup, new_cup)
                     st.success(f"Proceso finalizado. Archivos modificados: {count}. Total cambios: {changes}.")
+                    
+                    if count > 0:
+                        render_download_button(path_cups, "dl_cups_mass", "📦 Descargar JSONs Actualizados (ZIP)")
+                        
                     if errors:
                         st.error(f"Errores en {len(errors)} archivos.")
                         st.expander("Ver Errores").write(errors)
@@ -770,6 +854,10 @@ def render(container=None):
                     # new_note puede ser vacío si se quiere borrar/limpiar
                     count, changes, errors = worker_update_notes_masivo(path_notes, target_note, new_note)
                     st.success(f"Proceso finalizado. Archivos modificados: {count}. Total cambios: {changes}.")
+                    
+                    if count > 0:
+                        render_download_button(path_notes, "dl_notes_mass", "📦 Descargar JSONs Actualizados (ZIP)")
+                        
                     if errors:
                         st.error(f"Errores en {len(errors)} archivos.")
                         st.expander("Ver Errores").write(errors)
@@ -785,6 +873,10 @@ def render(container=None):
                 if path_clean:
                     count, errs = worker_limpiar_json_rips(path_clean)
                     st.success(f"Proceso finalizado. {count} archivos limpiados.")
+                    
+                    if count > 0:
+                        render_download_button(path_clean, "dl_clean_json", "📦 Descargar JSONs Limpios (ZIP)")
+                        
                     if errs:
                         st.error(f"Errores en {len(errs)} archivos.")
                         st.expander("Ver Errores").write(errs)
@@ -810,9 +902,22 @@ def render(container=None):
                         count_changes = recursive_update_key(content, "finalidadTecnologiaSalud", new_val)
                         
                         if count_changes > 0:
-                            json_str = json.dumps(content, indent=4, ensure_ascii=False)
-                            st.download_button("📥 Descargar JSON Actualizado", data=json_str, file_name=f"update_{f_json.name}", mime="application/json")
-                            st.success(f"✅ Se actualizaron {count_changes} campos.")
+                            # Guardar el JSON actualizado en una carpeta temporal para descarga
+                            temp_dir = os.path.join("temp_downloads", f"json_update_{int(time.time())}")
+                            os.makedirs(temp_dir, exist_ok=True)
+                            temp_file_path = os.path.join(temp_dir, f"update_{f_json.name}")
+                            
+                            with open(temp_file_path, 'w', encoding='utf-8') as f:
+                                json.dump(content, f, indent=4, ensure_ascii=False)
+                            
+                            st.success(f"Se realizaron {count_changes} cambios en el archivo.")
+                            
+                            # Usar render_download_button
+                            render_download_button(
+                                folder_path=temp_dir,
+                                key=f"dl_json_update_{f_json.name}",
+                                label="📥 Descargar JSON Actualizado"
+                            )
                         else:
                             st.warning("⚠️ No se encontró el campo 'finalidadTecnologiaSalud' en el archivo.")
                     except Exception as e:
@@ -827,6 +932,10 @@ def render(container=None):
                      if path_tech and new_val_mass:
                         count, changes, errors = worker_update_key_masivo(path_tech, "finalidadTecnologiaSalud", new_val_mass)
                         st.success(f"Proceso finalizado. Archivos modificados: {count}. Total cambios: {changes}.")
+                        
+                        if count > 0:
+                            render_download_button(path_tech, "dl_tech_mass", "📦 Descargar JSONs Actualizados (ZIP)")
+                            
                         if errors:
                             st.error(f"Errores en {len(errors)} archivos.")
                             st.expander("Ver Errores").write(errors)

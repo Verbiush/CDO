@@ -60,10 +60,10 @@ except ImportError:
     pass
 
 try:
-    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector
+    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button
 except ImportError:
     try:
-        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button
     except ImportError:
         def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
             st.warning("Selector de carpeta nativo no disponible.")
@@ -78,6 +78,9 @@ except ImportError:
         def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
             st.warning("render_path_selector no disponible")
             return default_path
+
+        def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
+            st.warning("Descarga no disponible (Error importando gui_utils)")
 
 try:
     from pdf2docx import Converter
@@ -490,8 +493,9 @@ def worker_txt_a_json_individual(file_list, silent_mode=False):
             new_path = base + ".json"
             os.rename(file_path, new_path)
             count += 1
-        except:
+        except Exception as e:
             errores += 1
+            if not silent_mode: st.warning(f"Error renombrando {file_path}: {e}")
     return f"Renombrados {count} archivos. Errores: {errores}"
 
 def worker_organizar_facturas_feov(root_path, target_path, silent_mode=False):
@@ -519,7 +523,8 @@ def worker_organizar_facturas_feov(root_path, target_path, silent_mode=False):
                         numero_factura = match.group(1)
                         destinos_map[numero_factura] = ruta_carpeta_destino
                         break
-        except: pass
+        except Exception as e:
+            if not silent_mode: st.warning(f"Error procesando {nombre_carpeta_destino}: {e}")
 
     if not destinos_map:
         return "No se encontraron facturas FEOV en las carpetas de destino."
@@ -565,419 +570,6 @@ def worker_organizar_facturas_feov(root_path, target_path, silent_mode=False):
     return f"Organización FEOV finalizada. Movidos: {movidos}, Conflictos: {conflictos}, Errores: {errores}"
 
 
-
-# --- WORKERS: UNIFICATION & DIVISION (GROUP 1) ---
-
-def worker_unificar_por_carpeta(carpeta_base, nombre_final_base, silent_mode=False):
-    if not carpeta_base or not nombre_final_base:
-        return "Faltan argumentos (carpeta o nombre)."
-    
-    subcarpetas = [os.path.join(carpeta_base, d) for d in os.listdir(carpeta_base) if os.path.isdir(os.path.join(carpeta_base, d))]
-    if not subcarpetas: return "No se encontraron subcarpetas."
-
-    progress_bar = None
-    if not silent_mode: progress_bar = st.progress(0, text="Unificando PDFs...")
-    
-    procesados = 0
-    errores = 0
-    
-    for i, carpeta in enumerate(subcarpetas):
-        if not silent_mode: progress_bar.progress((i + 1) / len(subcarpetas))
-        
-        archivos_pdf_a_procesar = []
-        for num_pdf in range(1, 11):
-            nombre_archivo_buscado = f"{num_pdf}.pdf"
-            ruta_archivo_buscado = os.path.join(carpeta, nombre_archivo_buscado)
-            if os.path.exists(ruta_archivo_buscado):
-                archivos_pdf_a_procesar.append(ruta_archivo_buscado)
-
-        if not archivos_pdf_a_procesar:
-            continue
-        
-        try:
-            nombre_final = f"{nombre_final_base}.pdf"
-            ruta_salida = os.path.join(carpeta, nombre_final)
-            
-            doc_final = fitz.open()
-            for ruta_pdf in archivos_pdf_a_procesar:
-                with fitz.open(ruta_pdf) as doc_origen:
-                    doc_final.insert_pdf(doc_origen)
-            
-            if len(doc_final) > 0:
-                doc_final.save(ruta_salida, garbage=4, deflate=True)
-                procesados += 1
-            doc_final.close()
-        except Exception:
-            errores += 1
-            
-    return f"Unificación finalizada. Procesados: {procesados}, Errores: {errores}"
-
-def worker_unificar_imagenes_por_carpeta(carpeta_base, nombre_final_base, tipo_imagen, silent_mode=False):
-    # tipo_imagen: "JPG" or "PNG"
-    ext_map = {
-        "JPG": ['.jpg', '.jpeg'],
-        "PNG": ['.png']
-    }
-    
-    subcarpetas = [os.path.join(carpeta_base, d) for d in os.listdir(carpeta_base) if os.path.isdir(os.path.join(carpeta_base, d))]
-    if not subcarpetas: return "No se encontraron subcarpetas."
-
-    progress_bar = None
-    if not silent_mode: progress_bar = st.progress(0, text=f"Unificando {tipo_imagen}...")
-    
-    procesados = 0
-    errores = 0
-    
-    for i, carpeta in enumerate(subcarpetas):
-        if not silent_mode: progress_bar.progress((i + 1) / len(subcarpetas))
-        
-        image_files = []
-        for file_name in os.listdir(carpeta):
-            if any(file_name.lower().endswith(ext) for ext in ext_map.get(tipo_imagen, [])):
-                try:
-                    num = int(os.path.splitext(file_name)[0])
-                    image_files.append((num, os.path.join(carpeta, file_name)))
-                except: continue
-        
-        if not image_files: continue
-        image_files.sort()
-        
-        try:
-            pdf_path = os.path.join(carpeta, f"{nombre_final_base}.pdf")
-            images_to_convert = []
-            
-            # Open first image
-            first_img = Image.open(image_files[0][1])
-            if first_img.mode == 'RGBA': first_img = first_img.convert('RGB')
-            
-            for _, img_path in image_files[1:]:
-                img = Image.open(img_path)
-                if img.mode == 'RGBA': img = img.convert('RGB')
-                images_to_convert.append(img)
-            
-            first_img.save(pdf_path, "PDF", resolution=100.0, save_all=True, append_images=images_to_convert)
-            procesados += 1
-        except:
-            errores += 1
-            
-    return f"Unificación {tipo_imagen} finalizada. Procesados: {procesados}, Errores: {errores}"
-
-def worker_unificar_docx_por_carpeta(carpeta_base, nombre_final_base, silent_mode=False):
-    if not HAS_DOCX2PDF: return "Librería docx2pdf no instalada."
-    
-    subcarpetas = [os.path.join(carpeta_base, d) for d in os.listdir(carpeta_base) if os.path.isdir(os.path.join(carpeta_base, d))]
-    if not subcarpetas: return "No se encontraron subcarpetas."
-
-    progress_bar = None
-    if not silent_mode: progress_bar = st.progress(0, text="Unificando DOCX...")
-    
-    procesados = 0
-    errores = 0
-    
-    for i, carpeta in enumerate(subcarpetas):
-        if not silent_mode: progress_bar.progress((i + 1) / len(subcarpetas))
-        
-        archivos_docx = []
-        for num in range(1, 11):
-            f = os.path.join(carpeta, f"{num}.docx")
-            if os.path.exists(f): archivos_docx.append(f)
-            
-        if not archivos_docx: continue
-        
-        pdfs_temp = []
-        try:
-            for docx in archivos_docx:
-                temp_pdf = os.path.splitext(docx)[0] + "_temp.pdf"
-                try:
-                    convert_docx_to_pdf(docx, temp_pdf)
-                    if os.path.exists(temp_pdf): pdfs_temp.append(temp_pdf)
-                except: pass
-            
-            if pdfs_temp:
-                doc_final = fitz.open()
-                for p in pdfs_temp:
-                    try:
-                        with fitz.open(p) as d: doc_final.insert_pdf(d)
-                    except: pass
-                
-                doc_final.save(os.path.join(carpeta, f"{nombre_final_base}.pdf"))
-                doc_final.close()
-                procesados += 1
-                
-                # Cleanup
-                for p in pdfs_temp:
-                    try: os.remove(p)
-                    except: pass
-        except:
-            errores += 1
-            
-    return f"Unificación DOCX finalizada. Procesados: {procesados}, Errores: {errores}"
-
-def worker_dividir_pdf_en_paginas(archivos_pdf, silent_mode=False):
-    if not archivos_pdf: return "No hay archivos seleccionados."
-    
-    progress_bar = None
-    if not silent_mode: progress_bar = st.progress(0, text="Dividiendo PDFs...")
-    
-    procesados = 0
-    errores = 0
-    
-    for i, pdf_path in enumerate(archivos_pdf):
-        if not silent_mode: progress_bar.progress((i + 1) / len(archivos_pdf))
-        try:
-            base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-            out_dir = os.path.join(os.path.dirname(pdf_path), base_name)
-            os.makedirs(out_dir, exist_ok=True)
-            
-            with fitz.open(pdf_path) as doc:
-                for page_num in range(len(doc)):
-                    new_doc = fitz.open()
-                    new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
-                    new_doc.save(os.path.join(out_dir, f"{page_num + 1}.pdf"))
-                    new_doc.close()
-            procesados += 1
-        except:
-            errores += 1
-            
-    return f"División finalizada. Procesados: {procesados}, Errores: {errores}"
-
-def worker_dividir_pdfs_masivamente(carpeta_base, silent_mode=False):
-    pdfs = []
-    for root, _, files in os.walk(carpeta_base):
-        for f in files:
-            if f.lower().endswith('.pdf'): pdfs.append(os.path.join(root, f))
-            
-    if not pdfs: return "No se encontraron PDFs."
-    
-    return worker_dividir_pdf_en_paginas(pdfs, silent_mode)
-
-# --- WORKERS: ORGANIZATION (GROUP 2) ---
-
-def worker_copiar_archivos_mapeo(ruta_origen_base, ruta_destino_base, df_mapeo, col_origen, col_destino, silent_mode=False):
-    if df_mapeo is None: return "DataFrame inválido."
-    
-    progress_bar = None
-    if not silent_mode: progress_bar = st.progress(0, text="Copiando por mapeo...")
-    
-    copiados, errores, conflictos, no_enc = 0, 0, 0, 0
-    total = len(df_mapeo)
-    
-    for idx, row in df_mapeo.iterrows():
-        if not silent_mode: progress_bar.progress((idx + 1) / total)
-        
-        try:
-            dir_origen = str(row[col_origen]).strip()
-            dir_destino = str(row[col_destino]).strip()
-            
-            full_src = os.path.join(ruta_origen_base, dir_origen)
-            full_dst = os.path.join(ruta_destino_base, dir_destino)
-            
-            if not os.path.isdir(full_src) or not os.path.isdir(full_dst):
-                no_enc += 1
-                continue
-                
-            for f in os.listdir(full_src):
-                src_file = os.path.join(full_src, f)
-                dst_file = os.path.join(full_dst, f)
-                
-                if os.path.isfile(src_file):
-                    if os.path.exists(dst_file):
-                        conflictos += 1
-                    else:
-                        shutil.copy2(src_file, dst_file)
-                        copiados += 1
-        except:
-            errores += 1
-            
-    return f"Copia finalizada. Copiados: {copiados}, Conflictos: {conflictos}, No encontrados: {no_enc}, Errores: {errores}"
-
-def worker_copiar_archivos_raiz_mapeo(ruta_origen_raiz, ruta_destino_base, df_mapeo, col_id, col_folder, silent_mode=False):
-    if df_mapeo is None: return "DataFrame inválido."
-    
-    files_in_root = [f for f in os.listdir(ruta_origen_raiz) if os.path.isfile(os.path.join(ruta_origen_raiz, f))]
-    
-    progress_bar = None
-    if not silent_mode: progress_bar = st.progress(0, text="Copiando desde raíz...")
-    
-    copiados, errores, conflictos, no_enc = 0, 0, 0, 0
-    total = len(df_mapeo)
-    
-    for idx, row in df_mapeo.iterrows():
-        if not silent_mode: progress_bar.progress((idx + 1) / total)
-        
-        try:
-            file_id = str(row[col_id]).strip()
-            folder_name = str(row[col_folder]).strip()
-            
-            if not file_id or not folder_name: continue
-            
-            # Find file (case insensitive partial match)
-            found_file = None
-            for f in files_in_root:
-                if file_id.lower() in f.lower():
-                    found_file = f
-                    break
-            
-            if not found_file:
-                no_enc += 1
-                continue
-                
-            dst_folder = os.path.join(ruta_destino_base, folder_name)
-            os.makedirs(dst_folder, exist_ok=True)
-            
-            src = os.path.join(ruta_origen_raiz, found_file)
-            dst = os.path.join(dst_folder, found_file)
-            
-            if os.path.exists(dst):
-                conflictos += 1
-            else:
-                shutil.copy2(src, dst)
-                copiados += 1
-        except:
-            errores += 1
-            
-    return f"Copia raíz finalizada. Copiados: {copiados}, Conflictos: {conflictos}, No encontrados: {no_enc}, Errores: {errores}"
-
-def worker_copiar_archivo_a_subcarpetas(archivo_a_copiar, carpeta_destino_base, silent_mode=False):
-    if not archivo_a_copiar or not carpeta_destino_base: return "Argumentos inválidos."
-    
-    subfolders = [os.path.join(carpeta_destino_base, d) for d in os.listdir(carpeta_destino_base) if os.path.isdir(os.path.join(carpeta_destino_base, d))]
-    if not subfolders: return "No hay subcarpetas."
-    
-    progress_bar = None
-    if not silent_mode: progress_bar = st.progress(0, text="Distribuyendo archivo...")
-    
-    copiados, conflictos, errores = 0, 0, 0
-    fname = os.path.basename(archivo_a_copiar)
-    
-    for i, folder in enumerate(subfolders):
-        if not silent_mode: progress_bar.progress((i + 1) / len(subfolders))
-        try:
-            dst = os.path.join(folder, fname)
-            if os.path.exists(dst):
-                conflictos += 1
-            else:
-                shutil.copy2(archivo_a_copiar, dst)
-                copiados += 1
-        except:
-            errores += 1
-            
-    return f"Distribución finalizada. Copiados: {copiados}, Conflictos: {conflictos}, Errores: {errores}"
-
-
-    resultados_datos = []
-    procesados, errores = 0, 0
-    
-    progress_bar = None
-    if not silent_mode: progress_bar = st.progress(0, text="Leyendo Retefuente...")
-    
-    for i, ruta_pdf in enumerate(pdf_files):
-        if not silent_mode: progress_bar.progress((i + 1) / len(pdf_files))
-        nombre_archivo = os.path.basename(ruta_pdf)
-        try:
-            with fitz.open(ruta_pdf) as doc:
-                for num_pagina, page in enumerate(doc, start=1):
-                    blocks = page.get_text("blocks")
-                    blocks.sort(key=lambda b: b[1]) # Sort vertically
-                    
-                    label_block = None
-                    nit_label_block = None
-                    nombre_encontrado = "NO ENCONTRADO"
-                    nit_encontrado = "NO ENCONTRADO"
-                    
-                    # 1. Find key labels
-                    for b in blocks:
-                        text_clean = " ".join(b[4].split()).upper()
-                        if "PRACTICO LA RETENCION" in text_clean:
-                            label_block = b
-                            break
-                            
-                    if label_block:
-                        lx0, ly0, lx1, ly1 = label_block[:4]
-                        for b in blocks:
-                            bx0, by0 = b[:2]
-                            text_clean = " ".join(b[4].split()).upper()
-                            if bx0 > lx0 and abs(by0 - ly0) < 30:
-                                if "NIT" in text_clean or "C.C." in text_clean:
-                                    nit_label_block = b
-                                    break
-                                    
-                    if not nit_label_block:
-                        for b in blocks:
-                            text_clean = " ".join(b[4].split()).upper()
-                            if "NIT." in text_clean and "C.C." in text_clean:
-                                nit_label_block = b
-                                break
-                                
-                    # 2. Extract NAME
-                    if label_block:
-                        lx0, ly0, lx1, ly1 = label_block[:4]
-                        candidates = []
-                        for b in blocks:
-                            if b == label_block: continue
-                            bx0, by0 = b[:2]
-                            if by0 > ly0 and abs(bx0 - lx0) < 100:
-                                candidates.append(b)
-                        candidates.sort(key=lambda b: b[1])
-                        
-                        for cand in candidates:
-                            text_cand = cand[4].strip()
-                            upper_cand = text_cand.upper()
-                            if not text_cand: continue
-                            if "DIRECCION" in upper_cand: break
-                            if "NIT" in upper_cand or "C.C." in upper_cand: continue
-                            nombre_encontrado = " ".join(text_cand.split())
-                            break
-                            
-                    # 3. Extract NIT
-                    if nit_label_block:
-                        nx0, ny0 = nit_label_block[:2]
-                        nit_candidates = []
-                        for b in blocks:
-                            if b == nit_label_block: continue
-                            bx0, by0 = b[:2]
-                            if by0 > ny0 and abs(bx0 - nx0) < 80:
-                                nit_candidates.append(b)
-                        nit_candidates.sort(key=lambda b: b[1])
-                        
-                        for cand in nit_candidates:
-                            text_cand = cand[4].strip()
-                            upper_cand = text_cand.upper()
-                            if not text_cand: continue
-                            if "CIUDAD" in upper_cand: break
-                            nit_encontrado = " ".join(text_cand.split())
-                            break
-                            
-                    # Cleanup
-                    if nombre_encontrado != "NO ENCONTRADO":
-                        match_mix = re.search(r'^(.*?)(\d{6,}[\d\s]*)$', nombre_encontrado)
-                        if match_mix:
-                            nombre_encontrado = match_mix.group(1).strip()
-                            nit_extraido = match_mix.group(2).replace(" ", "").strip()
-                            if nit_encontrado == "NO ENCONTRADO" or not any(c.isdigit() for c in nit_encontrado):
-                                nit_encontrado = nit_extraido
-                                
-                    resultados_datos.append({
-                        "Archivo": nombre_archivo,
-                        "Página": num_pagina,
-                        "RAZON SOCIAL / NOMBRE": nombre_encontrado,
-                        "NIT / C.C.": nit_encontrado
-                    })
-            procesados += 1
-        except Exception as e:
-            errores += 1
-            resultados_datos.append({"Archivo": nombre_archivo, "Error": str(e)})
-            
-    if not resultados_datos: return "No se extrajeron datos."
-    
-    try:
-        df = pd.DataFrame(resultados_datos)
-        df.to_excel(output_path, index=False)
-        return f"Reporte guardado en {output_path}. Procesados: {procesados}, Errores: {errores}"
-    except Exception as e:
-        return f"Error guardando Excel: {e}"
-
-# --- WORKERS: EXCEL/FILES ---
 
 def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_folder, visible_only=False, silent_mode=False):
     if not excel_path or not sheet_name or col_idx is None or not target_folder:
@@ -1105,8 +697,8 @@ def worker_unificar_imagenes_pdf(folder_path, output_name="Unificado.pdf", silen
                     first_img = img
                 else:
                     img_list.append(img)
-            except Exception:
-                pass
+            except Exception as e:
+                if not silent_mode: st.warning(f"Error cargando imagen {img_path}: {e}")
                 
         if first_img:
             first_img.save(pdf_path, save_all=True, append_images=img_list)
@@ -1266,7 +858,8 @@ def worker_unificar_docx_por_carpeta(carpeta_base, nombre_final_base, silent_mod
                     try:
                         with fitz.open(pdf_temp) as doc_temp:
                             doc_final.insert_pdf(doc_temp)
-                    except: pass
+                    except Exception as e:
+                        log.append(f"Error uniendo {pdf_temp}: {e}")
                 
                 doc_final.save(ruta_salida)
                 doc_final.close()
@@ -1274,7 +867,8 @@ def worker_unificar_docx_por_carpeta(carpeta_base, nombre_final_base, silent_mod
                 
                 for pdf_temp in pdfs_temporales:
                     try: os.remove(pdf_temp)
-                    except: pass
+                    except Exception as e:
+                        log.append(f"Error eliminando {pdf_temp}: {e}")
         except Exception as e:
             log.append(f"Error en {nombre_subcarpeta}: {e}")
 
@@ -3105,6 +2699,7 @@ def dialog_importar_excel():
                     uploaded.seek(0)
                     result = worker_aplicar_renombrado_excel(uploaded, folder)
                     st.success(result)
+                    render_download_button(folder, "dl_ren_excel", "📦 Descargar Carpeta Modificada (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -3138,6 +2733,7 @@ def dialog_sufijo():
                         # Run synchronously
                         result = worker_anadir_sufijo_excel(uploaded, sheet, col_folder, col_suffix, folder, use_filter)
                         st.success(result)
+                        render_download_button(folder, "dl_sufijo", "📦 Descargar Resultados (ZIP)")
                         time.sleep(2)
                         # st.rerun()
                 except Exception as e:
@@ -3183,6 +2779,7 @@ def dialog_renombrar_mapeo_excel():
                         uploaded.seek(0)
                     result = worker_renombrar_mapeo_excel(uploaded, sheet, col_src, col_dst, use_filter, folder)
                     st.success(result)
+                    render_download_button(folder, "dl_ren_map", "📦 Descargar Carpeta Modificada (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -3217,6 +2814,7 @@ def dialog_modif_docx_completo():
                     uploaded.seek(0)
                     result = worker_modificar_docx_completo(uploaded, sheet, folder, use_filter)
                     st.success(result)
+                    render_download_button(folder, "dl_mod_docx_full", "📦 Descargar Carpeta Modificada (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -3246,6 +2844,7 @@ def dialog_insertar_firma_docx():
                 with st.spinner("Insertando firmas..."):
                     result = worker_firmar_docx_con_imagen_masivo(base_path, docx_name, sig_name)
                     st.success(result)
+                    render_download_button(base_path, "dl_sign_docx", "📦 Descargar Destino (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -4597,6 +4196,7 @@ def dialog_descargar_firmas():
                     uploaded.seek(0)
                     result = worker_descargar_firmas(uploaded, sheet_name, col_id, col_folder, root_path)
                     st.success(result)
+                    render_download_button(root_path, "dl_sigs_root", "📦 Descargar Firmas (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -4653,6 +4253,7 @@ def dialog_descargar_historias_ovida():
                 with st.spinner("Descargando historias de OVIDA..."):
                     result = worker_descargar_historias_ovida(uploaded, sheet_name, col_estudio, col_ingreso, col_egreso, col_carpeta, download_path)
                     st.success(result)
+                    render_download_button(download_path, "dl_ovida_root", "📦 Descargar Historias (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -5315,8 +4916,7 @@ def dialog_crear_firma():
                     with st.spinner("Generando firmas..."):
                         result = worker_crear_firma_nombre(current_path, font_path, size, humanize)
                         st.success(result)
-                        time.sleep(2)
-                        # st.rerun()
+                        render_download_button(current_path, "dl_firma_folder", "📦 Descargar Firmas (ZIP)")
                 except Exception as e:
                     st.error(f"Error: {e}")
             else:
@@ -5348,6 +4948,7 @@ def dialog_crear_firma():
                             with st.spinner("Generando firmas..."):
                                 result = worker_crear_firma_excel(current_path, font_path, size, file_bytes, sheet, col_folder, col_full_name, humanize)
                                 st.success(result)
+                                render_download_button(current_path, "dl_firma_excel", "📦 Descargar Resultados (ZIP)")
                             time.sleep(2)
                             # st.rerun()
                         except Exception as e:
@@ -5361,10 +4962,6 @@ def dialog_crear_firma():
 def dialog_organizar_feov_avanzado():
     st.write("Mueve archivos de 'Origen' a subcarpetas en 'Destino' basándose en el número de factura FEOV del PDF destino.")
     
-    # Validación de Modo
-    if not st.session_state.get("force_native_mode", True):
-        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
-
     st.write("1. Carpeta Destino (contiene subcarpetas con PDFs FEOV...)")
     
     path_dest = render_path_selector(
@@ -5385,8 +4982,7 @@ def dialog_organizar_feov_avanzado():
                 with st.spinner("Organizando facturas..."):
                     result = worker_organizar_facturas_por_pdf_avanzado(path_dest, path_orig)
                     st.success(result)
-                    time.sleep(2)
-                    # st.rerun()
+                    render_download_button(path_dest, "dl_feov_adv", "📦 Descargar Destino (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
@@ -5396,10 +4992,6 @@ def dialog_organizar_feov_avanzado():
 def dialog_autorizacion_docx():
     st.write("Modifica el campo AUTORIZACION en DOCX masivamente.")
     
-    # Validación de Modo
-    if not st.session_state.get("force_native_mode", True):
-        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
-
     uploaded = st.file_uploader("Excel", type=["xlsx"], key="auth_up")
     sheet = None
     col_folder = None
@@ -5433,8 +5025,7 @@ def dialog_autorizacion_docx():
                 with st.spinner("Modificando DOCX..."):
                     result = worker_autorizacion_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_auth, use_filter)
                     st.success(result)
-                    time.sleep(2)
-                    # st.rerun()
+                    render_download_button(base_path, "dl_auth_docx", "📦 Descargar DOCX Modificados (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -5442,10 +5033,6 @@ def dialog_autorizacion_docx():
 def dialog_regimen_docx():
     st.write("Modifica el campo REGIMEN en DOCX masivamente.")
     
-    # Validación de Modo
-    if not st.session_state.get("force_native_mode", True):
-        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
-
     uploaded = st.file_uploader("Excel", type=["xlsx"], key="reg_up")
     sheet = None
     col_folder = None
@@ -5479,8 +5066,7 @@ def dialog_regimen_docx():
                 with st.spinner("Modificando Régimen..."):
                     result = worker_regimen_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_reg, use_filter)
                     st.success(result)
-                    time.sleep(2)
-                    # st.rerun()
+                    render_download_button(base_path, "dl_reg_docx", "📦 Descargar DOCX Modificados (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -5523,7 +5109,8 @@ def dialog_crear_carpetas_excel():
                 with st.spinner("Creando carpetas..."):
                     result = worker_crear_carpetas_excel_avanzado(file_bytes, sheet, col_name, base_path, use_filter)
                     st.success(result)
-                    time.sleep(2)
+                    render_download_button(base_path, "dl_create_fold_excel", "📦 Descargar Estructura (ZIP)")
+                    # time.sleep(2)
                     # st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -5572,7 +5159,8 @@ def dialog_copiar_mapeo():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_mapeo_subcarpetas(file_bytes, sheet, col_src, col_dst, src_base, dst_base, use_filter)
                     st.success(result)
-                    time.sleep(2)
+                    render_download_button(dst_base, "dl_copy_map_sub", "📦 Descargar Destino (ZIP)")
+                    # time.sleep(2)
                     # st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -5626,7 +5214,8 @@ def dialog_copiar_raiz():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_archivos_desde_raiz_mapeo(file_bytes, sheet, col_id, col_folder, root_src, root_dst, use_filter)
                     st.success(result)
-                    time.sleep(2)
+                    render_download_button(root_dst, "dl_copy_root_map", "📦 Descargar Destino (ZIP)")
+                    # time.sleep(2)
                     # st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -5652,9 +5241,14 @@ def dialog_rips_masivos():
             if folder_src:
                 try:
                     with st.spinner("Convirtiendo JSONs..."):
-                        result = worker_json_evento_a_xlsx_masivo(folder_src, os.path.join(folder_src, file_dst))
+                        excel_path = os.path.join(folder_src, file_dst)
+                        result = worker_json_evento_a_xlsx_masivo(folder_src, excel_path)
                         st.success(result)
-                        time.sleep(2)
+                        render_download_button(excel_path, f"dl_rips_json_excel_{int(time.time())}", f"📥 Descargar {file_dst}")
+                        # if os.path.exists(excel_path):
+                        #     with open(excel_path, "rb") as f:
+                        #         st.download_button("📥 Descargar Excel", f, file_name=file_dst)
+                        # time.sleep(2)
                         # st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
@@ -5676,7 +5270,8 @@ def dialog_rips_masivos():
                     with st.spinner("Generando JSONs..."):
                         result = worker_xlsx_evento_a_json_masivo(t_path, folder_dst)
                         st.success(result)
-                        time.sleep(2)
+                        render_download_button(folder_dst, "dl_rips_excel_json", "📦 Descargar JSONs Generados (ZIP)")
+                        # time.sleep(2)
                         # st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
@@ -5708,6 +5303,9 @@ def dialog_exportar_renombrado():
                     out_path = os.path.join(folder, "Renombrar_Archivos.xlsx")
                     df.to_excel(out_path, index=False)
                     st.success(f"Excel generado en: {out_path}")
+                    render_download_button(out_path, f"dl_renom_exp_{int(time.time())}", "⬇️ Descargar Excel")
+                    # with open(out_path, "rb") as f:
+                    #     st.download_button("⬇️ Descargar Excel", f, file_name="Renombrar_Archivos.xlsx")
                 else:
                     st.warning("No se encontraron archivos en la carpeta.")
             except Exception as e:
@@ -5735,7 +5333,8 @@ def dialog_aplicar_renombrado():
                 with st.spinner("Renombrando archivos..."):
                     result = worker_aplicar_renombrado_excel(t_path, folder)
                     st.success(result)
-                    time.sleep(2)
+                    render_download_button(folder, "dl_renombrado_apply", "📦 Descargar Archivos Renombrados (ZIP)")
+                    # time.sleep(2)
                     # st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -5768,8 +5367,7 @@ def dialog_copiar_archivo_a_subcarpetas():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_archivo_a_subcarpetas(t_path, dest_base_path)
                     st.success(result)
-                    time.sleep(2)
-                    # st.rerun()
+                    render_download_button(dest_base_path, "dl_copy_sub", "📦 Descargar Destino (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
@@ -5800,7 +5398,8 @@ def dialog_organizar_feov():
                 with st.spinner("Organizando facturas..."):
                     result = worker_organizar_facturas_feov(source_path, target_path)
                     st.success(result)
-                    time.sleep(2)
+                    render_download_button(target_path, "dl_feov", "📦 Descargar Facturas Organizadas (ZIP)")
+                    # time.sleep(2)
                     # st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -5846,6 +5445,11 @@ def render():
                         with st.spinner("Unificando PDFs..."):
                             result = worker_unificar_por_carpeta(path_unif, "Unificado")
                             st.success(result)
+                            out_file = os.path.join(path_unif, "Unificado.pdf")
+                            render_download_button(out_file, f"dl_unif_pdf_{int(time.time())}", "⬇️ Descargar PDF Unificado")
+                            # if os.path.exists(out_file):
+                            #    with open(out_file, "rb") as f:
+                            #        st.download_button("⬇️ Descargar PDF Unificado", f, file_name="Unificado.pdf")
                     except Exception as e:
                         st.error(f"Error: {e}")
             
@@ -5855,6 +5459,11 @@ def render():
                         with st.spinner("Unificando JPGs..."):
                             result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "JPG")
                             st.success(result)
+                            out_file = os.path.join(path_unif, "Unificado.pdf")
+                            render_download_button(out_file, f"dl_unif_jpg_{int(time.time())}", "⬇️ Descargar PDF (JPGs)")
+                            # if os.path.exists(out_file):
+                            #    with open(out_file, "rb") as f:
+                            #        st.download_button("⬇️ Descargar PDF (JPGs)", f, file_name="Unificado_JPG.pdf")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
@@ -5864,6 +5473,11 @@ def render():
                         with st.spinner("Unificando PNGs..."):
                             result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "PNG")
                             st.success(result)
+                            out_file = os.path.join(path_unif, "Unificado.pdf")
+                            render_download_button(out_file, f"dl_unif_png_{int(time.time())}", "⬇️ Descargar PDF (PNGs)")
+                            # if os.path.exists(out_file):
+                            #    with open(out_file, "rb") as f:
+                            #        st.download_button("⬇️ Descargar PDF (PNGs)", f, file_name="Unificado_PNG.pdf")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
@@ -5873,6 +5487,11 @@ def render():
                         with st.spinner("Unificando DOCX..."):
                             result = worker_unificar_docx_por_carpeta(path_unif, "Unificado.docx")
                             st.success(result)
+                            out_file = os.path.join(path_unif, "Unificado.docx")
+                            render_download_button(out_file, f"dl_unif_docx_{int(time.time())}", "⬇️ Descargar DOCX Unificado")
+                            # if os.path.exists(out_file):
+                            #    with open(out_file, "rb") as f:
+                            #        st.download_button("⬇️ Descargar DOCX Unificado", f, file_name="Unificado.docx")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -5883,6 +5502,9 @@ def render():
                         with st.spinner("Dividiendo PDFs..."):
                             result = worker_dividir_pdfs_masivamente(path_unif)
                             st.success(result)
+                            div_folder = os.path.join(path_unif, "Dividido")
+                            if os.path.exists(div_folder):
+                                render_download_button(div_folder, "dl_split_mass", "📦 Descargar Carpeta Dividido (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -5898,6 +5520,10 @@ def render():
                              out_path = os.path.join(st.session_state.get('current_path', '.'), "Unificado_Manual.pdf")
                              result = worker_unificar_pdfs_list(uploaded_pdfs, out_path)
                              st.success(result)
+                             render_download_button(out_path, f"dl_unif_man_{int(time.time())}", "⬇️ Descargar Unificado Manual")
+                            # if os.path.exists(out_path):
+                            #     with open(out_path, "rb") as f:
+                            #         st.download_button("⬇️ Descargar Unificado Manual", f, file_name="Unificado_Manual.pdf")
                      except Exception as e:
                          st.error(f"Error: {e}")
 
@@ -5912,6 +5538,7 @@ def render():
                             out_folder = os.path.join(st.session_state.get('current_path', '.'), "Dividido")
                             result = worker_dividir_pdf_paginas(uploaded_split, out_folder)
                             st.success(result)
+                            render_download_button(out_folder, "dl_split_man", "📦 Descargar Páginas Divididas (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -5937,6 +5564,7 @@ def render():
                         with st.spinner("Moviendo archivos por coincidencia..."):
                             result = worker_mover_por_coincidencia(path_org)
                             st.success(result)
+                            render_download_button(path_org, "dl_org_move", "📦 Descargar Resultado (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
@@ -5955,6 +5583,7 @@ def render():
                         with st.spinner("Consolidando subcarpetas..."):
                             result = worker_consolidar_subcarpetas(path_org)
                             st.success(result)
+                            render_download_button(path_org, "dl_org_consol", "📦 Descargar Consolidado (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -6020,16 +5649,31 @@ def render():
                 
                 if result and isinstance(result, dict) and "files" in result:
                     st.success(result.get("message", "Análisis completado."))
+                    
+                    # Create temp dir for results
+                    timestamp = int(time.time())
+                    temp_dir = os.path.join("temp_downloads", f"{key_prefix}_{timestamp}")
+                    os.makedirs(temp_dir, exist_ok=True)
+                    
+                    files_created = []
                     for i, f in enumerate(result["files"]):
                         data = f["data"]
                         if hasattr(data, "getvalue"): data = data.getvalue()
-                        st.download_button(
-                            label=f"📥 {f.get('label', 'Descargar')}",
-                            data=data,
-                            file_name=f["name"],
-                            mime=f.get("mime", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
-                            key=f"{key_prefix}_dl_{i}"
-                        )
+                        
+                        file_name = f["name"]
+                        file_path = os.path.join(temp_dir, file_name)
+                        
+                        with open(file_path, "wb") as fp:
+                            fp.write(data)
+                        files_created.append(file_path)
+
+                    if len(files_created) == 1:
+                        # Download single file
+                        render_download_button(files_created[0], f"{key_prefix}_dl", f"📥 Descargar {os.path.basename(files_created[0])}")
+                    elif len(files_created) > 1:
+                        # Download folder as ZIP
+                        render_download_button(temp_dir, f"{key_prefix}_dl_zip", "📦 Descargar Todos (ZIP)")
+                        
                 elif result:
                      st.warning("El resultado no tiene el formato esperado para descarga directa.")
                 else:
