@@ -186,11 +186,15 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         st.markdown(f"**{label}**")
         
         # Options: Upload ZIP vs Manual/Agent
-        method = st.radio("Método de Selección:", ["Subir Archivos (ZIP)", "Ruta del Servidor / Manual", "Agente Local"], 
-                          key=f"method_{key}", horizontal=True, label_visibility="collapsed")
+        # method = st.radio("Método de Selección:", ["Subir Archivos (ZIP)", "Ruta del Servidor / Manual", "Agente Local"], 
+        #                   key=f"method_{key}", horizontal=True, label_visibility="collapsed")
+        
+        # En modo Web, solo permitimos subir ZIP
+        method = "Subir Archivos (ZIP)"
+        st.write("Sube un ZIP para trabajar con sus carpetas/archivos.")
         
         if method == "Subir Archivos (ZIP)":
-            uploaded = st.file_uploader(f"Subir ZIP con archivos para '{label}'", type="zip", key=f"upload_{key}")
+            uploaded = st.file_uploader(f"Subir ZIP con archivos para '{label}'", type="zip", key=f"upload_{key}", label_visibility="collapsed")
             if uploaded:
                 path = extract_uploaded_zip(uploaded)
                 if path:
@@ -200,51 +204,51 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                     # Show preview of extracted files?
                     # st.caption(f"Contenido: {os.listdir(path)[:5]}...")
             else:
-                st.info("Sube un ZIP para trabajar con sus carpetas/archivos.")
+                st.info("Esperando archivo ZIP...")
                 
-        elif method == "Ruta del Servidor / Manual":
-            input_key = f"input_man_{key}"
-            st.text_input("Ruta en el Servidor", value=target_path, key=input_key, help=help_text,
-                          on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
+        # elif method == "Ruta del Servidor / Manual":
+        #     input_key = f"input_man_{key}"
+        #     st.text_input("Ruta en el Servidor", value=target_path, key=input_key, help=help_text,
+        #                   on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
             
-        elif method == "Agente Local":
-            col1, col2 = st.columns([0.8, 0.2])
-            with col1:
-                st.text_input("Ruta (desde Agente)", value=target_path, disabled=True, key=f"disp_agent_{key}")
-            with col2:
-                st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-                btn_key = f"btn_agent_{key}"
-                if st.button("🖥️", key=btn_key, help="Solicitar selección al Agente Local"):
-                     username = st.session_state.get("username", "admin")
-                     success, task_id = database.create_task(username, "SELECT_FOLDER")
+        # elif method == "Agente Local":
+        #     col1, col2 = st.columns([0.8, 0.2])
+        #     with col1:
+        #         st.text_input("Ruta (desde Agente)", value=target_path, disabled=True, key=f"disp_agent_{key}")
+        #     with col2:
+        #         st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
+        #         btn_key = f"btn_agent_{key}"
+        #         if st.button("🖥️", key=btn_key, help="Solicitar selección al Agente Local"):
+        #              username = st.session_state.get("username", "admin")
+        #              success, task_id = database.create_task(username, "SELECT_FOLDER")
                      
-                     if success and task_id:
-                         progress_text = "Esperando agente..."
-                         status_area = st.empty()
-                         status_area.info(progress_text)
+        #              if success and task_id:
+        #                  progress_text = "Esperando agente..."
+        #                  status_area = st.empty()
+        #                  status_area.info(progress_text)
                          
-                         found = False
-                         for _ in range(60):
-                             time.sleep(1)
-                             result = database.get_task_result(task_id)
-                             if result and result.get("status") == "COMPLETED":
-                                 res_data = result.get("result", {})
-                                 if res_data and res_data.get("success"):
-                                     path = res_data.get("data")
-                                     if path:
-                                         update_path_key(key, path)
-                                         status_area.success("Seleccionado!")
-                                         found = True
-                                         time.sleep(0.5)
-                                         st.rerun()
-                                 break
-                             elif result and result.get("status") == "ERROR":
-                                 status_area.error(f"Error: {result.get('result', {}).get('error')}")
-                                 found = True
-                                 break
+        #                  found = False
+        #                  for _ in range(60):
+        #                      time.sleep(1)
+        #                      result = database.get_task_result(task_id)
+        #                      if result and result.get("status") == "COMPLETED":
+        #                          res_data = result.get("result", {})
+        #                          if res_data and res_data.get("success"):
+        #                              path = res_data.get("data")
+        #                              if path:
+        #                                  update_path_key(key, path)
+        #                                  status_area.success("Seleccionado!")
+        #                                  found = True
+        #                                  time.sleep(0.5)
+        #                                  st.rerun()
+        #                          break
+        #                      elif result and result.get("status") == "ERROR":
+        #                          status_area.error(f"Error: {result.get('result', {}).get('error')}")
+        #                          found = True
+        #                          break
                          
-                         if not found:
-                             status_area.warning("Tiempo agotado.")
+        #                  if not found:
+        #                      status_area.warning("Tiempo agotado.")
 
     return target_path
 
