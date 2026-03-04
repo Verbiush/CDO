@@ -3,12 +3,9 @@ FROM python:3.10-slim
 WORKDIR /app
 
 # Instalar dependencias del sistema
-# python3-tk: Para soporte básico de tkinter (aunque en server no muestra ventana)
-# chromium: Para selenium si se usa en el servidor
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
-    software-properties-common \
     python3-tk \
     chromium \
     chromium-driver \
