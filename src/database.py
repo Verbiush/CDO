@@ -596,6 +596,76 @@ def init_db():
         finally:
             conn.close()
 
+def get_all_users():
+    """Returns all users from the database as a dictionary {username: user_data}."""
+    conn = get_connection()
+    try:
+        if USE_MYSQL:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM users")
+            rows = cursor.fetchall()
+        elif USE_POSTGRES:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users")
+            rows = cursor.fetchall()
+        else:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users")
+            rows = [dict(row) for row in cursor.fetchall()]
+            
+        # Convert to dictionary keyed by username
+        users_dict = {}
+        for row in rows:
+            # Parse JSON fields if they exist and are strings
+            if isinstance(row.get("permissions"), str):
+                try: row["permissions"] = json.loads(row["permissions"])
+                except: row["permissions"] = {}
+            
+            if isinstance(row.get("favorites"), str):
+                try: row["favorites"] = json.loads(row["favorites"])
+                except: row["favorites"] = []
+                
+            if isinstance(row.get("config"), str):
+                try: row["config"] = json.loads(row["config"])
+                except: row["config"] = {}
+                
+            users_dict[row["username"]] = row
+            
+        return users_dict
+    except Exception as e:
+        print(f"Error getting users: {e}")
+        return {}
+    finally:
+        conn.close()
+
+def get_all_invoices():
+    """Returns all document records (invoices) from the database."""
+    conn = get_connection()
+    try:
+        # We use document_records as it contains EPS and Regimen info required by tab_admin.py
+        # Ordered by created_at DESC to show newest first
+        query = "SELECT * FROM document_records ORDER BY created_at DESC"
+        
+        if USE_MYSQL:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(query)
+            return cursor.fetchall()
+        elif USE_POSTGRES:
+            cursor = conn.cursor()
+            cursor.execute(query)
+            return cursor.fetchall()
+        else:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(query)
+            return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        print(f"Error getting invoices (records): {e}")
+        return []
+    finally:
+        conn.close()
+
 def get_user(username):
     """Retrieves a user by username."""
     conn = get_connection()
