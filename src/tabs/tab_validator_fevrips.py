@@ -139,7 +139,7 @@ def dialog_generar_cuv():
     col_mode, col_url = st.columns([0.3, 0.7])
     
     with col_mode:
-        conn_mode = st.radio("Modo de Conexión:", ["Local (Nativo)", "Docker Integrado", "Servidor Remoto"], key="fevrips_mode", help="Seleccione 'Local' si ejecuta FEVRIPS en su máquina (Docker o Nativo).")
+        conn_mode = st.radio("Modo de Conexión:", ["Local (Nativo)", "Docker Integrado", "Docker AWS (Interno)", "Servidor Remoto"], key="fevrips_mode", help="Seleccione 'Local' si ejecuta FEVRIPS en su máquina (Docker o Nativo). 'Docker AWS' para despliegue en nube.")
         
         # Checkbox para activar modo "Servicio Web" (oculta UI nativa)
         if conn_mode == "Local (Nativo)":
@@ -192,6 +192,14 @@ def dialog_generar_cuv():
                             st.toast("Descargando e iniciando (puede tardar)...")
                             time.sleep(10)
                             # st.rerun()
+        
+        # --- MODO DOCKER AWS (INTERNO) ---
+        elif conn_mode == "Docker AWS (Interno)":
+            st.success("☁️ Modo Nube Activo")
+            # Usamos HTTP interno (puerto 5000) ya que estamos en la red Docker
+            api_url = "http://fevrips-api:5000/api/Validacion/ValidarArchivo"
+            st.code(api_url, language="text")
+            st.caption("ℹ️ Esta URL es interna para la red Docker de AWS.")
 
         # Modo Local: Permitir URL personalizada para flexibilidad (Docker o Nativo Windows)
         elif conn_mode == "Local (Nativo)":
@@ -552,7 +560,7 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
     token = st.text_input("Token de Autorización (Bearer):", value=token_default, type="password")
     
     if st.button("🔌 Probar Conexión"):
-        if conn_mode in ["Local (Nativo)", "Docker Integrado"]:
+        if conn_mode in ["Local (Nativo)", "Docker Integrado", "Docker AWS (Interno)"]:
              try:
                  parsed_u = urllib.parse.urlparse(api_url)
                  check_host = parsed_u.hostname or "localhost"
@@ -571,6 +579,8 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
                          st.info("💡 **Solución (Sin Docker):**\n1. Asegúrese de tener instalado el aplicativo **'Mecanismo Único de Validación (Cliente-Servidor)'** de MinSalud.\n2. Ejecútelo antes de validar.\n3. Verifique que el puerto configurado coincida con el de la aplicación (usualmente 9443 o 5000).")
                      elif conn_mode == "Docker Integrado":
                          st.info("💡 **Solución (Docker):**\n1. Verifique que el contenedor 'fevrips-api' esté corriendo en la sección de arriba.\n2. Si está detenido, haga clic en 'Iniciar'.")
+                     elif conn_mode == "Docker AWS (Interno)":
+                         st.info("💡 **Solución (AWS):**\n1. Verifique que el contenedor 'fevrips-api' esté corriendo (docker-compose logs fevrips-api).\n2. Verifique que el puerto 5000 esté expuesto internamente.")
              except Exception as e:
                  st.error(f"Error diagnóstico: {e}")
 
