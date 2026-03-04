@@ -23,6 +23,9 @@ COPY . .
 COPY start_aws.sh .
 RUN chmod +x start_aws.sh
 
+# Crear directorio de datos con permisos
+RUN mkdir -p /data && chmod 777 /data
+
 # Variables de entorno por defecto
 ENV PORT=8501
 ENV STREAMLIT_SERVER_PORT=8501
