@@ -275,6 +275,21 @@ if __name__ == "__main__":
     
     logger.info(f"Agent starting. Config file: {config_file}")
     
+    # --- Create default config if missing ---
+    if not os.path.exists(config_file):
+        logger.info("Config file not found. Creating default configuration for AWS...")
+        default_config = {
+            "server_url": "http://3.142.164.128:8000",
+            "username": "admin",  # Default user
+            "password": "password" # Default password (user should change this via UI if needed)
+        }
+        try:
+            with open(config_file, "w") as f:
+                json.dump(default_config, f, indent=4)
+            logger.info(f"Created default config at {config_file}")
+        except Exception as e:
+            logger.error(f"Failed to create default config: {e}")
+
     if os.path.exists(config_file):
         try:
             with open(config_file, "r") as f:

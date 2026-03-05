@@ -1,0 +1,85 @@
+import os
+import subprocess
+import shutil
+import sys
+
+def build_installer():
+    print("=== Building CDO Local Agent Installer ===")
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    dist_dir = os.path.join(current_dir, "dist")
+    build_dir = os.path.join(current_dir, "build")
+    
+    # Clean previous builds
+    # if os.path.exists(dist_dir): shutil.rmtree(dist_dir)
+    # if os.path.exists(build_dir): shutil.rmtree(build_dir)
+        
+    print("1. Installing PyInstaller...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
+    
+    print("\n2. Building Agent Executable (CDO_Agente.exe)...")
+    
+    # Build main.py -> CDO_Agente.exe (noconsole)
+    # Hidden imports for FastAPI/Uvicorn
+    hidden_imports = [
+        "--hidden-import=uvicorn.logging",
+        "--hidden-import=uvicorn.loops",
+        "--hidden-import=uvicorn.loops.auto",
+        "--hidden-import=uvicorn.protocols",
+        "--hidden-import=uvicorn.protocols.http",
+        "--hidden-import=uvicorn.protocols.http.auto",
+        "--hidden-import=uvicorn.lifespan.on",
+        "--hidden-import=uvicorn.lifespan.off",
+        "--hidden-import=anyio"
+    ]
+    
+    cmd_agent = [
+        sys.executable, "-m", "PyInstaller",
+        "--noconsole",
+        "--onefile",
+        "--name=CDO_Agente",
+        "--clean",
+        os.path.join(current_dir, "main.py")
+    ] + hidden_imports
+    
+    subprocess.check_call(cmd_agent, cwd=current_dir)
+    
+    agent_exe = os.path.join(dist_dir, "CDO_Agente.exe")
+    if not os.path.exists(agent_exe):
+        print("Error: CDO_Agente.exe not found!")
+        return
+
+    print("\n3. Building Installer (Instalador_Agente_CDO.exe)...")
+    # Build setup_agent.py -> Instalador.exe
+    # Include CDO_Agente.exe as data
+    # On Windows, separator is ;
+    add_data = f"{agent_exe};."
+    
+    cmd_installer = [
+        sys.executable, "-m", "PyInstaller",
+        "--noconsole",
+        "--onefile",
+        "--name=Instalador_Agente_CDO",
+        "--clean",
+        f"--add-data={add_data}",
+        "--uac-admin",  # Request admin to write to registry/program files if needed
+        os.path.join(current_dir, "setup_agent.py")
+    ]
+    
+    subprocess.check_call(cmd_installer, cwd=current_dir)
+    
+    installer_exe = os.path.join(dist_dir, "Instalador_Agente_CDO.exe")
+    
+    if os.path.exists(installer_exe):
+        print(f"\nSUCCESS! Installer created at:\n{installer_exe}")
+        
+        # Move to root for easier access
+        root_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
+        final_path = os.path.join(root_dir, "Instalador_Agente_CDO.exe")
+        shutil.copy2(installer_exe, final_path)
+        print(f"Copied to root: {final_path}")
+    else:
+        print("Error: Installer creation failed.")
+
+if __name__ == "__main__":
+    build_installer()

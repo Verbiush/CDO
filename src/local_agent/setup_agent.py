@@ -4,6 +4,7 @@ import shutil
 import winreg
 import subprocess
 import time
+import json
 import tkinter as tk
 from tkinter import messagebox, ttk
 import threading
@@ -84,6 +85,20 @@ class AgentInstaller(tk.Tk):
             
             self.log(f"Instalando en {dest_dir}...")
             os.makedirs(dest_dir, exist_ok=True)
+            
+            # Write default config
+            config_file = os.path.join(dest_dir, "agent_config.json")
+            default_config = {
+                "server_url": "http://3.142.164.128:8000",
+                "username": "admin",
+                "password": "password"
+            }
+            try:
+                with open(config_file, "w") as f:
+                    json.dump(default_config, f, indent=4)
+                self.log("Configuración creada...")
+            except Exception as e:
+                print(f"Config write error: {e}")
             
             self.progress['value'] = 40
             
