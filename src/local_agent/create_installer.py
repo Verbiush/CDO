@@ -49,7 +49,9 @@ def build_installer():
         "--hidden-import=uvicorn.protocols.http.auto",
         "--hidden-import=uvicorn.lifespan.on",
         "--hidden-import=uvicorn.lifespan.off",
-        "--hidden-import=anyio"
+        "--hidden-import=anyio",
+        "--hidden-import=starlette",
+        "--hidden-import=fastapi"
     ]
     
     cmd_agent = [

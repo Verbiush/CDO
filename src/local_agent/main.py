@@ -294,9 +294,11 @@ if __name__ == "__main__":
         try:
             with open(config_file, "r") as f:
                 config = json.load(f)
-            server_url = config.get("server_url")
-            username = config.get("username")
-            password = config.get("password")
+            
+            # Use .get() to avoid KeyError if key is missing
+            server_url = config.get("server_url", "")
+            username = config.get("username", "")
+            password = config.get("password", "")
             
             # --- Auto-fix port 8501 to 8000 ---
             if server_url and ":8501" in server_url:
@@ -306,8 +308,11 @@ if __name__ == "__main__":
             logger.info(f"Loaded config for user: {username} at {server_url}")
             
             if server_url and username and password:
-                polling_client = PollingClient(server_url, username, password)
-                polling_client.start()
+                try:
+                    polling_client = PollingClient(server_url, username, password)
+                    polling_client.start()
+                except Exception as pe:
+                    logger.error(f"Failed to start PollingClient: {pe}")
             else:
                 logger.warning("Config missing server_url, username or password")
         except Exception as e:
@@ -315,4 +320,10 @@ if __name__ == "__main__":
     else:
         logger.warning(f"Config file not found at {config_file}. Run setup or create file manually.")
             
-    uvicorn.run(app, host="127.0.0.1", port=8989)
+    # Keep the main thread alive if PollingClient fails but Uvicorn is running
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=8989)
+    except Exception as ue:
+        logger.critical(f"Uvicorn server crashed: {ue}")
+        # If uvicorn crashes, we might want to restart or just exit with error
+        sys.exit(1)
