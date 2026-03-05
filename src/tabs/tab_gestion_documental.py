@@ -719,10 +719,11 @@ def render():
         
         # Selector de Ruta Estandarizado
         base_path = render_path_selector(
-            label="Carpeta Raíz de Salida",
+            label="Carpeta Raíz / ZIP Base (Modo Web)",
             key="gd_base_path_struct",
             default_path=st.session_state.get("gd_base_path", st.session_state.get("current_path", os.getcwd())),
-            omit_checkbox=False
+            omit_checkbox=False,
+            help_text="Seleccione la carpeta donde se crearán las subcarpetas. En Modo Web, suba un ZIP (puede estar vacío) para usarlo como base."
         )
         st.session_state.input_base_path_struct = base_path
 
@@ -770,8 +771,20 @@ def render():
             
             st.success(f"✅ Proceso finalizado. Carpetas Creadas: {count_created}")
             
-            # --- DOWNLOAD BUTTON (WEB MODE) ---
-            render_download_button(base_path, "dl_struct", "📦 Descargar Estructura (ZIP)")
+            # Save state for download button persistence
+            st.session_state.last_created_folders_path = base_path
+            st.session_state.last_created_folders_count = count_created
+            
+        # --- DOWNLOAD BUTTON (WEB MODE - PERSISTENT) ---
+        if "last_created_folders_path" in st.session_state and st.session_state.last_created_folders_path:
+             # Verify path still exists (temp might be cleaned up if server restarts, but usually persists in session)
+             if os.path.exists(st.session_state.last_created_folders_path):
+                 st.info(f"📂 Última creación: {st.session_state.get('last_created_folders_count', 0)} carpetas listas para descargar.")
+                 render_download_button(st.session_state.last_created_folders_path, "dl_struct", "📦 Descargar Estructura (ZIP)")
+             else:
+                 # Clean up invalid state
+                 if "last_created_folders_path" in st.session_state:
+                     del st.session_state.last_created_folders_path
 
     # --- TAB ORGANIZAR (Renombrar/Mover) ---
     with tab_organize:
