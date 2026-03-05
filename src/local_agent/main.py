@@ -7,24 +7,60 @@ import logging
 import threading
 import requests
 import base64
-import pandas as pd
-import tkinter as tk
-from tkinter import filedialog
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
+import traceback
+import multiprocessing
+
+# --- CRITICAL: Early Error Logging Setup ---
+# Setup a debug log in the same directory as the executable/script
+try:
+    if getattr(sys, 'frozen', False):
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    debug_log_path = os.path.join(base_dir, "agent_debug_crash.log")
+    
+    # Configure logging to write to this file immediately
+    logging.basicConfig(
+        filename=debug_log_path,
+        level=logging.DEBUG,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        filemode='w' # Overwrite each run
+    )
+    logging.info("--- Agent Starting (Debug Mode) ---")
+except Exception as e:
+    # If we can't even log, we are in trouble. 
+    pass
 
 # Fix for PyInstaller --noconsole mode
 class NullWriter:
-    def write(self, text): pass
+    def write(self, text): 
+        try:
+            logging.info(f"STDOUT/ERR: {text.strip()}")
+        except: pass
     def flush(self): pass
     def isatty(self): return False
     def fileno(self): return -1
 
-if sys.stdout is None: sys.stdout = NullWriter()
-if sys.stderr is None: sys.stderr = NullWriter()
+# Redirect stdout/stderr to our logger/null
+sys.stdout = NullWriter()
+sys.stderr = NullWriter()
 
-# Configure logging
+import pandas as pd
+import tkinter as tk
+from tkinter import filedialog
+try:
+    from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+    import uvicorn
+except ImportError as e:
+    logging.critical(f"Failed to import FastAPI/Uvicorn: {e}")
+    # Keep process alive to read log
+    time.sleep(60)
+    sys.exit(1)
+
+# Configure standard logging (can coexist or override basicConfig)
+# ... existing logging setup ...
 try:
     log_dir = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser("~")), 'CDO_Organizer')
     if not os.path.exists(log_dir):
@@ -275,55 +311,68 @@ if __name__ == "__main__":
     
     logger.info(f"Agent starting. Config file: {config_file}")
     
-    # --- Create default config if missing ---
-    if not os.path.exists(config_file):
-        logger.info("Config file not found. Creating default configuration for AWS...")
-        default_config = {
-            "server_url": "http://3.142.164.128:8000",
-            "username": "admin",  # Default user
-            "password": "password" # Default password (user should change this via UI if needed)
-        }
-        try:
-            with open(config_file, "w") as f:
-                json.dump(default_config, f, indent=4)
-            logger.info(f"Created default config at {config_file}")
-        except Exception as e:
-            logger.error(f"Failed to create default config: {e}")
-
-    if os.path.exists(config_file):
-        try:
-            with open(config_file, "r") as f:
-                config = json.load(f)
-            
-            # Use .get() to avoid KeyError if key is missing
-            server_url = config.get("server_url", "")
-            username = config.get("username", "")
-            password = config.get("password", "")
-            
-            # --- Auto-fix port 8501 to 8000 ---
-            if server_url and ":8501" in server_url:
-                logger.warning(f"Detected incorrect port 8501 in server_url: {server_url}. Switching to port 8000 for API connection.")
-                server_url = server_url.replace(":8501", ":8000")
-            
-            logger.info(f"Loaded config for user: {username} at {server_url}")
-            
-            if server_url and username and password:
-                try:
-                    polling_client = PollingClient(server_url, username, password)
-                    polling_client.start()
-                except Exception as pe:
-                    logger.error(f"Failed to start PollingClient: {pe}")
-            else:
-                logger.warning("Config missing server_url, username or password")
-        except Exception as e:
-            logger.error(f"Error loading config: {e}")
-    else:
-        logger.warning(f"Config file not found at {config_file}. Run setup or create file manually.")
-            
-    # Keep the main thread alive if PollingClient fails but Uvicorn is running
     try:
-        uvicorn.run(app, host="127.0.0.1", port=8989)
-    except Exception as ue:
-        logger.critical(f"Uvicorn server crashed: {ue}")
-        # If uvicorn crashes, we might want to restart or just exit with error
-        sys.exit(1)
+        # --- Create default config if missing ---
+        if not os.path.exists(config_file):
+            logger.info("Config file not found. Creating default configuration for AWS...")
+            default_config = {
+                "server_url": "http://3.142.164.128:8000",
+                "username": "admin",  # Default user
+                "password": "password" # Default password (user should change this via UI if needed)
+            }
+            try:
+                with open(config_file, "w") as f:
+                    json.dump(default_config, f, indent=4)
+                logger.info(f"Created default config at {config_file}")
+            except Exception as e:
+                logger.error(f"Failed to create default config: {e}")
+
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, "r") as f:
+                    config = json.load(f)
+                
+                # Use .get() to avoid KeyError if key is missing
+                server_url = config.get("server_url", "")
+                username = config.get("username", "")
+                password = config.get("password", "")
+                
+                # --- Auto-fix port 8501 to 8000 ---
+                if server_url and ":8501" in server_url:
+                    logger.warning(f"Detected incorrect port 8501 in server_url: {server_url}. Switching to port 8000 for API connection.")
+                    server_url = server_url.replace(":8501", ":8000")
+                
+                logger.info(f"Loaded config for user: {username} at {server_url}")
+                
+                if server_url and username and password:
+                    try:
+                        polling_client = PollingClient(server_url, username, password)
+                        polling_client.start()
+                    except Exception as pe:
+                        logger.error(f"Failed to start PollingClient: {pe}")
+                else:
+                    logger.warning("Config missing server_url, username or password")
+            except Exception as e:
+                logger.error(f"Error loading config: {e}")
+        else:
+            logger.warning(f"Config file not found at {config_file}. Run setup or create file manually.")
+                
+        # Keep the main thread alive if PollingClient fails but Uvicorn is running
+        try:
+            logger.info("Starting Uvicorn Server on 127.0.0.1:8989")
+            # Disable Uvicorn access log to prevent console write errors
+            config = uvicorn.Config(app, host="127.0.0.1", port=8989, log_level="info")
+            server = uvicorn.Server(config)
+            server.run()
+        except Exception as ue:
+            logger.critical(f"Uvicorn server crashed: {ue}")
+            logger.critical(traceback.format_exc())
+            
+    except Exception as global_e:
+        logging.critical(f"CRITICAL GLOBAL ERROR: {global_e}")
+        logging.critical(traceback.format_exc())
+        
+    # --- FAILSAFE KEEP ALIVE ---
+    # If everything fails, keep process alive for 5 minutes so user can see it running/check logs
+    logger.info("Entering Failsafe Keep-Alive Loop (5 min)")
+    time.sleep(300)

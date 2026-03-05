@@ -51,7 +51,10 @@ def build_installer():
         "--hidden-import=uvicorn.lifespan.off",
         "--hidden-import=anyio",
         "--hidden-import=starlette",
-        "--hidden-import=fastapi"
+        "--hidden-import=fastapi",
+        "--hidden-import=email_validator",
+        "--hidden-import=pydantic",
+        "--hidden-import=pydantic.deprecated.decorator"
     ]
     
     cmd_agent = [
