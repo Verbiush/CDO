@@ -12,8 +12,27 @@ def build_installer():
     
     # Clean previous builds
     # if os.path.exists(dist_dir): shutil.rmtree(dist_dir)
-    # if os.path.exists(build_dir): shutil.rmtree(build_dir)
+    # if os.path.exists(build_dir):
+    #     shutil.rmtree(build_dir)
         
+    # --- Helper to Sign Code ---
+    def sign_executable(file_path):
+        print(f"Signing {file_path}...")
+        sign_script = os.path.abspath(os.path.join(current_dir, "..", "..", "sign_code.ps1"))
+        if os.path.exists(sign_script):
+            try:
+                subprocess.check_call([
+                    "powershell",
+                    "-ExecutionPolicy", "Bypass",
+                    "-File", sign_script,
+                    "-TargetFile", file_path
+                ])
+                print("Signature applied successfully.")
+            except Exception as e:
+                print(f"Warning: Failed to sign executable: {e}")
+        else:
+            print(f"Warning: Sign script not found at {sign_script}")
+
     print("1. Installing PyInstaller...")
     subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
     
@@ -49,6 +68,9 @@ def build_installer():
         print("Error: CDO_Agente.exe not found!")
         return
 
+    # SIGN INNER EXE
+    sign_executable(agent_exe)
+
     print("\n3. Building Installer (Instalador_Agente_CDO.exe)...")
     # Build setup_agent.py -> Instalador.exe
     # Include CDO_Agente.exe as data
@@ -71,6 +93,9 @@ def build_installer():
     installer_exe = os.path.join(dist_dir, "Instalador_Agente_CDO.exe")
     
     if os.path.exists(installer_exe):
+        # SIGN OUTER INSTALLER
+        sign_executable(installer_exe)
+
         print(f"\nSUCCESS! Installer created at:\n{installer_exe}")
         
         # Move to root for easier access
