@@ -491,7 +491,6 @@ else:
                 render_path_selector(
                     label="Carpeta de Descargas (Opcional)",
                     key="cfg_download_path",
-                    default_path="",
                     help_text="Ruta local para guardar reportes automáticamente."
                 )
 

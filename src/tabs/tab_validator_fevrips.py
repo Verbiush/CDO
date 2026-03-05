@@ -124,7 +124,6 @@ def dialog_generar_cuv():
     target_cuv_path = render_path_selector(
         label="Carpeta de Facturas (Raíz)",
         key="path_cuv",
-        default_path=current_global_path,
         help_text="Se usará la carpeta seleccionada para buscar los archivos RIPS."
     )
     
@@ -253,7 +252,6 @@ def dialog_generar_cuv():
             new_exe_path = render_file_selector(
                 "Ruta del Ejecutable FEVRIPS:", 
                 key=selector_key,
-                default_path=current_exe_path,
                 help_text="Seleccione el ejecutable de FEVRIPS (FVE.ValidadorLocal.exe).",
                 file_types=[("Ejecutables", "*.exe"), ("Todos", "*.*")]
             )

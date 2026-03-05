@@ -5070,6 +5070,136 @@ def dialog_regimen_docx():
             except Exception as e:
                 st.error(f"Error: {e}")
 
+def worker_distribuir_base_archivo(file_source, is_upload_bytes, excel_bytes, sheet_name, col_folder, base_path):
+    try:
+        # 1. Read Excel
+        if isinstance(excel_bytes, bytes):
+            df = pd.read_excel(io.BytesIO(excel_bytes), sheet_name=sheet_name)
+        else:
+            df = pd.read_excel(excel_bytes, sheet_name=sheet_name)
+        
+        count = 0
+        errors = 0
+        
+        # Determine source file name and content
+        src_filename = "Archivo_Distribuido"
+        src_content = None
+        
+        if is_upload_bytes:
+            # file_source is UploadedFile object or bytes
+            if hasattr(file_source, "name"): src_filename = file_source.name
+            else: src_filename = "Archivo_Distribuido.dat"
+
+            if hasattr(file_source, "getvalue"): src_content = file_source.getvalue()
+            else: src_content = file_source # assume bytes
+        else:
+            # file_source is path string
+            if os.path.exists(file_source):
+                 src_filename = os.path.basename(file_source)
+            else:
+                 return f"Error: Archivo origen no existe: {file_source}"
+
+        for index, row in df.iterrows():
+            folder_val = row[col_folder]
+            if pd.isna(folder_val): continue
+            folder_name = str(folder_val).strip()
+            
+            # Sanitize folder name
+            folder_name = "".join([c for c in folder_name if c.isalnum() or c in (' ', '-', '_', '.')]).strip()
+            
+            if not folder_name: continue
+
+            dest_dir = os.path.join(base_path, folder_name)
+            os.makedirs(dest_dir, exist_ok=True)
+            
+            dest_file = os.path.join(dest_dir, src_filename)
+            
+            try:
+                if is_upload_bytes:
+                    with open(dest_file, "wb") as f:
+                        f.write(src_content)
+                else:
+                    shutil.copy2(file_source, dest_file)
+                count += 1
+            except Exception as e:
+                errors += 1
+                # print(f"Error copying to {dest_dir}: {e}")
+                
+        return f"Proceso completado. Archivos copiados: {count}. Errores: {errors}."
+    except Exception as e:
+        return f"Error crítico: {e}"
+
+@st.dialog("Distribuir Archivo (Base Excel)")
+def dialog_distribuir_base():
+    st.write("Copia un archivo a múltiples carpetas definidas en un Excel.")
+    
+    # 1. Excel Base
+    uploaded_excel = st.file_uploader("Cargar Base (Excel)", type=["xlsx", "xls"], key="dist_base_excel")
+    
+    sheet = None
+    col_folder = None
+    
+    if uploaded_excel:
+        try:
+            uploaded_excel.seek(0)
+            xls = pd.ExcelFile(uploaded_excel)
+            sheet = st.selectbox("Hoja", xls.sheet_names, key="dist_base_sheet")
+            if sheet:
+                df_preview = pd.read_excel(uploaded_excel, sheet_name=sheet, nrows=5)
+                col_folder = st.selectbox("Columna Nombre Carpeta", df_preview.columns, key="dist_base_col")
+        except Exception as e:
+            st.error(f"Error Excel: {e}")
+
+    # 2. Archivo a Distribuir
+    st.divider()
+    st.write("Archivo a Distribuir:")
+    
+    file_to_distribute = None
+    is_upload_bytes = False
+    
+    # Check mode
+    is_web = not st.session_state.get("force_native_mode", True)
+    
+    if is_web:
+        # Web Mode: Upload
+        file_to_distribute = st.file_uploader("Cargar Archivo", key="dist_base_file_up")
+        if file_to_distribute:
+            is_upload_bytes = True
+    else:
+        # Native Mode: Selector
+        file_to_distribute = render_file_selector("Seleccionar Archivo Local", key="dist_base_file_local")
+        is_upload_bytes = False
+
+    # 3. Carpeta Destino Base
+    st.divider()
+    base_dest_path = render_path_selector(
+        key="dist_base_dest",
+        label="Carpeta Destino (Raíz)",
+        help_text="Donde se encuentran o crearán las carpetas del Excel."
+    )
+    
+    # 4. Action
+    if st.button("🚀 Distribuir"):
+        if uploaded_excel and sheet and col_folder and file_to_distribute and base_dest_path:
+            try:
+                uploaded_excel.seek(0)
+                excel_bytes = uploaded_excel.getvalue()
+                
+                with st.spinner("Distribuyendo archivo..."):
+                    result = worker_distribuir_base_archivo(
+                        file_to_distribute, 
+                        is_upload_bytes, 
+                        excel_bytes, 
+                        sheet, 
+                        col_folder, 
+                        base_dest_path
+                    )
+                    st.success(result)
+            except Exception as e:
+                st.error(f"Error: {e}")
+        else:
+            st.warning("Complete todos los campos.")
+
 @st.dialog("Crear Carpetas desde Excel")
 def dialog_crear_carpetas_excel():
     st.write("Crea estructura de carpetas basada en una columna de Excel.")
@@ -5435,8 +5565,7 @@ def render():
                 # Selector de ruta estandarizado
             path_unif = render_path_selector(
                 label="Carpeta de Trabajo",
-                key="tab_unif_folder",
-                default_path=default_path
+                key="tab_unif_folder"
             )
             
             if st.button("🗂️ Unificar PDF por Carpeta", key="btn_unif_pdf"):
@@ -5549,8 +5678,7 @@ def render():
         # Selector de ruta estandarizado
         path_org = render_path_selector(
             label="Carpeta de Trabajo",
-            key="tab_org_folder",
-            default_path=default_path
+            key="tab_org_folder"
         )
         
         col_o1, col_o2 = st.columns(2)
@@ -5625,8 +5753,7 @@ def render():
         # Selector de ruta estandarizado
         path_an = render_path_selector(
             label="Carpeta de Análisis",
-            key="tab_an_folder",
-            default_path=default_path
+            key="tab_an_folder"
         )
         
         # Obtener lista de PDFs para análisis (Recursivo)
@@ -5751,10 +5878,12 @@ def render():
                 dialog_crear_firma()
 
         with col_c2:
-            # st.subheader("Distribución / Otros")
+            st.subheader("Distribución / Otros")
             
+            if st.button("📂 Distribuir Base", key="btn_dist_base"):
+                dialog_distribuir_base()
+
             # if st.button("📤 Copiar a Subcarpetas (Dialogo)", key="btn_dlg_dist_sub"):
             #    dialog_copiar_archivo_a_subcarpetas()
-            pass
 
 

@@ -298,43 +298,42 @@ def render(container=None):
                 
                 current_path = render_path_selector(
                     label="Carpeta Origen (Individual)",
-                    key="conv_ind_source_path",
-                    default_path=current_path_default
+                    key="conv_ind_source_path"
                 )
                 
-                st.info(f"📁 Buscando archivos en: {current_path}")
-                
-                # Filter files based on conversion type
-                valid_exts = []
-                if conv_type_code.startswith("PDF"): valid_exts = [".pdf"]
-                elif conv_type_code.startswith("JPG"): valid_exts = [".jpg", ".jpeg"]
-                elif conv_type_code.startswith("DOCX"): valid_exts = [".docx"]
-                elif conv_type_code.startswith("PNG"): valid_exts = [".png"]
-                elif conv_type_code.startswith("TXT"): valid_exts = [".txt"]
-                elif conv_type_code == "XLS2XLSX": valid_exts = [".xls"]
-                elif conv_type_code.startswith("XLSX"): valid_exts = [".xlsx", ".xls"]
-
-                try:
-                    files = [f for f in os.listdir(current_path) if any(f.lower().endswith(ext) for ext in valid_exts)]
-                except Exception:
+                if not current_path:
+                    st.info("📂 Seleccione una carpeta para ver los archivos.")
                     files = []
+                else:
+                    st.info(f"📁 Buscando archivos en: {current_path}")
+                    
+                    # Filter files based on conversion type
+                    valid_exts = []
+                    if conv_type_code.startswith("PDF"): valid_exts = [".pdf"]
+                    elif conv_type_code.startswith("JPG"): valid_exts = [".jpg", ".jpeg"]
+                    elif conv_type_code.startswith("DOCX"): valid_exts = [".docx"]
+                    elif conv_type_code.startswith("PNG"): valid_exts = [".png"]
+                    elif conv_type_code.startswith("TXT"): valid_exts = [".txt"]
+                    elif conv_type_code == "XLS2XLSX": valid_exts = [".xls"]
+                    elif conv_type_code.startswith("XLSX"): valid_exts = [".xlsx", ".xls"]
+
+                    try:
+                        files = [f for f in os.listdir(current_path) if any(f.lower().endswith(ext) for ext in valid_exts)]
+                    except Exception:
+                        files = []
                 
                 if files:
                     selected_file = st.selectbox("Seleccionar Archivo:", files, key="ind_file_select")
                     file_to_process = os.path.join(current_path, selected_file)
-                else:
-                    st.warning(f"No se encontraron archivos compatibles con {conv_type_label} en la carpeta actual.")
+                elif current_path:
+                    st.warning(f"No se encontraron archivos compatibles con {conv_type_label} en la carpeta seleccionada.")
 
             # 3. Output Folder
             st.markdown("### 3. Carpeta de Salida")
             
-            default_save = st.session_state.get("current_path", os.getcwd())
-            if not default_save: default_save = os.getcwd()
-            
             output_folder = render_path_selector(
                 label="Carpeta Destino",
-                key="conv_ind_out",
-                default_path=default_save
+                key="conv_ind_out"
             )
 
             # 4. Action
@@ -342,10 +341,12 @@ def render(container=None):
             if st.button("Ejecutar Conversión", key="btn_exec_ind"):
                 if not file_to_process:
                     st.error("⚠️ Seleccione o suba un archivo para procesar.")
+                elif not output_folder:
+                    st.error("⚠️ Seleccione una carpeta de destino.")
                 else:
                     # Prepare paths
                     actual_input_path = ""
-                    actual_output_folder = output_folder if output_folder else default_save
+                    actual_output_folder = output_folder
                     
                     if not os.path.exists(actual_output_folder):
                         try:
@@ -447,8 +448,7 @@ def render(container=None):
             
             source_path = render_path_selector(
                 label="Ruta Origen",
-                key="conv_mass_target",
-                default_path=current_global_path
+                key="conv_mass_target"
             )
             
             target_folder = source_path
@@ -472,20 +472,16 @@ def render(container=None):
             target_output = render_path_selector(
                 label="Carpeta Salida",
                 key="conv_mass_out",
-                default_path=target_folder
+                omit_checkbox=True
             )
             
-            use_custom_out = st.session_state.get("cb_use_custom_conv_mass_out", False)
-
             # 4. Execute
             st.write("")
             if st.button("🚀 Ejecutar Conversión Masiva", key="btn_exec_mass"):
-                if target_folder and os.path.exists(target_folder):
-                    # Si no se usa ruta personalizada, es None (In Place)
-                    if not use_custom_out:
-                        final_output = None
-                    else:
-                        final_output = target_output
+                if not target_output:
+                    st.error("⚠️ Seleccione una carpeta de salida.")
+                elif target_folder and os.path.exists(target_folder):
+                    final_output = target_output
                         
                     count, msg = worker_convertir_masivo(target_folder, mass_conv_type_code, output_folder=final_output, sep=mass_sep)
                     if count > 0:

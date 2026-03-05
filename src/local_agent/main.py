@@ -9,6 +9,79 @@ import requests
 import base64
 import traceback
 import multiprocessing
+import tkinter as tk
+from tkinter import scrolledtext, messagebox
+
+# --- GUI Class ---
+class AgentGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("CDO Agente Local")
+        self.root.geometry("600x400")
+        
+        # Status Frame
+        status_frame = tk.Frame(root)
+        status_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        tk.Label(status_frame, text="Estado:").pack(side=tk.LEFT)
+        self.status_label = tk.Label(status_frame, text="Iniciando...", fg="blue", font=("Arial", 10, "bold"))
+        self.status_label.pack(side=tk.LEFT, padx=5)
+        
+        # Log Area
+        tk.Label(root, text="Registros (Logs):").pack(anchor=tk.W, padx=10)
+        self.log_area = scrolledtext.ScrolledText(root, state='disabled', height=15)
+        self.log_area.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Buttons
+        btn_frame = tk.Frame(root)
+        btn_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        tk.Button(btn_frame, text="Ocultar Ventana", command=self.minimize_to_tray).pack(side=tk.LEFT)
+        tk.Button(btn_frame, text="Abrir Logs", command=self.open_logs).pack(side=tk.LEFT, padx=10)
+        tk.Button(btn_frame, text="Salir", command=self.on_closing, bg="#ffcccc").pack(side=tk.RIGHT)
+
+        self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray) # Default close minimizes
+        
+        # Redirect logging to GUI
+        self.setup_logging()
+        
+    def setup_logging(self):
+        class TextHandler(logging.Handler):
+            def __init__(self, text_widget):
+                logging.Handler.__init__(self)
+                self.text_widget = text_widget
+
+            def emit(self, record):
+                msg = self.format(record)
+                def append():
+                    self.text_widget.configure(state='normal')
+                    self.text_widget.insert(tk.END, msg + '\n')
+                    self.text_widget.see(tk.END)
+                    self.text_widget.configure(state='disabled')
+                # Schedule update on main thread
+                self.text_widget.after(0, append)
+
+        text_handler = TextHandler(self.log_area)
+        text_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        logging.getLogger().addHandler(text_handler)
+        
+    def set_status(self, text, color="black"):
+        self.status_label.config(text=text, fg=color)
+        
+    def minimize_to_tray(self):
+        self.root.iconify() # Just minimize for now, real tray needs pystray
+        
+    def open_logs(self):
+        try:
+            log_dir = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser("~")), 'CDO_Organizer')
+            os.startfile(log_dir)
+        except:
+            pass
+
+    def on_closing(self):
+        if messagebox.askokcancel("Salir", "¿Desea detener el Agente Local?"):
+            self.root.destroy()
+            os._exit(0) # Force exit
 
 # --- CRITICAL: Early Error Logging Setup ---
 # Setup a debug log in the same directory as the executable/script
@@ -47,7 +120,6 @@ sys.stdout = NullWriter()
 sys.stderr = NullWriter()
 
 import pandas as pd
-import tkinter as tk
 from tkinter import filedialog
 try:
     from fastapi import FastAPI, HTTPException
@@ -97,22 +169,27 @@ except ImportError:
 
 # --- Polling Client for Remote Mode ---
 class PollingClient(threading.Thread):
-    def __init__(self, server_url, username, password):
+    def __init__(self, server_url, username, password, gui=None):
         super().__init__()
         self.server_url = server_url
         self.username = username
         self.password = password
+        self.gui = gui
         self.running = True
         self.daemon = True
         self.drivers = {} # Store active validators/drivers: {'ovida': instance}
 
     def run(self):
-        logger.info(f"Starting Polling Client to {self.server_url} as {self.username}")
+        msg = f"Iniciando conexión a {self.server_url}..."
+        logger.info(msg)
+        if self.gui: self.gui.set_status(msg, "orange")
+        
         while self.running:
             try:
                 self.poll()
             except Exception as e:
-                logger.error(f"Polling error: {e}")
+                logger.error(f"Error de polling: {e}")
+                if self.gui: self.gui.set_status("Error de Conexión", "red")
             time.sleep(2)
 
     def poll(self):
@@ -123,13 +200,16 @@ class PollingClient(threading.Thread):
                 timeout=5
             )
             if resp.status_code == 200:
+                if self.gui: self.gui.set_status("Conectado (Esperando tareas)", "green")
                 data = resp.json()
                 tasks = data.get("tasks", [])
                 for task in tasks:
                     self.execute_task(task)
             else:
-                logger.warning(f"Poll failed: {resp.status_code}")
+                logger.warning(f"Poll fallido: {resp.status_code}")
+                if self.gui: self.gui.set_status(f"Error HTTP {resp.status_code}", "red")
         except requests.exceptions.ConnectionError:
+            if self.gui: self.gui.set_status("Reconectando...", "orange")
             pass # Silent retry
 
     def execute_task(self, task):
@@ -309,6 +389,10 @@ import multiprocessing
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     
+    # --- Start GUI ---
+    root = tk.Tk()
+    gui = AgentGUI(root)
+    
     logger.info(f"Agent starting. Config file: {config_file}")
     
     try:
@@ -346,7 +430,8 @@ if __name__ == "__main__":
                 
                 if server_url and username and password:
                     try:
-                        polling_client = PollingClient(server_url, username, password)
+                        # Pass GUI reference to client
+                        polling_client = PollingClient(server_url, username, password, gui=gui)
                         polling_client.start()
                     except Exception as pe:
                         logger.error(f"Failed to start PollingClient: {pe}")
@@ -357,22 +442,23 @@ if __name__ == "__main__":
         else:
             logger.warning(f"Config file not found at {config_file}. Run setup or create file manually.")
                 
-        # Keep the main thread alive if PollingClient fails but Uvicorn is running
-        try:
-            logger.info("Starting Uvicorn Server on 127.0.0.1:8989")
-            # Disable Uvicorn access log to prevent console write errors
-            config = uvicorn.Config(app, host="127.0.0.1", port=8989, log_level="info")
-            server = uvicorn.Server(config)
-            server.run()
-        except Exception as ue:
-            logger.critical(f"Uvicorn server crashed: {ue}")
-            logger.critical(traceback.format_exc())
+        # Start Uvicorn in a separate thread to not block GUI
+        def start_uvicorn():
+            try:
+                logger.info("Starting Uvicorn Server on 127.0.0.1:8989")
+                config = uvicorn.Config(app, host="127.0.0.1", port=8989, log_level="info")
+                server = uvicorn.Server(config)
+                server.run()
+            except Exception as ue:
+                logger.critical(f"Uvicorn server crashed: {ue}")
+                logger.critical(traceback.format_exc())
+
+        uvicorn_thread = threading.Thread(target=start_uvicorn, daemon=True)
+        uvicorn_thread.start()
             
     except Exception as global_e:
         logging.critical(f"CRITICAL GLOBAL ERROR: {global_e}")
         logging.critical(traceback.format_exc())
         
-    # --- FAILSAFE KEEP ALIVE ---
-    # If everything fails, keep process alive for 5 minutes so user can see it running/check logs
-    logger.info("Entering Failsafe Keep-Alive Loop (5 min)")
-    time.sleep(300)
+    # --- START MAIN LOOP ---
+    root.mainloop()
