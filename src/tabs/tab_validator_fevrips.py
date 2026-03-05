@@ -139,14 +139,10 @@ def dialog_generar_cuv():
     col_mode, col_url = st.columns([0.3, 0.7])
     
     with col_mode:
-        conn_mode = st.radio("Modo de Conexión:", ["Local (Nativo)", "Docker Integrado", "Docker AWS (Interno)", "Servidor Remoto"], key="fevrips_mode", help="Seleccione 'Local' si ejecuta FEVRIPS en su máquina (Docker o Nativo). 'Docker AWS' para despliegue en nube.")
+        conn_mode = st.radio("Modo de Conexión:", ["Docker Integrado", "Docker AWS (Interno)"], key="fevrips_mode", help="Seleccione el modo Docker para validación FEVRIPS.")
         
         # Checkbox para activar modo "Servicio Web" (oculta UI nativa)
-        if conn_mode == "Local (Nativo)":
-            if st.checkbox("Modo Servicio Web (Ocultar App Nativa)", value=True):
-                st.session_state.is_web_service_mode = True
-            else:
-                st.session_state.is_web_service_mode = False
+        # if conn_mode == "Local (Nativo)": ... Removed
     
     api_url = ""
     if conn_mode == "Servidor Remoto":

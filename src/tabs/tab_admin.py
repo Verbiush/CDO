@@ -200,8 +200,11 @@ def render(*args, **kwargs):
                 df_pending = df_filtered[pending_mask]
                 
                 # Radicado: radicado is not null and not empty
-                radicado_mask = df_filtered['radicado'].notna() & (df_filtered['radicado'] != '')
-                df_rad = df_filtered[radicado_mask]
+                if 'radicado' in df_filtered.columns:
+                    radicado_mask = df_filtered['radicado'].notna() & (df_filtered['radicado'] != '')
+                    df_rad = df_filtered[radicado_mask]
+                else:
+                    df_rad = pd.DataFrame(columns=df_filtered.columns)
                 
                 st.divider()
                 

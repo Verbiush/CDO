@@ -229,6 +229,12 @@ def obtener_driver(create_if_missing=True):
             service = Service(driver_path)
             options = webdriver.ChromeOptions()
             options.add_argument("--start-maximized")
+            # Headless options for AWS/Server environments
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--window-size=1920,1080")
+            
             # options.add_argument("--detach=true") 
             new_driver = webdriver.Chrome(service=service, options=options)
             _set_driver_instance(new_driver)
