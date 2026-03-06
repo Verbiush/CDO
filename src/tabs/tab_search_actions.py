@@ -593,8 +593,12 @@ def worker_zip_lista(file_list, target_zip_path, silent_mode=False):
         if not silent_mode:
             progress_bar.progress(1.0, text="Finalizado.")
             st.success(msg)
-            time.sleep(1.5)
-            st.rerun()
+            
+            # Offer download
+            render_download_button(target_zip_path, "dl_zip_list", "📦 Descargar ZIP Generado")
+            
+            # time.sleep(1.5)
+            # st.rerun()
         return msg
     except Exception as e:
         msg = f"Error creando ZIP: {e}"
@@ -636,8 +640,12 @@ def worker_zip_carpetas_individual(folder_list, target_folder=None, silent_mode=
     if not silent_mode:
         progress_bar.progress(1.0, text="Finalizado.")
         st.success(msg)
-        time.sleep(1.5)
-        st.rerun()
+        
+        if target_folder and os.path.exists(target_folder):
+             render_download_button(target_folder, "dl_zip_ind", "📦 Descargar Carpetas (ZIP)")
+             
+        # time.sleep(1.5)
+        # st.rerun()
     return msg
 
 def run_zip_carpetas_ind_task(folder_list, target_folder):
@@ -875,7 +883,11 @@ def dialogo_confirmar_eliminar():
             st.text(f"... y {len(results)-50} más.")
 
     # Opción de forzar borrado permanente si falla la papelera
-    force_delete = st.checkbox("Forzar borrado permanente si falla la papelera (Irreversible)", value=False, help="Si la papelera no está disponible (ej. unidades de red), los archivos se borrarán definitivamente.")
+    # En modo Web (no nativo), por defecto sugerimos borrado permanente ya que la papelera del servidor no es accesible
+    is_web_mode = not st.session_state.get("force_native_mode", True)
+    default_force = is_web_mode
+    
+    force_delete = st.checkbox("Forzar borrado permanente (Irreversible)", value=default_force, help="Elimina los archivos definitivamente sin pasar por la papelera. Recomendado para modo Web/Servidor.")
 
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
@@ -890,24 +902,34 @@ def dialogo_confirmar_eliminar():
                 try:
                     if os.path.exists(path):
                         safe_path = os.path.normpath(path)
-                        try:
-                            if send2trash is not None:
-                                send2trash(safe_path)
-                                count_del += 1
-                            else:
-                                raise ImportError("send2trash no disponible")
-                        except Exception as e_trash:
-                            if force_delete:
-                                # Fallback to permanent delete
-                                if os.path.isdir(safe_path):
-                                    shutil.rmtree(safe_path)
+                        
+                        # Si force_delete está activo, vamos directo a borrar
+                        if force_delete:
+                             if os.path.isdir(safe_path):
+                                 shutil.rmtree(safe_path)
+                             else:
+                                 os.remove(safe_path)
+                             count_del += 1
+                        else:
+                            # Intentar papelera
+                            try:
+                                if send2trash is not None:
+                                    send2trash(safe_path)
+                                    count_del += 1
                                 else:
-                                    os.remove(safe_path)
-                                count_del += 1
-                                log(f"Borrado permanente (fallback): {safe_path}")
-                            else:
-                                log(f"Error enviando a papelera {path}: {e_trash}")
-                                st.error(f"No se pudo enviar a papelera: {os.path.basename(path)}. Active 'Forzar borrado' si desea eliminarlo permanentemente.")
+                                    raise ImportError("send2trash no disponible")
+                            except Exception as e_trash:
+                                # Fallback automático si falla la papelera en modo web
+                                if is_web_mode:
+                                     if os.path.isdir(safe_path):
+                                         shutil.rmtree(safe_path)
+                                     else:
+                                         os.remove(safe_path)
+                                     count_del += 1
+                                     log(f"Papelera falló, borrado permanente (Web Mode): {safe_path}")
+                                else:
+                                    log(f"Error enviando a papelera {path}: {e_trash}")
+                                    st.error(f"No se pudo enviar a papelera: {os.path.basename(path)}. Active 'Forzar borrado' si desea eliminarlo permanentemente.")
                 except Exception as e:
                     log(f"Error eliminando {path}: {e}")
             

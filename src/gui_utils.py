@@ -114,6 +114,22 @@ def extract_uploaded_zip(uploaded_file):
     session_id = getattr(st.session_state, "session_id", "default_session")
     timestamp = int(time.time())
     
+    # Cleanup old temp files (older than 1 hour) to prevent "No space left on device"
+    try:
+        base_temp = os.path.join(os.getcwd(), "temp_uploads")
+        if os.path.exists(base_temp):
+            for item in os.listdir(base_temp):
+                item_path = os.path.join(base_temp, item)
+                # If item is older than 1 hour (3600 seconds)
+                if os.path.getmtime(item_path) < time.time() - 3600:
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path, ignore_errors=True)
+                    else:
+                        os.remove(item_path)
+    except Exception as e:
+        # Just log error, don't stop execution
+        print(f"Warning: Cleanup failed: {e}")
+
     # Safe filename
     safe_name = "".join([c for c in uploaded_file.name if c.isalnum() or c in ('-', '_', '.')])
     extract_dir = os.path.join(os.getcwd(), "temp_uploads", f"{timestamp}_{safe_name}")
@@ -131,8 +147,9 @@ def extract_uploaded_zip(uploaded_file):
             z.extractall(extract_dir)
             
         # Check if the zip contains a single top-level folder
-        # If so, return that folder instead of the wrapper
-        items = os.listdir(extract_dir)
+        # Filter out system files like __MACOSX, .DS_Store, etc.
+        items = [i for i in os.listdir(extract_dir) if i not in ['__MACOSX', '.DS_Store', 'Thumbs.db'] and not i.startswith('._')]
+        
         if len(items) == 1 and os.path.isdir(os.path.join(extract_dir, items[0])):
             return os.path.join(extract_dir, items[0])
             
@@ -493,38 +510,44 @@ def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
                 except Exception as e:
                     st.error(f"Error al leer archivo: {e}")
             else:
-                # ZIP logic for folders
+                # ZIP logic for folders (In-Memory for Web Mode)
                 gen_key = f"gen_zip_{key}"
                 
-                if st.button("Preparar Descarga (ZIP)", key=gen_key):
-                    with st.spinner("Comprimiendo archivos..."):
-                        try:
-                            # Create zip in temp
-                            timestamp = int(time.time())
-                            zip_name = f"download_{timestamp}" # make_archive adds .zip
-
-                        
-                        # Ensure temp dir exists
-                        temp_dl_dir = os.path.join(os.getcwd(), "temp_downloads")
-                        os.makedirs(temp_dl_dir, exist_ok=True)
-                        
-                        zip_base_path = os.path.join(temp_dl_dir, zip_name)
-                        
-                        zip_path = shutil.make_archive(zip_base_path, 'zip', folder_path)
-                        
-                        st.session_state[f"ready_zip_{key}"] = zip_path
-                        st.success("✅ Archivo listo.")
-                    except Exception as e:
-                        st.error(f"Error al comprimir: {e}")
+                # Check folder size to decide between Memory or Disk?
+                # For AWS/Cloud, Memory is preferred if small, but Disk (Temp) is safer for large.
+                # User requested "no se guarden los archivos en el servidor".
+                # We'll use Memory (BytesIO) to avoid persistent disk usage.
                 
-            # If ready, show download
-            ready_zip = st.session_state.get(f"ready_zip_{key}")
-            if ready_zip and os.path.exists(ready_zip):
-                with open(ready_zip, "rb") as fp:
+                if st.button("Preparar Descarga (ZIP)", key=gen_key):
+                    with st.spinner("Comprimiendo en memoria..."):
+                        try:
+                            import io
+                            mem_zip = io.BytesIO()
+                            
+                            with zipfile.ZipFile(mem_zip, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+                                root_len = len(folder_path) + 1
+                                for root, dirs, files in os.walk(folder_path):
+                                    for file in files:
+                                        file_path = os.path.join(root, file)
+                                        archive_name = file_path[root_len:]
+                                        zf.write(file_path, archive_name)
+                            
+                            st.session_state[f"ready_zip_data_{key}"] = mem_zip.getvalue()
+                            st.session_state[f"ready_zip_name_{key}"] = f"download_{int(time.time())}.zip"
+                            st.success("✅ Archivo listo para descargar (En Memoria).")
+                            
+                        except Exception as e:
+                            st.error(f"Error al comprimir: {e}")
+                
+                # If ready, show download
+                zip_data = st.session_state.get(f"ready_zip_data_{key}")
+                zip_name = st.session_state.get(f"ready_zip_name_{key}")
+                
+                if zip_data:
                     st.download_button(
                         label=label,
-                        data=fp,
-                        file_name=os.path.basename(ready_zip),
+                        data=zip_data,
+                        file_name=zip_name,
                         mime="application/zip",
                         key=f"dl_btn_{key}"
                     )
