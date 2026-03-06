@@ -6,6 +6,14 @@ import threading
 import sys
 import os
 
+try:
+    from src.gui_utils import render_path_selector
+except ImportError:
+    try:
+        from gui_utils import render_path_selector
+    except ImportError:
+        render_path_selector = None
+
 def render(tab_container):
     """
     Renderiza el contenido de la pestaña 'Bot Zeus Salud'.
