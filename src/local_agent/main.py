@@ -68,7 +68,7 @@ def load_config():
     return None
 
 def save_config(url, username, password):
-    config = {"url": url, "username": username, "password": password}
+    config = {"server_url": url, "username": username, "password": password}
     config_path = get_config_path()
     
     # Ensure directory exists if saving to AppData
@@ -406,10 +406,24 @@ def main():
         input("Presione Enter para cerrar...")
         return
 
-    url = config["url"]
-    auth = (config["username"], config["password"])
+    url = config.get("server_url", config.get("url"))
+    if not url:
+        print("Error: Configuración incompleta (URL no encontrada).")
+        # Try setup again? Or exit?
+        config = setup()
+        if config:
+            url = config.get("server_url", config.get("url"))
+        
+        if not url:
+            print("No se pudo obtener la URL del servidor.")
+            input("Presione Enter para cerrar...")
+            return
+
+    username = config.get("username")
+    password = config.get("password")
+    auth = (username, password)
     
-    print(f"Agente conectado a {url} como {config['username']}")
+    print(f"Agente conectado a {url} como {username}")
     print("Esperando comandos... (Presione Ctrl+C para salir)")
     
     error_count = 0
