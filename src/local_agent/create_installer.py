@@ -74,7 +74,7 @@ def build_installer():
     
     cmd_agent = [
         sys.executable, "-m", "PyInstaller",
-        "--noconsole",
+        "--console", # Show console for debugging
         "--onefile",
         "--name=CDO_Agente",
         "--clean",
