@@ -229,11 +229,22 @@ def obtener_driver(create_if_missing=True):
             service = Service(driver_path)
             options = webdriver.ChromeOptions()
             options.add_argument("--start-maximized")
-            # Headless options for AWS/Server environments
-            options.add_argument("--headless=new")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--window-size=1920,1080")
+            
+            # Check native mode from session state
+            is_native = True
+            if st is not None and hasattr(st, 'session_state'):
+                is_native = st.session_state.get("force_native_mode", True)
+            
+            if not is_native:
+                # Headless options for AWS/Server environments
+                options.add_argument("--headless=new")
+                options.add_argument("--no-sandbox")
+                options.add_argument("--disable-dev-shm-usage")
+                options.add_argument("--window-size=1920,1080")
+            else:
+                # Native mode options
+                # Ensure browser stays open if script finishes (though streamlit keeps running)
+                options.add_experimental_option("detach", True)
             
             # Configure download directory
             if st is not None and hasattr(st, 'session_state'):
