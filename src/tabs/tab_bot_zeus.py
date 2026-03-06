@@ -69,14 +69,72 @@ def render(tab_container):
     
 
         with col_bot1:
-            st.subheader("1. Conexión")
+            st.subheader("1. Conexión y Configuración")
+            
+            # Configuración de Carpeta de Descargas
+            is_native = st.session_state.get("force_native_mode", True)
+            if is_native:
+                dl_path = render_path_selector(
+                    label="Carpeta de Descargas (Bot)",
+                    key="bot_dl_path_sel",
+                    default_path=os.path.join(os.getcwd(), "downloads")
+                )
+                st.session_state.bot_download_dir = dl_path
+            else:
+                # Web Mode: Use temp folder
+                if "bot_download_dir" not in st.session_state or not st.session_state.bot_download_dir.startswith(os.path.join(os.getcwd(), "temp_downloads")):
+                    timestamp = int(time.time())
+                    temp_dl = os.path.join(os.getcwd(), "temp_downloads", f"bot_session_{timestamp}")
+                    os.makedirs(temp_dl, exist_ok=True)
+                    st.session_state.bot_download_dir = temp_dl
+                
+                st.info(f"📂 Descargas en entorno temporal: {st.session_state.bot_download_dir}")
+
             if st.button("🚀 Abrir Navegador / Conectar", use_container_width=True):
                 success, msg = bot_zeus.abrir_navegador_inicial()
                 if success:
                     st.success(msg)
                 else:
                     st.error(msg)
-        
+            
+            # Botón para descargar resultados (especialmente útil en Web Mode)
+            if "bot_download_dir" in st.session_state and os.path.exists(st.session_state.bot_download_dir):
+                files_in_dir = os.listdir(st.session_state.bot_download_dir)
+                if files_in_dir:
+                    st.markdown("---")
+                    st.caption(f"Archivos en carpeta de descarga: {len(files_in_dir)}")
+                    
+                    if not is_native:
+                        # Zip and Download for Web
+                        import shutil
+                        
+                        if st.button("📦 Preparar ZIP de Descargas", key="btn_zip_bot_dl"):
+                            zip_buffer = io.BytesIO()
+                            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                                for root, dirs, files in os.walk(st.session_state.bot_download_dir):
+                                    for file in files:
+                                        abs_path = os.path.join(root, file)
+                                        rel_path = os.path.relpath(abs_path, st.session_state.bot_download_dir)
+                                        zf.write(abs_path, rel_path)
+                            
+                            zip_buffer.seek(0)
+                            st.download_button(
+                                label="📥 Descargar ZIP",
+                                data=zip_buffer,
+                                file_name=f"Bot_Descargas_{int(time.time())}.zip",
+                                mime="application/zip"
+                            )
+                            
+                            # Optional cleanup logic could go here
+                    else:
+                        # Native: Open folder
+                        if st.button("📂 Abrir Carpeta", key="btn_open_bot_dl"):
+                            import subprocess
+                            try:
+                                os.startfile(st.session_state.bot_download_dir)
+                            except:
+                                subprocess.Popen(["explorer", st.session_state.bot_download_dir])
+
             st.divider()
         
             st.subheader("2. Carga de Datos")

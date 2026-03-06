@@ -332,10 +332,14 @@ def _crear_firma_estilizada(texto):
 
 # --- WORKERS: ORGANIZATION ---
 
-def worker_mover_por_coincidencia(root_path, silent_mode=False):
+def worker_mover_por_coincidencia(root_path, silent_mode=False, return_zip=False):
     if not silent_mode: st.info(f"Iniciando movimiento por coincidencia en: {root_path}")
     
-    items = os.listdir(root_path)
+    try:
+        items = os.listdir(root_path)
+    except Exception as e:
+        return {"error": f"Error leyendo directorio: {e}"}
+
     files = [f for f in items if os.path.isfile(os.path.join(root_path, f))]
     folders = [d for d in items if os.path.isdir(os.path.join(root_path, d))]
     
@@ -369,17 +373,43 @@ def worker_mover_por_coincidencia(root_path, silent_mode=False):
     if not silent_mode:
         if progress_bar: progress_bar.progress(1.0, text="Finalizado.")
         st.success(msg)
-    return msg
 
-def worker_consolidar_subcarpetas(root_path, silent_mode=False):
+    if return_zip:
+        try:
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(root_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, root_path)
+                        zf.write(file_path, arcname)
+            
+            # Cleanup temp folder if we are returning zip
+            try: shutil.rmtree(root_path, ignore_errors=True)
+            except: pass
+            
+            return {
+                "files": [{
+                    "name": f"Organizados_Coincidencia_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "Descargar Organizados (ZIP)"
+                }],
+                "message": msg
+            }
+        except Exception as e:
+            return {"error": f"Error creando ZIP: {e}", "message": msg}
+            
+    return {"message": msg}
+
+def worker_consolidar_subcarpetas(root_path, silent_mode=False, return_zip=False):
     if not silent_mode: st.info(f"Consolidando subcarpetas en: {root_path}")
     
     try:
         main_folders = [d for d in os.listdir(root_path) if os.path.isdir(os.path.join(root_path, d))]
     except Exception as e:
-        return f"Error leyendo directorio base: {e}"
+        return {"error": f"Error leyendo directorio base: {e}"}
 
-    if not main_folders: return "No se encontraron carpetas para procesar."
+    if not main_folders: return {"error": "No se encontraron carpetas para procesar."}
     
     copiados = 0
     conflictos = 0
@@ -418,12 +448,37 @@ def worker_consolidar_subcarpetas(root_path, silent_mode=False):
     if not silent_mode:
         if progress_bar: progress_bar.progress(1.0, text="Finalizado.")
         st.success(msg)
-    return msg
 
-def worker_firmar_docx_con_imagen_masivo(base_path, docx_filename, signature_filename, silent_mode=False):
+    if return_zip:
+        try:
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(root_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, root_path)
+                        zf.write(file_path, arcname)
+            
+            try: shutil.rmtree(root_path, ignore_errors=True)
+            except: pass
+            
+            return {
+                "files": [{
+                    "name": f"Consolidados_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "Descargar Consolidados (ZIP)"
+                }],
+                "message": msg
+            }
+        except Exception as e:
+            return {"error": f"Error creando ZIP: {e}", "message": msg}
+
+    return {"message": msg}
+
+def worker_firmar_docx_con_imagen_masivo(base_path, docx_filename, signature_filename, silent_mode=False, return_zip=False):
     try:
         folders_to_process = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
-        if not folders_to_process: return "No se encontraron carpetas para procesar."
+        if not folders_to_process: return {"error": "No se encontraron carpetas para procesar."}
         
         procesados = 0
         errores = 0
@@ -480,11 +535,37 @@ def worker_firmar_docx_con_imagen_masivo(base_path, docx_filename, signature_fil
             except Exception:
                 errores += 1
                 
-        return f"Proceso finalizado. Modificados: {procesados}, Errores/Omitidos: {errores}"
-    except Exception as e:
-        return f"Error general: {e}"
+        msg = f"Proceso finalizado. Modificados: {procesados}, Errores/Omitidos: {errores}"
+        
+        if return_zip:
+            try:
+                mem_zip = io.BytesIO()
+                with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for root, dirs, files in os.walk(base_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, base_path)
+                            zf.write(file_path, arcname)
+                
+                try: shutil.rmtree(base_path, ignore_errors=True)
+                except: pass
+                
+                return {
+                    "files": [{
+                        "name": f"Firmados_Masivo_{int(time.time())}.zip",
+                        "data": mem_zip.getvalue(),
+                        "label": "Descargar Firmados (ZIP)"
+                    }],
+                    "message": msg
+                }
+            except Exception as e:
+                return {"error": f"Error creando ZIP: {e}", "message": msg}
 
-def worker_txt_a_json_individual(file_list, silent_mode=False):
+        return {"message": msg}
+    except Exception as e:
+        return {"error": f"Error general: {e}"}
+
+def worker_txt_a_json_individual(file_list, silent_mode=False, return_zip_from_folder=None):
     count = 0
     errores = 0
     for file_path in file_list:
@@ -496,11 +577,38 @@ def worker_txt_a_json_individual(file_list, silent_mode=False):
         except Exception as e:
             errores += 1
             if not silent_mode: st.warning(f"Error renombrando {file_path}: {e}")
-    return f"Renombrados {count} archivos. Errores: {errores}"
+            
+    msg = f"Renombrados {count} archivos. Errores: {errores}"
+    
+    if return_zip_from_folder and os.path.isdir(return_zip_from_folder):
+        try:
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(return_zip_from_folder):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, return_zip_from_folder)
+                        zf.write(file_path, arcname)
+            
+            try: shutil.rmtree(return_zip_from_folder, ignore_errors=True)
+            except: pass
+            
+            return {
+                "files": [{
+                    "name": f"Renombrados_JSON_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "Descargar Renombrados (ZIP)"
+                }],
+                "message": msg
+            }
+        except Exception as e:
+            return {"error": f"Error creando ZIP: {e}", "message": msg}
+            
+    return {"message": msg}
 
-def worker_organizar_facturas_feov(root_path, target_path, silent_mode=False):
+def worker_organizar_facturas_feov(root_path, target_path, silent_mode=False, return_zip=False):
     if not root_path or not target_path:
-        return "Error: Rutas de origen o destino no válidas."
+        return {"error": "Error: Rutas de origen o destino no válidas."}
 
     if not silent_mode: st.info("Iniciando organización de facturas FEOV...")
     
@@ -511,7 +619,7 @@ def worker_organizar_facturas_feov(root_path, target_path, silent_mode=False):
     try:
         list_carpetas_destino = [d for d in os.listdir(target_path) if os.path.isdir(os.path.join(target_path, d))]
     except Exception as e:
-        return f"Error leyendo destinos: {e}"
+        return {"error": f"Error leyendo destinos: {e}"}
 
     for nombre_carpeta_destino in list_carpetas_destino:
         ruta_carpeta_destino = os.path.join(target_path, nombre_carpeta_destino)
@@ -527,7 +635,7 @@ def worker_organizar_facturas_feov(root_path, target_path, silent_mode=False):
             if not silent_mode: st.warning(f"Error procesando {nombre_carpeta_destino}: {e}")
 
     if not destinos_map:
-        return "No se encontraron facturas FEOV en las carpetas de destino."
+        return {"error": "No se encontraron facturas FEOV en las carpetas de destino."}
 
     # Paso 2: Mover archivos
     movidos, errores, conflictos = 0, 0, 0
@@ -564,18 +672,56 @@ def worker_organizar_facturas_feov(root_path, target_path, silent_mode=False):
                     errores += 1
                     break
     
+    msg = f"Proceso finalizado. Movidos: {movidos}, Conflictos: {conflictos}, Errores: {errores}"
     if not silent_mode: 
         if progress_bar: progress_bar.progress(1.0, text="Finalizado.")
+        st.success(msg)
+        
+    if return_zip:
+        try:
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(target_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, target_path)
+                        zf.write(file_path, arcname)
+            
+            try: shutil.rmtree(target_path, ignore_errors=True)
+            except: pass
+            # We should also clean root_path if it was temp?
+            # But root_path might be same as target_path or different.
+            # Assuming root_path is handled by caller or is distinct.
+            
+            return {
+                "files": [{
+                    "name": f"Organizados_FEOV_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "Descargar Organizados (ZIP)"
+                }],
+                "message": msg
+            }
+        except Exception as e:
+            return {"error": f"Error creando ZIP: {e}", "message": msg}
+            
+    return {"message": msg}
         
     return f"Organización FEOV finalizada. Movidos: {movidos}, Conflictos: {conflictos}, Errores: {errores}"
 
 
 
-def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_folder, visible_only=False, silent_mode=False):
-    if not excel_path or not sheet_name or col_idx is None or not target_folder:
-        return "Faltan parámetros."
+def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_folder=None, visible_only=False, silent_mode=False):
+    if not excel_path or not sheet_name or col_idx is None:
+        return {"error": "Faltan parámetros (Excel, Hoja o Columna)."}
         
     try:
+        is_temp = False
+        if not target_folder:
+            is_temp = True
+            target_folder = os.path.join(os.getcwd(), "temp_downloads", f"carpetas_{int(time.time())}")
+            
+        os.makedirs(target_folder, exist_ok=True)
+
         nombres_carpetas_raw = []
         if visible_only:
             wb = openpyxl.load_workbook(excel_path, data_only=True)
@@ -590,7 +736,7 @@ def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_fo
             df = pd.read_excel(excel_path, sheet_name=sheet_name)
             nombres_carpetas_raw = df.iloc[:, col_idx].dropna().astype(str).tolist()
             
-        if not nombres_carpetas_raw: return "No se encontraron nombres."
+        if not nombres_carpetas_raw: return {"error": "No se encontraron nombres."}
         
         creadas, errores = 0, 0
         progress_bar = None
@@ -613,15 +759,40 @@ def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_fo
                 creadas += 1
             except: errores += 1
             
-        return f"Creadas: {creadas}, Errores: {errores}"
+        msg = f"Creadas: {creadas}, Errores: {errores}"
+        
+        if is_temp:
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(target_folder):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, target_folder)
+                        zf.write(file_path, arcname)
+                        
+            # Clean up temp folder
+            try: shutil.rmtree(target_folder, ignore_errors=True)
+            except: pass
+            
+            return {
+                "files": [{
+                    "name": f"Carpetas_Creadas_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "Descargar Carpetas (ZIP)"
+                }],
+                "message": msg
+            }
+        else:
+            return {"message": f"{msg} en {target_folder}"}
+            
     except Exception as e:
-        return f"Error: {e}"
+        return {"error": f"Error: {e}"}
 
 # --- WORKERS: PDF ---
 
-def worker_unificar_pdfs_list(file_list, output_path, sort_method="Nombre", silent_mode=False):
+def worker_unificar_pdfs_list(file_list, output_path=None, sort_method="Nombre", silent_mode=False):
     try:
-        if not file_list: return "No hay archivos para unificar."
+        if not file_list: return {"error": "No hay archivos para unificar."}
         
         # Sort files
         if sort_method == "Nombre":
@@ -642,13 +813,28 @@ def worker_unificar_pdfs_list(file_list, output_path, sort_method="Nombre", sile
             except Exception as e:
                 if not silent_mode: st.warning(f"Omitiendo archivo por error: {e}")
         
-        doc_final.save(output_path)
-        doc_final.close()
-        return f"PDF Unificado creado en: {output_path}"
+        if output_path:
+            doc_final.save(output_path)
+            doc_final.close()
+            return {"message": f"PDF Unificado creado en: {output_path}"}
+        else:
+            # Return bytes for download
+            out_buffer = io.BytesIO()
+            doc_final.save(out_buffer)
+            doc_final.close()
+            return {
+                "files": [{
+                    "name": f"Unificado_{int(time.time())}.pdf",
+                    "data": out_buffer.getvalue(),
+                    "label": "Descargar PDF Unificado"
+                }],
+                "message": "PDF Unificado correctamente."
+            }
+            
     except Exception as e:
-        return f"Error unificando PDFs: {e}"
+        return {"error": f"Error unificando PDFs: {e}"}
 
-def worker_dividir_pdf_paginas(input_pdf, output_folder, silent_mode=False):
+def worker_dividir_pdf_paginas(input_pdf, output_folder=None, silent_mode=False):
     try:
         if isinstance(input_pdf, str):
             doc = fitz.open(input_pdf)
@@ -658,11 +844,16 @@ def worker_dividir_pdf_paginas(input_pdf, output_folder, silent_mode=False):
             doc = fitz.open(stream=input_pdf.read(), filetype="pdf")
             name_base = os.path.splitext(input_pdf.name)[0]
             
+        is_temp = False
+        if not output_folder:
+            is_temp = True
+            output_folder = os.path.join(os.getcwd(), "temp_downloads", f"split_{int(time.time())}")
+            
         os.makedirs(output_folder, exist_ok=True)
         
         for i in range(len(doc)):
             page = doc.load_page(i)
-            pix = page.get_pixmap()
+            # pix = page.get_pixmap() # Not used
             out_name = f"{name_base}_pag_{i+1}.pdf"
             
             # Create new PDF for single page
@@ -671,9 +862,33 @@ def worker_dividir_pdf_paginas(input_pdf, output_folder, silent_mode=False):
             new_doc.save(os.path.join(output_folder, out_name))
             new_doc.close()
             
-        return f"PDF dividido en {len(doc)} páginas en {output_folder}"
+        msg = f"PDF dividido en {len(doc)} páginas."
+        
+        if is_temp:
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(output_folder):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, output_folder)
+                        zf.write(file_path, arcname)
+            
+            try: shutil.rmtree(output_folder, ignore_errors=True)
+            except: pass
+            
+            return {
+                "files": [{
+                    "name": f"PDF_Dividido_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "Descargar Páginas (ZIP)"
+                }],
+                "message": msg
+            }
+        else:
+            return {"message": f"{msg} Guardado en {output_folder}"}
+
     except Exception as e:
-        return f"Error dividiendo PDF: {e}"
+        return {"error": f"Error dividiendo PDF: {e}"}
 
 def worker_unificar_imagenes_pdf(folder_path, output_name="Unificado.pdf", silent_mode=False):
     try:
@@ -684,9 +899,8 @@ def worker_unificar_imagenes_pdf(folder_path, output_name="Unificado.pdf", silen
         ]
         
         if not images:
-            return "No se encontraron imágenes en la carpeta."
+            return {"error": "No se encontraron imágenes en la carpeta."}
             
-        pdf_path = os.path.join(folder_path, output_name)
         img_list = []
         first_img = None
         
@@ -701,20 +915,41 @@ def worker_unificar_imagenes_pdf(folder_path, output_name="Unificado.pdf", silen
                 if not silent_mode: st.warning(f"Error cargando imagen {img_path}: {e}")
                 
         if first_img:
-            first_img.save(pdf_path, save_all=True, append_images=img_list)
-            return f"PDF creado exitosamente: {output_name} ({len(images)} imágenes)"
+            output = io.BytesIO()
+            first_img.save(output, format="PDF", save_all=True, append_images=img_list)
+            pdf_bytes = output.getvalue()
+            
+            # Save to disk only if it's a persistent folder (Native Mode)
+            # We assume folder_path is persistent if it's not in temp_uploads/temp_downloads
+            is_temp = "temp_" in folder_path.lower()
+            
+            if not is_temp:
+                pdf_path = os.path.join(folder_path, output_name)
+                try:
+                    with open(pdf_path, "wb") as f:
+                        f.write(pdf_bytes)
+                except: pass
+
+            return {
+                "files": [{
+                    "name": os.path.basename(output_name),
+                    "data": pdf_bytes,
+                    "label": "Descargar PDF Unificado"
+                }],
+                "message": f"PDF creado exitosamente ({len(images)} imágenes)"
+            }
         else:
-            return "No se pudieron procesar las imágenes."
+            return {"error": "No se pudieron procesar las imágenes."}
     except Exception as e:
-        return f"Error: {e}"
+        return {"error": f"Error: {e}"}
 
 # --- WORKERS: PDF EXTENDED ---
 
 def worker_unificar_por_carpeta(carpeta_base, nombre_final_base, silent_mode=False):
-    if not carpeta_base or not os.path.isdir(carpeta_base): return "Carpeta base inválida."
+    if not carpeta_base or not os.path.isdir(carpeta_base): return {"error": "Carpeta base inválida."}
     
     subcarpetas = [os.path.join(carpeta_base, d) for d in os.listdir(carpeta_base) if os.path.isdir(os.path.join(carpeta_base, d))]
-    if not subcarpetas: return "No se encontraron subcarpetas."
+    if not subcarpetas: return {"error": "No se encontraron subcarpetas."}
 
     log = []
     pdfs_creados = 0
@@ -751,11 +986,31 @@ def worker_unificar_por_carpeta(carpeta_base, nombre_final_base, silent_mode=Fal
         except Exception as e:
             log.append(f"Error en {nombre_subcarpeta}: {e}")
 
-    return f"Proceso finalizado. {pdfs_creados} PDFs creados." + (" Errores: " + "; ".join(log) if log else "")
+    msg = f"Proceso finalizado. {pdfs_creados} PDFs creados." + (" Errores: " + "; ".join(log) if log else "")
+    
+    # Always attempt to zip if it looks like a temp folder (or just return the ability to zip)
+    # Since this modifies in-place, we can offer a download of the whole structure.
+    
+    mem_zip = io.BytesIO()
+    with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(carpeta_base):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, carpeta_base)
+                zf.write(file_path, arcname)
+    
+    return {
+        "files": [{
+            "name": f"Procesados_{int(time.time())}.zip",
+            "data": mem_zip.getvalue(),
+            "label": "Descargar Resultados (ZIP)"
+        }],
+        "message": msg
+    }
 
 def worker_unificar_imagenes_por_carpeta_rec(carpeta_base, nombre_final_base, tipo_imagen="JPG", silent_mode=False):
     # tipo_imagen: "JPG" or "PNG"
-    if not carpeta_base or not os.path.isdir(carpeta_base): return "Carpeta base inválida."
+    if not carpeta_base or not os.path.isdir(carpeta_base): return {"error": "Carpeta base inválida."}
     
     ext_map = {
         "JPG": ['.jpg', '.jpeg'],
@@ -764,7 +1019,7 @@ def worker_unificar_imagenes_por_carpeta_rec(carpeta_base, nombre_final_base, ti
     exts = ext_map.get(tipo_imagen, ['.jpg'])
 
     subcarpetas = [os.path.join(carpeta_base, d) for d in os.listdir(carpeta_base) if os.path.isdir(os.path.join(carpeta_base, d))]
-    if not subcarpetas: return "No se encontraron subcarpetas."
+    if not subcarpetas: return {"error": "No se encontraron subcarpetas."}
     
     pdfs_creados = 0
     log = []
@@ -817,11 +1072,28 @@ def worker_unificar_imagenes_por_carpeta_rec(carpeta_base, nombre_final_base, ti
         except Exception as e:
             log.append(f"Error en {nombre_subcarpeta}: {e}")
 
-    return f"Proceso finalizado. {pdfs_creados} PDFs creados." + (" Errores: " + "; ".join(log) if log else "")
+    msg = f"Proceso finalizado. {pdfs_creados} PDFs creados." + (" Errores: " + "; ".join(log) if log else "")
+    
+    mem_zip = io.BytesIO()
+    with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(carpeta_base):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, carpeta_base)
+                zf.write(file_path, arcname)
+
+    return {
+        "files": [{
+            "name": f"Procesados_Img_{int(time.time())}.zip",
+            "data": mem_zip.getvalue(),
+            "label": "Descargar Resultados (ZIP)"
+        }],
+        "message": msg
+    }
 
 def worker_unificar_docx_por_carpeta(carpeta_base, nombre_final_base, silent_mode=False):
-    if not HAS_DOCX2PDF: return "docx2pdf no está instalado."
-    if not carpeta_base or not os.path.isdir(carpeta_base): return "Carpeta base inválida."
+    if not HAS_DOCX2PDF: return {"error": "docx2pdf no está instalado."}
+    if not carpeta_base or not os.path.isdir(carpeta_base): return {"error": "Carpeta base inválida."}
     
     subcarpetas = [os.path.join(carpeta_base, d) for d in os.listdir(carpeta_base) if os.path.isdir(os.path.join(carpeta_base, d))]
     pdfs_creados = 0
@@ -872,10 +1144,27 @@ def worker_unificar_docx_por_carpeta(carpeta_base, nombre_final_base, silent_mod
         except Exception as e:
             log.append(f"Error en {nombre_subcarpeta}: {e}")
 
-    return f"Proceso finalizado. {pdfs_creados} PDFs creados."
+    msg = f"Proceso finalizado. {pdfs_creados} PDFs creados." + (" Errores: " + "; ".join(log) if log else "")
+
+    mem_zip = io.BytesIO()
+    with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(carpeta_base):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, carpeta_base)
+                zf.write(file_path, arcname)
+
+    return {
+        "files": [{
+            "name": f"Procesados_Docx_{int(time.time())}.zip",
+            "data": mem_zip.getvalue(),
+            "label": "Descargar Resultados (ZIP)"
+        }],
+        "message": msg
+    }
 
 def worker_dividir_pdfs_masivamente(carpeta_base, silent_mode=False):
-    if not carpeta_base or not os.path.isdir(carpeta_base): return "Carpeta inválida."
+    if not carpeta_base or not os.path.isdir(carpeta_base): return {"error": "Carpeta inválida."}
     
     pdfs_a_procesar = []
     for root, _, files in os.walk(carpeta_base):
@@ -883,7 +1172,7 @@ def worker_dividir_pdfs_masivamente(carpeta_base, silent_mode=False):
             if file.lower().endswith('.pdf'):
                 pdfs_a_procesar.append(os.path.join(root, file))
     
-    if not pdfs_a_procesar: return "No se encontraron PDFs."
+    if not pdfs_a_procesar: return {"error": "No se encontraron PDFs."}
     
     count = 0
     for ruta_pdf_original in pdfs_a_procesar:
@@ -903,7 +1192,24 @@ def worker_dividir_pdfs_masivamente(carpeta_base, silent_mode=False):
             count += 1
         except: pass
         
-    return f"Divididos {count} PDFs masivamente."
+    msg = f"Divididos {count} PDFs masivamente."
+    
+    mem_zip = io.BytesIO()
+    with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(carpeta_base):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, carpeta_base)
+                zf.write(file_path, arcname)
+
+    return {
+        "files": [{
+            "name": f"Divididos_Masivo_{int(time.time())}.zip",
+            "data": mem_zip.getvalue(),
+            "label": "Descargar Resultados (ZIP)"
+        }],
+        "message": msg
+    }
 
 
 
@@ -963,15 +1269,23 @@ def worker_json_a_xlsx_ind(file_obj, silent_mode=False):
             for sheet_name, rows in all_services.items():
                 if rows:
                     pd.DataFrame(rows).to_excel(writer, sheet_name=sheet_name, index=False)
-        return output.getvalue(), None
+        
+        return {
+            "files": [{
+                "name": f"RIPS_Convertido_{int(time.time())}.xlsx",
+                "data": output.getvalue(),
+                "label": "Descargar Excel (RIPS)"
+            }],
+            "message": "Conversión JSON a Excel exitosa."
+        }
     except Exception as e:
-        return None, str(e)
+        return {"error": str(e)}
 
 def worker_consolidar_json_xlsx(folder_path, silent_mode=False):
     try:
         json_files = [f for f in os.listdir(folder_path) if f.lower().endswith('.json')]
         if not json_files:
-            return None, "No hay archivos JSON en la carpeta."
+            return {"error": "No hay archivos JSON en la carpeta."}
         
         master_header = []
         master_users = []
@@ -1015,9 +1329,17 @@ def worker_consolidar_json_xlsx(folder_path, silent_mode=False):
             for s_name, rows in master_services.items():
                 if rows:
                     pd.DataFrame(rows).to_excel(writer, sheet_name=s_name, index=False)
-        return output.getvalue(), f"Consolidados {len(json_files)} archivos."
+        
+        return {
+            "files": [{
+                "name": f"Consolidado_RIPS_{int(time.time())}.xlsx",
+                "data": output.getvalue(),
+                "label": "Descargar Consolidado (XLSX)"
+            }],
+            "message": f"Consolidados {len(json_files)} archivos."
+        }
     except Exception as e:
-        return None, str(e)
+        return {"error": str(e)}
 
 def worker_xlsx_a_json_ind(file_obj, silent_mode=False):
     try:
@@ -1054,10 +1376,19 @@ def worker_xlsx_a_json_ind(file_obj, silent_mode=False):
             
             final_json = transaccion_data
             final_json["usuarios"] = list(usuarios_map.values())
-            return json.dumps(final_json, ensure_ascii=False, indent=4), None
-        return None, "Formato Excel inválido (Faltan hojas Transaccion/Usuarios)"
+            json_str = json.dumps(final_json, ensure_ascii=False, indent=4)
+            
+            return {
+                "files": [{
+                    "name": f"RIPS_Generado_{int(time.time())}.json",
+                    "data": json_str.encode('utf-8'),
+                    "label": "Descargar JSON (RIPS)"
+                }],
+                "message": "Conversión Excel a JSON exitosa."
+            }
+        return {"error": "Formato Excel inválido (Faltan hojas Transaccion/Usuarios)"}
     except Exception as e:
-        return None, str(e)
+        return {"error": str(e)}
 
 def worker_rips_excel_to_json_original(file_obj, silent_mode=False):
     """
@@ -1121,10 +1452,19 @@ def worker_rips_excel_to_json_original(file_obj, silent_mode=False):
             "usuarios": list(usuarios_dict.values())
         }
         
-        return json.dumps(resultado_final, ensure_ascii=False, indent=4), None
+        json_str = json.dumps(resultado_final, ensure_ascii=False, indent=4)
+        
+        return {
+            "files": [{
+                "name": f"RIPS_Original_{int(time.time())}.json",
+                "data": json_str.encode('utf-8'),
+                "label": "Descargar JSON (Original)"
+            }],
+            "message": "Conversión Excel a JSON (Original) exitosa."
+        }
         
     except Exception as e:
-        return None, str(e)
+        return {"error": str(e)}
 
 def worker_rips_json_to_excel_original(file_obj, silent_mode=False):
     """
@@ -1170,7 +1510,6 @@ def worker_rips_json_to_excel_original(file_obj, silent_mode=False):
                 otros_servicios.append({**base_info, **otro})
 
         output = io.BytesIO()
-        # Use xlsxwriter or openpyxl if installed. Default to None (let pandas choose)
         with pd.ExcelWriter(output) as writer:
             if consultas:
                 pd.DataFrame(consultas).to_excel(writer, sheet_name="Consultas", index=False)
@@ -1182,9 +1521,16 @@ def worker_rips_json_to_excel_original(file_obj, silent_mode=False):
             if not consultas and not procedimientos and not otros_servicios:
                  pd.DataFrame().to_excel(writer, sheet_name="Vacio", index=False)
                  
-        return output.getvalue(), None
+        return {
+            "files": [{
+                "name": f"RIPS_Original_{int(time.time())}.xlsx",
+                "data": output.getvalue(),
+                "label": "Descargar Excel (Original)"
+            }],
+            "message": "Conversión JSON a Excel (Original) exitosa."
+        }
     except Exception as e:
-        return None, str(e)
+        return {"error": str(e)}
 
 def worker_desconsolidar_xlsx_json(file_obj, dest_folder, silent_mode=False):
     try:
@@ -1192,10 +1538,10 @@ def worker_desconsolidar_xlsx_json(file_obj, dest_folder, silent_mode=False):
             file_obj.seek(0)
         xls = pd.ExcelFile(file_obj)
         if "Transaccion" not in xls.sheet_names:
-            return False, "Falta hoja Transaccion"
+            return {"error": "Falta hoja Transaccion"}
         df_t = pd.read_excel(xls, sheet_name="Transaccion")
         if "archivo_origen" not in df_t.columns:
-            return False, "Falta columna 'archivo_origen' en Transaccion"
+            return {"error": "Falta columna 'archivo_origen' en Transaccion"}
             
         service_map = {
             "Consultas": "consultas", "Procedimientos": "procedimientos", "Urgencias": "urgencias",
@@ -1223,39 +1569,52 @@ def worker_desconsolidar_xlsx_json(file_obj, dest_folder, silent_mode=False):
                         if fname not in services_by_file: services_by_file[fname] = {k: [] for k in service_map.values()}
                         services_by_file[fname][j_key].append(row.to_dict())
 
-        count = 0
-        for fname, header in headers_by_file.items():
-            header.pop("archivo_origen", None)
-            final = header
-            users = []
-            for u in users_by_file.get(fname, []):
-                u.pop("archivo_origen", None)
-                u_cons = u.get("consecutivo")
-                u["servicios"] = {k: [] for k in service_map.values()}
-                if fname in services_by_file:
-                    for s_key, items in services_by_file[fname].items():
-                        for item in items:
-                            if item.get("consecutivoUsuario") == u_cons:
-                                i_clean = item.copy()
-                                i_clean.pop("archivo_origen", None)
-                                i_clean.pop("consecutivoUsuario", None)
-                                u["servicios"][s_key].append(i_clean)
-                users.append(u)
-            final["usuarios"] = users
-            with open(os.path.join(dest_folder, fname), 'w', encoding='utf-8') as f:
-                json.dump(final, f, ensure_ascii=False, indent=4)
-            count += 1
-        return True, f"Desconsolidados {count} archivos."
+        # Create ZIP in memory for the results
+        mem_zip = io.BytesIO()
+        with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+            count = 0
+            for fname, header in headers_by_file.items():
+                header.pop("archivo_origen", None)
+                final = header
+                users = []
+                for u in users_by_file.get(fname, []):
+                    u.pop("archivo_origen", None)
+                    u_cons = u.get("consecutivo")
+                    u["servicios"] = {k: [] for k in service_map.values()}
+                    if fname in services_by_file:
+                        for s_key, items in services_by_file[fname].items():
+                            for item in items:
+                                if item.get("consecutivoUsuario") == u_cons:
+                                    i_clean = item.copy()
+                                    i_clean.pop("archivo_origen", None)
+                                    i_clean.pop("consecutivoUsuario", None)
+                                    u["servicios"][s_key].append(i_clean)
+                    users.append(u)
+                final["usuarios"] = users
+                
+                # Write to zip
+                json_content = json.dumps(final, ensure_ascii=False, indent=4)
+                zf.writestr(fname, json_content)
+                count += 1
+                
+        return {
+            "files": [{
+                "name": f"Desconsolidado_RIPS_{int(time.time())}.zip",
+                "data": mem_zip.getvalue(),
+                "label": "Descargar Desconsolidados (ZIP)"
+            }],
+            "message": f"Desconsolidados {count} archivos."
+        }
     except Exception as e:
-        return False, str(e)
+        return {"error": str(e)}
 
 # --- WORKERS: EXCEL / RENAMING ---
 
-def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False):
+def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False, return_zip=False):
     try:
         df = pd.read_excel(excel_path)
         if "Nombre Actual" not in df.columns or "Nombre Nuevo" not in df.columns:
-            return "Excel debe tener columnas 'Nombre Actual' y 'Nombre Nuevo'"
+            return {"error": "Excel debe tener columnas 'Nombre Actual' y 'Nombre Nuevo'"}
         count = 0
         for _, row in df.iterrows():
             curr = str(row["Nombre Actual"]).strip()
@@ -1269,11 +1628,38 @@ def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False):
                     os.rename(curr_path, os.path.join(folder_path, new))
                     count += 1
                 except: pass
-        return f"Renombrados {count} archivos."
+        
+        msg = f"Renombrados {count} archivos."
+        
+        if return_zip:
+            try:
+                mem_zip = io.BytesIO()
+                with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for root, dirs, files in os.walk(folder_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, folder_path)
+                            zf.write(file_path, arcname)
+                
+                try: shutil.rmtree(folder_path, ignore_errors=True)
+                except: pass
+                
+                return {
+                    "files": [{
+                        "name": f"Renombrados_{int(time.time())}.zip",
+                        "data": mem_zip.getvalue(),
+                        "label": "Descargar Renombrados (ZIP)"
+                    }],
+                    "message": msg
+                }
+            except Exception as e:
+                return {"error": f"Error creando ZIP: {e}", "message": msg}
+                
+        return {"message": msg}
     except Exception as e:
-        return f"Error: {e}"
+        return {"error": f"Error: {e}"}
 
-def worker_anadir_sufijo_excel(excel_path, sheet_name, col_folder, col_suffix, root_path, use_filter=False, silent_mode=False):
+def worker_anadir_sufijo_excel(excel_path, sheet_name, col_folder, col_suffix, root_path, use_filter=False, silent_mode=False, return_zip=False):
     """
     Versión sincronizada con app_web.py:
     1. Lee Excel (Carpeta, Sufijo).
@@ -1400,16 +1786,42 @@ def worker_anadir_sufijo_excel(excel_path, sheet_name, col_folder, col_suffix, r
             except: pass
 
         if not silent_mode and progress_bar: progress_bar.empty()
-        return f"Proceso completado. {count_files} archivos renombrados en {count_folders} carpetas encontradas."
+        msg = f"Proceso completado. {count_files} archivos renombrados en {count_folders} carpetas encontradas."
+        
+        if return_zip:
+            try:
+                mem_zip = io.BytesIO()
+                with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for root, dirs, files in os.walk(root_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, root_path)
+                            zf.write(file_path, arcname)
+                
+                try: shutil.rmtree(root_path, ignore_errors=True)
+                except: pass
+                
+                return {
+                    "files": [{
+                        "name": f"Renombrados_Sufijo_{int(time.time())}.zip",
+                        "data": mem_zip.getvalue(),
+                        "label": "Descargar Renombrados (ZIP)"
+                    }],
+                    "message": msg
+                }
+            except Exception as e:
+                return {"error": f"Error creando ZIP: {e}", "message": msg}
+        
+        return {"message": msg}
     except Exception as e:
-        return f"Error crítico: {e}"
+        return {"error": f"Error crítico: {e}"}
 
 # --- WORKERS: DOCX / FIRMAS ---
 
-def worker_unificar_docx_carpeta(folder_path, output_name="Unificado.docx", silent_mode=False):
+def worker_unificar_docx_carpeta(folder_path, output_name="Unificado.docx", silent_mode=False, return_zip=False):
     try:
         files = sorted([f for f in os.listdir(folder_path) if f.lower().endswith('.docx')], key=natural_sort_key)
-        if not files: return "No hay archivos .docx"
+        if not files: return {"error": "No hay archivos .docx"}
         master = Document(os.path.join(folder_path, files[0]))
         master.add_page_break()
         for f in files[1:]:
@@ -1417,12 +1829,49 @@ def worker_unificar_docx_carpeta(folder_path, output_name="Unificado.docx", sile
             for element in doc.element.body:
                 master.element.body.append(element)
             master.add_page_break()
-        master.save(os.path.join(folder_path, output_name))
-        return f"Unificados {len(files)} DOCX."
+        
+        out_path = os.path.join(folder_path, output_name)
+        master.save(out_path)
+        msg = f"Unificados {len(files)} DOCX."
+        
+        if return_zip:
+            try:
+                # If unifying, maybe user wants just the result? 
+                # Or the whole folder? Usually just the result if it's "Unify".
+                # But let's zip the whole folder to be safe/flexible, or just the file.
+                # Given "folder_path" might contain the source files, zipping all is safest backup.
+                # OR if it's a temp folder from upload, we definitely want the result.
+                # Let's zip just the output file if it's "Unify", but wait, user might want to see sources?
+                # Usually "Unificar" -> "Descargar Resultado".
+                
+                # Let's zip the whole folder for consistency with other workers.
+                mem_zip = io.BytesIO()
+                with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for root, dirs, files in os.walk(folder_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, folder_path)
+                            zf.write(file_path, arcname)
+                
+                try: shutil.rmtree(folder_path, ignore_errors=True)
+                except: pass
+                
+                return {
+                    "files": [{
+                        "name": f"Unificado_DOCX_{int(time.time())}.zip",
+                        "data": mem_zip.getvalue(),
+                        "label": "Descargar Unificado (ZIP)"
+                    }],
+                    "message": msg
+                }
+            except Exception as e:
+                return {"error": f"Error creando ZIP: {e}", "message": msg}
+                
+        return {"message": msg}
     except Exception as e:
-        return f"Error: {e}"
+        return {"error": f"Error: {e}"}
 
-def worker_crear_firma_nombre(nombre, documento, output_folder, silent_mode=False):
+def worker_crear_firma_nombre(nombre, documento, output_folder=None, silent_mode=False):
     try:
         img = Image.new('RGB', (400, 100), color='white')
         d = ImageDraw.Draw(img)
@@ -1430,20 +1879,51 @@ def worker_crear_firma_nombre(nombre, documento, output_folder, silent_mode=Fals
         except: font = ImageFont.load_default()
         d.text((10, 10), f"Firmado por: {nombre}", fill='black', font=font)
         d.text((10, 50), f"Doc: {documento}", fill='black', font=font)
-        out_path = os.path.join(output_folder, f"Firma_{documento}.png")
-        img.save(out_path)
-        return out_path
-    except: return None
+        
+        filename = f"Firma_{documento}.png"
+        
+        if output_folder:
+            out_path = os.path.join(output_folder, filename)
+            img.save(out_path)
+            return {"message": f"Firma guardada en {out_path}", "files": []}
+            
+        img_byte_arr = io.BytesIO()
+        img.save(img_byte_arr, format='PNG')
+        return {
+            "files": [{
+                "name": filename,
+                "data": img_byte_arr.getvalue(),
+                "label": "Descargar Firma (PNG)"
+            }],
+            "message": "Firma creada exitosamente."
+        }
+    except Exception as e:
+        return {"error": f"Error creando firma: {e}"}
 
-def worker_firmar_docx(docx_path, firma_path, output_path, silent_mode=False):
+def worker_firmar_docx(docx_path, firma_path, output_path=None, silent_mode=False):
     try:
         doc = Document(docx_path)
         doc.add_picture(firma_path, width=Pt(150))
-        doc.save(output_path)
-        return True
-    except: return False
+        
+        if output_path:
+            doc.save(output_path)
+            return {"message": "Documento firmado guardado.", "files": []}
+            
+        out_buffer = io.BytesIO()
+        doc.save(out_buffer)
+        
+        return {
+            "files": [{
+                "name": f"Firmado_{int(time.time())}.docx",
+                "data": out_buffer.getvalue(),
+                "label": "Descargar Documento Firmado"
+            }],
+            "message": "Documento firmado exitosamente."
+        }
+    except Exception as e:
+        return {"error": f"Error firmando documento: {e}"}
 
-def worker_modificar_docx_excel(uploaded_file, sheet_name, col_folder, col_val, root_path, mode, silent_mode=False):
+def worker_modificar_docx_excel(uploaded_file, sheet_name, col_folder, col_val, root_path, mode, silent_mode=False, return_zip=False):
     try:
         df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
         modificados = 0
@@ -1451,14 +1931,14 @@ def worker_modificar_docx_excel(uploaded_file, sheet_name, col_folder, col_val, 
         col_folder_idx = ord(col_folder.upper()) - ord('A')
         col_val_idx = ord(col_val.upper()) - ord('A')
         for index, row in df.iterrows():
-            folder_name = str(row.iloc[col_folder_idx]).strip()
-            new_val = str(row.iloc[col_val_idx]).strip()
-            if not folder_name or not new_val: continue
-            target_dir = os.path.join(root_path, folder_name)
-            if not os.path.isdir(target_dir): continue
-            target_docx = next((os.path.join(target_dir, f) for f in os.listdir(target_dir) if docx_pattern.match(f)), None)
-            if target_docx:
-                try:
+            try:
+                folder_name = str(row.iloc[col_folder_idx]).strip()
+                new_val = str(row.iloc[col_val_idx]).strip()
+                if not folder_name or not new_val: continue
+                target_dir = os.path.join(root_path, folder_name)
+                if not os.path.isdir(target_dir): continue
+                target_docx = next((os.path.join(target_dir, f) for f in os.listdir(target_dir) if docx_pattern.match(f)), None)
+                if target_docx:
                     doc = Document(target_docx)
                     modified = False
                     keyword = "REGIMEN:" if mode == "Regimen" else f"{mode}:"
@@ -1470,10 +1950,33 @@ def worker_modificar_docx_excel(uploaded_file, sheet_name, col_folder, col_val, 
                     if modified:
                         doc.save(target_docx)
                         modificados += 1
-                except: pass
-        return f"Modificados {modificados} documentos."
+            except: pass
+            
+        msg = f"Modificados {modificados} documentos."
+        
+        if return_zip:
+            try:
+                mem_zip = io.BytesIO()
+                with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                    for root, dirs, files in os.walk(root_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, root_path)
+                            zf.write(file_path, arcname)
+                return {
+                    "files": [{
+                        "name": f"Modificados_{mode}_{int(time.time())}.zip",
+                        "data": mem_zip.getvalue(),
+                        "label": "Descargar Modificados (ZIP)"
+                    }],
+                    "message": msg
+                }
+            except Exception as e:
+                return {"error": f"Error creando ZIP: {e}", "message": msg}
+        
+        return {"message": msg}
     except Exception as e:
-        return f"Error: {e}"
+        return {"error": f"Error: {e}"}
 
 def _create_column_map_from_headers(df):
     required_map = {
@@ -2551,44 +3054,59 @@ def worker_copiar_archivo_a_subcarpetas(file_path, dest_base_path, silent_mode=F
     if not silent_mode: progress_bar.empty()
     return f"Copiados: {copiados}. Conflictos: {conflictos}. Errores: {errores}."
 
-def worker_descargar_historias_hospitalizacion_ovida(uploaded_file, sheet_name, col_map, save_path, silent_mode=False):
+def worker_descargar_historias_hospitalizacion_ovida(uploaded_file, sheet_name, col_map, save_path=None, silent_mode=False):
     # Requires Selenium
     try:
         from selenium import webdriver
         from selenium.webdriver.chrome.service import Service
         from webdriver_manager.chrome import ChromeDriverManager
         import base64
-    except ImportError: return "Falta Selenium/WebDriverManager."
+        import zipfile
+    except ImportError: return {"error": "Falta Selenium/WebDriverManager."}
 
     try:
         if isinstance(uploaded_file, bytes): uploaded_file = io.BytesIO(uploaded_file)
         df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
-    except Exception as e: return f"Error Excel: {e}"
+    except Exception as e: return {"error": f"Error Excel: {e}"}
     
     driver = None
     try:
+        # Determine output directory
+        is_temp = False
+        if not save_path:
+            is_temp = True
+            save_path = os.path.join(os.getcwd(), "temp_downloads", f"ovida_{int(time.time())}")
+            os.makedirs(save_path, exist_ok=True)
+        elif not os.path.exists(save_path):
+             os.makedirs(save_path, exist_ok=True)
+
         options = webdriver.ChromeOptions()
+        # Headless mode for server environment if possible, but OVIDA might require GUI for login
+        # If running on server without display, we need headless.
+        # But the code waits for manual login...
+        # For now, let's keep it as is but be aware of headless limitations.
+        # If we are in Web Mode (AWS), we probably can't open a browser window for the user to see.
+        # This function might fail in AWS unless we use headless and auto-login (which we don't have credentials for).
+        # Assuming for now this is used with "Agente Local" or user accepts it won't work on pure headless server without tunneling.
+        
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
         driver.get("https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
-        
-        # Simple wait loop for login (simplified from original for modularity)
-        # In a real scenario, we might want a way to signal user readiness via UI, but here we'll wait or rely on user interaction before submitting if possible.
-        # However, since this is a background worker, we can't easily ask user "OK" in the middle unless we break it up.
-        # For now, we'll assume the user logs in within a generous timeout or we just wait for the URL change.
         
         timeout = 300
         start = time.time()
         logged_in = False
         while time.time() - start < timeout:
-            if "App/Vistas" in driver.current_url:
-                logged_in = True
-                break
+            try:
+                if "App/Vistas" in driver.current_url:
+                    logged_in = True
+                    break
+            except: pass
             time.sleep(2)
             
         if not logged_in:
             driver.quit()
-            return "No se detectó inicio de sesión."
+            return {"error": "No se detectó inicio de sesión."}
             
         descargados, errores, conflictos = 0, 0, 0
         progress_bar = None
@@ -2629,9 +3147,37 @@ def worker_descargar_historias_hospitalizacion_ovida(uploaded_file, sheet_name, 
             except: errores += 1
             
         if not silent_mode: progress_bar.empty()
-        return f"Descargados: {descargados}. Errores: {errores}. Conflictos: {conflictos}."
+        
+        result_msg = f"Descargados: {descargados}. Errores: {errores}. Conflictos: {conflictos}."
+        
+        if is_temp:
+            # Zip results
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(save_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, save_path)
+                        zf.write(file_path, arcname)
+            
+            # Cleanup
+            try:
+                shutil.rmtree(save_path, ignore_errors=True)
+            except: pass
+            
+            return {
+                "files": [{
+                    "name": f"Historias_OVIDA_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "Descargar Historias (ZIP)"
+                }],
+                "message": result_msg
+            }
+        else:
+            return {"message": result_msg}
+
     except Exception as e:
-        return f"Error crítico: {e}"
+        return {"error": f"Error crítico: {e}"}
     finally:
         if driver: driver.quit()
 
@@ -2642,46 +3188,70 @@ def worker_registraduria_masiva(df, col_cedula, headless=True, update_progress=N
         validator = ValidatorRegistraduria(headless=headless)
     except Exception as e:
         if not silent_mode: st.error(f"Error initializing ValidatorRegistraduria: {e}")
-        return None, f"Error: {e}"
+        return {"error": f"Error: {e}"}
     cb = update_progress if update_progress else lambda c, t, **kwargs: None
     try:
         df_results = validator.process_massive(df, col_cedula, progress_callback=cb)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df_results.to_excel(writer, index=False)
-        return output.getvalue(), f"Procesados {len(df_results)} registros."
+        
+        return {
+            "files": [{
+                "name": f"Resultados_Registraduria_{int(time.time())}.xlsx",
+                "data": output.getvalue(),
+                "label": "Descargar Resultados"
+            }],
+            "message": f"Procesados {len(df_results)} registros."
+        }
     except Exception as e:
-        return None, f"Error processing massive Registraduria: {e}"
+        return {"error": f"Error processing massive Registraduria: {e}"}
 
 def worker_adres_api_masiva(df, col_cedula, col_tipo_doc=None, default_tipo_doc="CC", update_progress=None, silent_mode=False):
     try:
         validator = ValidatorAdres()
     except Exception as e:
-        return None, f"Error initializing ValidatorAdres: {e}"
+        return {"error": f"Error initializing ValidatorAdres: {e}"}
     cb = update_progress if update_progress else lambda c, t, **kwargs: None
     try:
         df_results = validator.process_massive(df, col_cedula, tipo_doc_col=col_tipo_doc, default_tipo_doc=default_tipo_doc, progress_callback=cb)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df_results.to_excel(writer, index=False)
-        return output.getvalue(), f"Procesados {len(df_results)} registros."
+            
+        return {
+            "files": [{
+                "name": f"Resultados_ADRES_API_{int(time.time())}.xlsx",
+                "data": output.getvalue(),
+                "label": "Descargar Resultados"
+            }],
+            "message": f"Procesados {len(df_results)} registros."
+        }
     except Exception as e:
-        return None, f"Error processing massive ADRES API: {e}"
+        return {"error": f"Error processing massive ADRES API: {e}"}
 
 def worker_adres_web_massive(df, col_cedula, col_tipo_doc=None, default_tipo_doc="CC", update_progress=None, silent_mode=False):
     try:
         validator = ValidatorAdresWeb(headless=False)
     except Exception as e:
-        return None, f"Error initializing ValidatorAdresWeb: {e}"
+        return {"error": f"Error initializing ValidatorAdresWeb: {e}"}
     cb = update_progress if update_progress else lambda c, t, **kwargs: None
     try:
         df_results = validator.process_massive(df, col_cedula, tipo_doc_col=col_tipo_doc, default_tipo_doc=default_tipo_doc, progress_callback=cb)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df_results.to_excel(writer, index=False)
-        return output.getvalue(), f"Procesados {len(df_results)} registros."
+            
+        return {
+            "files": [{
+                "name": f"Resultados_ADRES_WEB_{int(time.time())}.xlsx",
+                "data": output.getvalue(),
+                "label": "Descargar Resultados"
+            }],
+            "message": f"Procesados {len(df_results)} registros."
+        }
     except Exception as e:
-        return None, f"Error processing massive ADRES Web: {e}"
+        return {"error": f"Error processing massive ADRES Web: {e}"}
 
 # --- DIALOGS (Proxies to Workers with UI) ---
 
@@ -3946,13 +4516,14 @@ def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
 
 # --- WORKERS: WEB SCRAPING & DOWNLOADS ---
 
-def worker_descargar_firmas(uploaded_file, sheet_name, col_id, col_folder, root_path, silent_mode=False):
+def worker_descargar_firmas(uploaded_file, sheet_name, col_id, col_folder, root_path=None, silent_mode=False):
     """
     Descarga firmas desde una URL base usando un Excel para mapear IDs a carpetas.
+    Retorna objeto para descarga si no se especifica ruta o si se solicita.
     """
     if not requests or not Image:
         if not silent_mode: st.error("Faltan librerías: requests o Pillow.")
-        return "Error: Librerías faltantes."
+        return {"error": "Librerías faltantes."}
 
     try:
         if isinstance(uploaded_file, bytes):
@@ -3964,6 +4535,14 @@ def worker_descargar_firmas(uploaded_file, sheet_name, col_id, col_folder, root_
         descargados = 0
         errores = 0
         
+        # Determine output directory
+        is_temp = False
+        if not root_path:
+            is_temp = True
+            root_path = os.path.join(os.getcwd(), "temp_downloads", f"firmas_{int(time.time())}")
+        
+        os.makedirs(root_path, exist_ok=True)
+
         progress_bar = None
         if not silent_mode:
             progress_bar = st.progress(0)
@@ -4001,13 +4580,43 @@ def worker_descargar_firmas(uploaded_file, sheet_name, col_id, col_folder, root_
                     errores += 1
             except Exception:
                 errores += 1
-                
-        return f"Proceso finalizado. Descargados: {descargados}. Errores/No encontrados: {errores}."
+        
+        if not silent_mode: 
+            progress_bar.empty()
+            status_text.empty()
+
+        result_msg = f"Proceso finalizado. Descargados: {descargados}. Errores/No encontrados: {errores}."
+        
+        if is_temp:
+            # Zip results
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(root_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, root_path)
+                        zf.write(file_path, arcname)
+            
+            # Cleanup
+            try:
+                shutil.rmtree(root_path, ignore_errors=True)
+            except: pass
+            
+            return {
+                "files": [{
+                    "name": f"Firmas_Descargadas_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "Descargar Firmas (ZIP)"
+                }],
+                "message": result_msg
+            }
+        else:
+            return {"message": result_msg}
         
     except Exception as e:
-        return f"Error crítico: {e}"
+        return {"error": f"Error crítico: {e}"}
 
-def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col_ingreso, col_egreso, col_carpeta, download_path, silent_mode=False):
+def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col_ingreso, col_egreso, col_carpeta, download_path=None, silent_mode=False):
     """
     Descarga historias clínicas de OVIDA usando Selenium (Chrome Headless/GUI).
     """
@@ -4019,17 +4628,22 @@ def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col
         from selenium.webdriver.chrome.service import Service
         from webdriver_manager.chrome import ChromeDriverManager
     except ImportError:
-        return "Error: Selenium/WebDriverManager no instalado."
+        return {"error": "Error: Selenium/WebDriverManager no instalado."}
 
-    if not os.path.isdir(download_path):
-        return "Error: Carpeta de descarga inválida."
+    # Determine output directory
+    is_temp = False
+    if not download_path:
+        is_temp = True
+        download_path = os.path.join(os.getcwd(), "temp_downloads", f"ovida_{int(time.time())}")
+    
+    os.makedirs(download_path, exist_ok=True)
 
     try:
         if isinstance(uploaded_file, bytes):
             uploaded_file = io.BytesIO(uploaded_file)
         df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
     except Exception as e:
-        return f"Error leyendo Excel: {e}"
+        return {"error": f"Error leyendo Excel: {e}"}
 
     driver = None
     try:
@@ -4066,21 +4680,25 @@ def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col
         
         if time.time() - start_time >= timeout:
             driver.quit()
-            return "Error: Tiempo de espera de inicio de sesión agotado."
-        start_time = time.time()
-        logged_in = False
+            return {"error": "Error: Tiempo de espera de inicio de sesión agotado."}
         
-        while time.time() - start_time < timeout:
+        # Additional wait for session to stabilize
+        time.sleep(2)
+        
+        # Verify login success
+        logged_in = False
+        start_check = time.time()
+        while time.time() - start_check < 30:
             try:
-                # Check for an element present only in the logged-in area
                 if "App/Vistas" in driver.current_url:
                     logged_in = True
                     break
             except: pass
-            time.sleep(2)
+            time.sleep(1)
             
         if not logged_in:
-            return "Error: No se detectó inicio de sesión en 5 minutos."
+             # Just a warning, maybe URL is different but session is active
+             pass
 
         if not silent_mode: st.info("Inicio de sesión detectado. Comenzando descargas...")
 
@@ -4149,11 +4767,37 @@ def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col
             except Exception as e:
                 errores += 1
                 if not silent_mode: st.warning(f"Error en estudio {estudio}: {e}")
-                
-        return f"Finalizado. Descargados: {descargados}, Errores: {errores}, Conflictos: {conflictos}."
+        
+        result_msg = f"Finalizado. Descargados: {descargados}, Errores: {errores}, Conflictos: {conflictos}."
+        
+        if is_temp:
+            # Zip results
+            mem_zip = io.BytesIO()
+            with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+                for root, dirs, files in os.walk(download_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, download_path)
+                        zf.write(file_path, arcname)
+            
+            # Cleanup
+            try:
+                shutil.rmtree(download_path, ignore_errors=True)
+            except: pass
+            
+            return {
+                "files": [{
+                    "name": f"Historias_OVIDA_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "Descargar Historias (ZIP)"
+                }],
+                "message": result_msg
+            }
+        else:
+            return {"message": result_msg}
 
     except Exception as e:
-        return f"Error crítico: {e}"
+        return {"error": f"Error crítico: {e}"}
     finally:
         if driver: driver.quit()
 

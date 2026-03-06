@@ -547,6 +547,11 @@ else:
     # Filter tabs based on permissions
     visible_tabs = []
     for name, render_func in all_tabs_map:
+        # Extra security check for Admin tabs
+        if name in ["📊 Gestión de Información", "👥 Gestión de Usuarios"]:
+            if st.session_state.role != "admin":
+                continue
+
         if "*" in allowed_tabs_config or name in allowed_tabs_config:
             if render_func: # Only add if module is loaded
                 visible_tabs.append((name, render_func))

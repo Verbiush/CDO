@@ -321,19 +321,26 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
 
     return target_path
 
-def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
+def render_download_button(folder_path, key, label="📦 Descargar ZIP", cleanup=False):
     """
     Renderiza un botón para descargar el contenido de una carpeta como ZIP,
     o un archivo individual directamente.
     Soporta modo Nativo (Guardar Como) y Web (Descarga navegador).
+    Si cleanup=True y estamos en modo Web (ZIP en memoria), borra la carpeta tras comprimir.
     """
-    if not folder_path or not os.path.exists(folder_path):
+    # Check if we already have the zip prepared in session state
+    zip_data_key = f"ready_zip_data_{key}"
+    zip_name_key = f"ready_zip_name_{key}"
+    
+    has_ready_zip = zip_data_key in st.session_state and st.session_state[zip_data_key] is not None
+    
+    if not has_ready_zip and (not folder_path or not os.path.exists(folder_path)):
         return
         
-    is_file = os.path.isfile(folder_path)
+    is_file = os.path.isfile(folder_path) if folder_path and os.path.exists(folder_path) else False
     
-    # Check if folder is empty (only if directory)
-    if not is_file:
+    # Check if folder is empty (only if directory and exists)
+    if not has_ready_zip and not is_file and folder_path and os.path.exists(folder_path):
         try:
             if not os.listdir(folder_path):
                 # st.warning("Carpeta vacía, nada que descargar.")
@@ -345,7 +352,10 @@ def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
     
     col1, col2 = st.columns([0.6, 0.4])
     with col1:
-        st.info(f"Ruta: {folder_path}")
+        if folder_path and os.path.exists(folder_path):
+            st.info(f"Ruta: {folder_path}")
+        elif has_ready_zip:
+             st.info(f"Archivo listo para descarga (En memoria)")
         
     with col2:
         is_native = st.session_state.get("force_native_mode", True)
@@ -358,25 +368,43 @@ def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
                     if is_file:
                         # Save File
                         initial_file = os.path.basename(folder_path)
-                        save_path = filedialog.asksaveasfilename(
-                            title="Guardar archivo como...",
-                            initialfile=initial_file,
-                            defaultextension=os.path.splitext(initial_file)[1]
-                        )
+                        # Tkinter dialogs need main thread, usually fine in local Streamlit
+                        try:
+                            root = tk.Tk()
+                            root.withdraw()
+                            root.wm_attributes('-topmost', 1)
+                            save_path = filedialog.asksaveasfilename(
+                                title="Guardar archivo como...",
+                                initialfile=initial_file,
+                                defaultextension=os.path.splitext(initial_file)[1]
+                            )
+                            root.destroy()
+                        except:
+                            save_path = None
+                            
                         if save_path:
                             shutil.copy2(folder_path, save_path)
                             st.success(f"✅ Archivo guardado en: {save_path}")
                     else:
                         # Save ZIP
-                        save_path = filedialog.asksaveasfilename(
-                            title="Guardar ZIP como...",
-                            initialfile=f"backup_{int(time.time())}.zip",
-                            defaultextension=".zip",
-                            filetypes=[("Zip files", "*.zip")]
-                        )
+                        try:
+                            root = tk.Tk()
+                            root.withdraw()
+                            root.wm_attributes('-topmost', 1)
+                            save_path = filedialog.asksaveasfilename(
+                                title="Guardar ZIP como...",
+                                initialfile=f"backup_{int(time.time())}.zip",
+                                defaultextension=".zip",
+                                filetypes=[("Zip files", "*.zip")]
+                            )
+                            root.destroy()
+                        except:
+                            save_path = None
+                            
                         if save_path:
                             with st.spinner("Comprimiendo y guardando..."):
-                                shutil.make_archive(os.path.splitext(save_path)[0], 'zip', folder_path)
+                                base_name = os.path.splitext(save_path)[0]
+                                shutil.make_archive(base_name, 'zip', folder_path)
                                 st.success(f"✅ ZIP guardado en: {save_path}")
                 except Exception as e:
                     st.error(f"Error al guardar: {e}")
@@ -425,6 +453,14 @@ def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
                             st.session_state[f"ready_zip_data_{key}"] = mem_zip.getvalue()
                             st.session_state[f"ready_zip_name_{key}"] = f"download_{int(time.time())}.zip"
                             st.success("✅ Archivo listo para descargar (En Memoria).")
+                            
+                            # Cleanup if requested
+                            if cleanup:
+                                try:
+                                    shutil.rmtree(folder_path)
+                                    # st.info("Archivos temporales del servidor eliminados.")
+                                except Exception as e:
+                                    print(f"Error cleaning up {folder_path}: {e}")
                             
                         except Exception as e:
                             st.error(f"Error al comprimir: {e}")

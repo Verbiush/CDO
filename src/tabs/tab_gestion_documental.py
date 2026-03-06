@@ -184,7 +184,7 @@ def resolve_unique_paths(records, folder_structure):
 
 
 
-def worker_descargar_historias_ovida(records, download_path, resolved_paths):
+def worker_descargar_historias_ovida(records, download_path, resolved_paths, return_zip=False):
     """
     Descarga historias clínicas de OVIDA para los registros dados.
     Usa Selenium para inicio de sesión y descarga.
@@ -192,14 +192,20 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths):
     if webdriver is None:
         return "Error: Selenium no está instalado o no se puede cargar."
 
-    if not os.path.isdir(download_path):
+    if not return_zip and not os.path.isdir(download_path):
         return "Error: Carpeta de descarga inválida."
 
     driver = None
     try:
         options = webdriver.ChromeOptions()
+        # Temp dir for Selenium downloads (even if we use printToPDF, it needs a profile dir)
+        # We can use a temp dir if return_zip is True
+        temp_dir = download_path if not return_zip else os.path.join(os.getcwd(), "temp_selenium_ovida")
+        if return_zip:
+            os.makedirs(temp_dir, exist_ok=True)
+            
         prefs = {
-            "download.default_directory": download_path,
+            "download.default_directory": temp_dir,
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
             "plugins.always_open_pdf_externally": True
@@ -229,6 +235,9 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths):
         
         if time.time() - start_time >= timeout:
             driver.quit()
+            if return_zip:
+                try: shutil.rmtree(temp_dir)
+                except: pass
             return "Error: Tiempo de espera de inicio de sesión agotado."
             
         # Check logged in state more robustly
@@ -243,6 +252,9 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths):
             time.sleep(2)
             
         if not logged_in:
+            if return_zip:
+                try: shutil.rmtree(temp_dir)
+                except: pass
             return "Error: No se detectó inicio de sesión en 5 minutos."
 
         st.info("Inicio de sesión detectado. Comenzando descargas...")
@@ -255,6 +267,13 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths):
         status_text = st.empty()
         
         total = len(records)
+        
+        # Prepare ZIP if needed
+        mem_zip = None
+        zf = None
+        if return_zip:
+            mem_zip = BytesIO()
+            zf = zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED)
         
         for i, record in enumerate(records):
             progress_bar.progress((i + 1) / total)
@@ -289,14 +308,17 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths):
                     # Fallback (shouldn't happen if resolved_paths is complete)
                     continue 
 
-                dest_dir = os.path.join(download_path, rel_path)
-                os.makedirs(dest_dir, exist_ok=True)
-                
-                final_path = os.path.join(dest_dir, f"HC_{estudio}.pdf")
-                
-                if os.path.exists(final_path):
-                    conflictos += 1
-                    continue
+                if not return_zip:
+                    dest_dir = os.path.join(download_path, rel_path)
+                    os.makedirs(dest_dir, exist_ok=True)
+                    final_path = os.path.join(dest_dir, f"HC_{estudio}.pdf")
+                    
+                    if os.path.exists(final_path):
+                        conflictos += 1
+                        continue
+                else:
+                    # Check if file exists in zip? Too expensive. Assume overwrite or ignore.
+                    pass
                     
                 status_text.text(f"Descargando Estudio: {estudio}")
 
@@ -322,8 +344,15 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths):
                 })
                 
                 pdf_data = base64.b64decode(pdf_b64['data'])
-                with open(final_path, 'wb') as f:
-                    f.write(pdf_data)
+                
+                if return_zip:
+                    # Add to ZIP in memory
+                    zip_entry_name = os.path.join(rel_path, f"HC_{estudio}.pdf")
+                    zf.writestr(zip_entry_name, pdf_data)
+                else:
+                    # Write to disk
+                    with open(final_path, 'wb') as f:
+                        f.write(pdf_data)
                 
                 descargados += 1
                 
@@ -331,7 +360,23 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths):
                 errores += 1
                 # print(f"Error en estudio {estudio}: {e}")
                 
-        return f"Finalizado. Descargados: {descargados}, Errores: {errores}, Conflictos: {conflictos}."
+        # Clean up temp dir if we created one
+        if return_zip and os.path.exists(temp_dir):
+            try: shutil.rmtree(temp_dir)
+            except: pass
+
+        if return_zip:
+            zf.close()
+            return {
+                "files": [{
+                    "name": f"Historias_OVIDA_{int(time.time())}.zip",
+                    "data": mem_zip.getvalue(),
+                    "label": "📦 Descargar Historias OVIDA (ZIP)"
+                }],
+                "message": f"Finalizado. Descargados: {descargados}, Errores: {errores}, Conflictos: {conflictos}."
+            }
+        else:
+            return f"Finalizado. Descargados: {descargados}, Errores: {errores}, Conflictos: {conflictos}."
 
     except Exception as e:
         return f"Error crítico: {e}"
@@ -1663,45 +1708,72 @@ def render():
         st.markdown("### 4. Integraciones Externas")
 
         # Configuración de Ruta Específica para OVIDA
+        is_native_mode = st.session_state.get("force_native_mode", True)
         
-        final_ovida_path = render_path_selector(
-            label="Carpeta Base para Descargas OVIDA",
-            key="ovida_base_path",
-            help_text="Ruta donde se guardarán las historias clínicas. Si se deja vacía, usará la configuración general.",
-            omit_checkbox=False
-        )
+        if is_native_mode:
+            final_ovida_path = render_path_selector(
+                label="Carpeta Base para Descargas OVIDA",
+                key="ovida_base_path",
+                help_text="Ruta donde se guardarán las historias clínicas. Si se deja vacía, usará la configuración general.",
+                omit_checkbox=False
+            )
+        else:
+            # En modo Web, no necesitamos ruta física persistente
+            final_ovida_path = None
+            st.info(f"Modo Web: Los archivos se procesarán en memoria y se descargarán como ZIP.")
 
         col_ovida_1, col_ovida_2 = st.columns([0.3, 0.7])
         
         with col_ovida_1:
-             st.info(f"Descarga automática de historias clínicas desde OVIDA usando Selenium.\n\nRuta destino: {final_ovida_path}")
+             st.info(f"Descarga automática de historias clínicas desde OVIDA usando Selenium.")
              
         with col_ovida_2:
              if st.button("🏥 Descargar Historias OVIDA", use_container_width=True, disabled=disabled_state):
                  if webdriver is None:
                      st.error("❌ Selenium no está instalado. No se puede ejecutar esta acción.")
-                 elif not final_ovida_path or not os.path.isdir(final_ovida_path):
-                     st.error(f"❌ La ruta de descarga no es válida: {final_ovida_path}")
+                 elif is_native_mode and not final_ovida_path:
+                     st.error("❌ La ruta de descarga no es válida.")
                  else:
+                     # Validate path only in Native Mode
+                     if is_native_mode and not os.path.isdir(final_ovida_path):
+                         st.error(f"❌ La ruta de descarga no es válida: {final_ovida_path}")
+                         st.stop()
+
                      # --- Resolve unique paths ---
                      resolved_paths_content = resolve_unique_paths(filtered_records_content, folder_structure_content)
                      
                      st.info("⏳ Iniciando proceso... Se abrirá un navegador.")
                      
                      # Call worker
-                     result_msg = worker_descargar_historias_ovida(
+                     # In Web Mode, we request a ZIP return to avoid server storage
+                     return_zip_mode = not is_native_mode
+                     
+                     result = worker_descargar_historias_ovida(
                          filtered_records_content, 
                          final_ovida_path, 
-                         resolved_paths_content
+                         resolved_paths_content,
+                         return_zip=return_zip_mode
                      )
                      
-                     if "Error" in result_msg:
-                         st.error(result_msg)
-                     else:
-                         st.success(result_msg)
+                     if isinstance(result, dict) and "files" in result:
+                         # Handle ZIP return (Web Mode)
+                         st.success(result.get("message", "Proceso completado."))
                          
-                         # --- DOWNLOAD BUTTON (WEB MODE) ---
-                         render_download_button(final_ovida_path, "dl_ovida", "📦 Descargar Historias OVIDA (ZIP)")
+                         # Store zip in session state for render_download_button
+                         for f in result["files"]:
+                             # Assuming one file (the zip)
+                             st.session_state[f"ready_zip_data_dl_ovida"] = f["data"]
+                             st.session_state[f"ready_zip_name_dl_ovida"] = f["name"]
+                         
+                         # Trigger download button rendering
+                         # We don't need to pass a path since it's in memory
+                         render_download_button(None, "dl_ovida", "📦 Descargar Historias OVIDA (ZIP)")
+                         
+                     elif isinstance(result, str) and "Error" in result:
+                         st.error(result)
+                     else:
+                         # Native Mode (String success message)
+                         st.success(result)
 
     # --- TAB 5: ADMIN BD (MOVED TO TAB_ADMIN.PY) ---
     # Logic moved to main admin tab.

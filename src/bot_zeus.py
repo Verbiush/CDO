@@ -235,6 +235,20 @@ def obtener_driver(create_if_missing=True):
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--window-size=1920,1080")
             
+            # Configure download directory
+            if st is not None and hasattr(st, 'session_state'):
+                 dl_dir = st.session_state.get("bot_download_dir", os.path.join(os.getcwd(), "downloads"))
+                 if not os.path.exists(dl_dir):
+                     os.makedirs(dl_dir, exist_ok=True)
+                 
+                 prefs = {
+                     "download.default_directory": os.path.abspath(dl_dir),
+                     "download.prompt_for_download": False,
+                     "download.directory_upgrade": True,
+                     "safebrowsing.enabled": True
+                 }
+                 options.add_experimental_option("prefs", prefs)
+            
             # options.add_argument("--detach=true") 
             new_driver = webdriver.Chrome(service=service, options=options)
             _set_driver_instance(new_driver)

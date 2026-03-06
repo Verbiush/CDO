@@ -176,21 +176,30 @@ def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=','):
         elif tipo == "PDF_GRAY":
             temp_out = os.path.join(folder, f"{name_no_ext}_temp_gray.pdf")
             _pdf_escala_grises(file_path, temp_out)
-            # Replace original logic
+            # Reemplazo seguro que funciona entre unidades de disco
             if os.path.exists(temp_out):
                 try:
-                    os.replace(temp_out, file_path)
-                except OSError:
-                    time.sleep(0.5)
-                    if os.path.exists(file_path): os.remove(file_path)
-                    os.rename(temp_out, file_path)
+                    # Intentar mover (shutil maneja cross-filesystem)
+                    shutil.move(temp_out, file_path)
+                except Exception:
+                    # Si falla (ej. archivo destino existe y no se puede sobrescribir directamente en Windows con move)
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                        shutil.move(temp_out, file_path)
+                    except Exception as e:
+                        # Último intento: copiar y borrar
+                        shutil.copy2(temp_out, file_path)
+                        os.remove(temp_out)
             
         return True, "Conversión exitosa"
     except Exception as e:
         return False, str(e)
 
-def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=','):
+def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', return_zip=False):
     if not folder_path or not os.path.exists(folder_path):
+        if return_zip:
+             return {"count": 0, "message": "Carpeta no encontrada", "error": True}
         return 0, "Carpeta no encontrada"
     
     count = 0
@@ -203,6 +212,8 @@ def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=','):
 
     total = len(files_to_process)
     if total == 0:
+        if return_zip:
+             return {"count": 0, "message": "La carpeta está vacía.", "error": True}
         return 0, "La carpeta está vacía (no se encontraron archivos)."
 
     progress_bar = st.progress(0, text="Convirtiendo...")
@@ -231,6 +242,34 @@ def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=','):
             else: print(f"Error convirtiendo {f}: {msg}")
             
     progress_bar.progress(1.0, text="Finalizado.")
+    
+    if return_zip:
+        import io
+        import zipfile
+        
+        if count == 0:
+            return {"count": 0, "message": "No se procesaron archivos.", "error": True}
+            
+        mem_zip = io.BytesIO()
+        with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
+            # Add files from output_folder to zip
+            for root, dirs, files in os.walk(output_folder):
+                for file in files:
+                    abs_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(abs_path, output_folder)
+                    zf.write(abs_path, rel_path)
+        mem_zip.seek(0)
+        
+        return {
+            "count": count,
+            "message": f"Procesados {count} archivos.",
+            "files": [{
+                "name": f"Conversion_Masiva_{int(time.time())}.zip",
+                "data": mem_zip.getvalue(),
+                "label": "📦 Descargar Archivos Convertidos (ZIP)"
+            }]
+        }
+    
     if count == 0:
         return 0, "No se encontraron archivos compatibles para el tipo de conversión seleccionado."
     return count, f"Procesados {count} archivos."
@@ -331,10 +370,19 @@ def render(container=None):
             # 3. Output Folder
             st.markdown("### 3. Carpeta de Salida")
             
-            output_folder = render_path_selector(
-                label="Carpeta Destino",
-                key="conv_ind_out"
-            )
+            is_native = st.session_state.get("force_native_mode", True)
+            if is_native:
+                output_folder = render_path_selector(
+                    label="Carpeta Destino",
+                    key="conv_ind_out"
+                )
+            else:
+                # En modo Web, usamos una carpeta temporal automática
+                timestamp = int(time.time())
+                output_folder = os.path.join(os.getcwd(), "temp_downloads", f"out_{timestamp}")
+                os.makedirs(output_folder, exist_ok=True)
+                st.info(f"📂 Procesando en entorno temporal seguro.")
+
 
             # 4. Action
             st.write("")
@@ -401,7 +449,26 @@ def render(container=None):
                                     target_file_path = actual_input_path
                                 
                                 if os.path.exists(target_file_path):
-                                    render_download_button(target_file_path, "dl_ind_conv", f"📥 Descargar {out_file_name}")
+                                    # Logic for Web Mode (In-Memory Download) vs Native Mode (Open Folder/File)
+                                    if not is_native:
+                                        with open(target_file_path, "rb") as f:
+                                            file_data = f.read()
+                                        
+                                        st.download_button(
+                                            label=f"📥 Descargar {out_file_name}",
+                                            data=file_data,
+                                            file_name=out_file_name,
+                                            mime="application/octet-stream"
+                                        )
+                                        
+                                        # Cleanup temp file immediately after reading
+                                        try:
+                                            os.remove(target_file_path)
+                                        except:
+                                            pass
+                                    else:
+                                        # Native Mode
+                                        render_download_button(target_file_path, "dl_ind_conv", f"📥 Abrir/Descargar {out_file_name}")
                             
                             elif conv_type_code == "PDF2JPG":
                                 # Find generated JPGs
@@ -435,61 +502,53 @@ def render(container=None):
                         if temp_dir_obj:
                             temp_dir_obj.cleanup()
 
-        # --- TAB 2: MASIVA ---
+        # --- TAB 2: MASSIVE ---
         with tab_mass:
             st.markdown("### Configuración de Conversión Masiva")
             
-            # 1. Carpeta Objetivo (Origen)
-            st.write("**Carpeta Origen:**")
-            
-            # Determinar ruta origen a mostrar/usar
-            current_global_path = st.session_state.get("current_path", os.getcwd())
-            if not current_global_path: current_global_path = os.getcwd()
-            
-            source_path = render_path_selector(
-                label="Ruta Origen",
-                key="conv_mass_target"
-            )
-            
-            target_folder = source_path
-            
-            # 2. Tipo de Conversión Masiva
-            st.write("**Tipo de Conversión Masiva:**")
-            mass_conv_type_label = st.selectbox("Tipo de Conversión Masiva", list(conversion_options.keys()), label_visibility="collapsed", key="mass_conv_type")
-            mass_conv_type_code = conversion_options[mass_conv_type_label]
+            st.write("**Tipo de Conversión:**")
+            conv_type_mass_label = st.selectbox("Tipo de Conversión", list(conversion_options.keys()), label_visibility="collapsed", key="mass_conv_type")
+            conv_type_mass = conversion_options[conv_type_mass_label]
 
-            # Separator selection for XLSX2TXT
-            mass_sep = ','
-            if mass_conv_type_code == "XLSX2TXT":
+            sep_mass = ','
+            if conv_type_mass == "XLSX2TXT":
                 st.write("**Delimitador:**")
-                mass_sep_label = st.selectbox("Seleccione delimitador", ["Coma (,)", "Punto y coma (;)", "Pipe (|)"], key="mass_sep")
+                sep_label_mass = st.selectbox("Seleccione delimitador", ["Coma (,)", "Punto y coma (;)", "Pipe (|)"], key="mass_sep")
                 sep_map = {"Coma (,)": ",", "Punto y coma (;)": ";", "Pipe (|)": "|"}
-                mass_sep = sep_map[mass_sep_label]
+                sep_mass = sep_map[sep_label_mass]
 
-            # 3. Guardar en (Destino)
-            st.write("**Ubicación de Salida:**")
-            
-            target_output = render_path_selector(
-                label="Carpeta Salida",
-                key="conv_mass_out",
-                omit_checkbox=True
+            # Source
+            source_path = render_path_selector(
+                label="Carpeta Origen (Masivo)",
+                key="conv_mass_source"
             )
+
+            # Output
+            st.markdown("### Carpeta de Salida")
+            is_native = st.session_state.get("force_native_mode", True)
             
-            # 4. Execute
+            if is_native:
+                out_path = render_path_selector(
+                    label="Carpeta Destino",
+                    key="conv_mass_out"
+                )
+            else:
+                # Web Mode: Use temp folder
+                timestamp = int(time.time())
+                out_path = os.path.join(os.getcwd(), "temp_downloads", f"mass_{timestamp}")
+                os.makedirs(out_path, exist_ok=True)
+                st.info(f"📂 Procesando en entorno temporal: {out_path}")
+
+            # Execute
             st.write("")
             if st.button("🚀 Ejecutar Conversión Masiva", key="btn_exec_mass"):
-                if not target_output:
+                if not out_path:
                     st.error("⚠️ Seleccione una carpeta de salida.")
-                elif target_folder and os.path.exists(target_folder):
-                    final_output = target_output
-                        
-                    count, msg = worker_convertir_masivo(target_folder, mass_conv_type_code, output_folder=final_output, sep=mass_sep)
+                elif source_path and os.path.exists(source_path):
+                    count, msg = worker_convertir_masivo(source_path, conv_type_mass, output_folder=out_path, sep=sep_mass)
                     if count > 0:
                         st.success(msg)
-                        
-                        dl_folder = final_output if final_output else target_folder
-                        render_download_button(dl_folder, "dl_mass_conv", "📦 Descargar Archivos Convertidos (ZIP)")
-                        
+                        render_download_button(out_path, "dl_mass_conv", "📦 Descargar Archivos Convertidos (ZIP)")
                     else:
                         st.warning(msg)
                 else:
