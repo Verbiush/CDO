@@ -39,10 +39,29 @@ except ImportError as e:
 
 CONFIG_FILE = "agent_config.json"
 
-def load_config():
+def get_config_path():
+    # 1. Check current directory
     if os.path.exists(CONFIG_FILE):
+        return CONFIG_FILE
+    
+    # 2. Check LocalAppData/CDO_Organizer (Standard install location)
+    local_appdata = os.getenv('LOCALAPPDATA', os.path.expanduser("~"))
+    app_dir = os.path.join(local_appdata, "CDO_Organizer")
+    config_path = os.path.join(app_dir, CONFIG_FILE)
+    
+    if os.path.exists(config_path):
+        return config_path
+        
+    # 3. Return default location for creation (AppData if possible, else CWD)
+    if os.path.exists(app_dir):
+        return config_path
+    return CONFIG_FILE
+
+def load_config():
+    config_path = get_config_path()
+    if os.path.exists(config_path):
         try:
-            with open(CONFIG_FILE, 'r') as f:
+            with open(config_path, 'r') as f:
                 return json.load(f)
         except:
             return None
@@ -50,7 +69,12 @@ def load_config():
 
 def save_config(url, username, password):
     config = {"url": url, "username": username, "password": password}
-    with open(CONFIG_FILE, 'w') as f:
+    config_path = get_config_path()
+    
+    # Ensure directory exists if saving to AppData
+    os.makedirs(os.path.dirname(os.path.abspath(config_path)), exist_ok=True)
+    
+    with open(config_path, 'w') as f:
         json.dump(config, f)
     return config
 
@@ -58,23 +82,46 @@ def setup():
     print("\n=== Configuración del Agente CDO ===")
     print("Este agente conectará su PC con la nube para permitir funciones nativas.")
     
-    default_url = "https://cdo-aws.com" # Replace with actual default if known
-    url = input(f"URL del Servidor (Enter para '{default_url}'): ").strip()
-    if not url: url = default_url
+    default_url = "http://3.142.164.128:8000"
     
-    if not url.startswith("http"): url = "https://" + url
+    # Check if we are in a GUI environment (no console)
+    is_gui = False
+    try:
+        if sys.stdin is None or sys.stdin.closed:
+            is_gui = True
+    except:
+        is_gui = True
+        
+    if is_gui:
+        import tkinter as tk
+        from tkinter import simpledialog, messagebox
+        
+        root = tk.Tk()
+        root.withdraw() # Hide main window
+        
+        messagebox.showinfo("Configuración Requerida", "El agente no está configurado.\nPor favor ingrese los datos de conexión.")
+        
+        url = simpledialog.askstring("Configuración", f"URL del Servidor:", initialvalue=default_url)
+        if not url: return None
+        
+        username = simpledialog.askstring("Configuración", "Usuario CDO:")
+        if not username: return None
+        
+        password = simpledialog.askstring("Configuración", "Contraseña CDO:", show='*')
+        if not password: return None
+        
+        root.destroy()
+    else:
+        url = input(f"URL del Servidor (Enter para '{default_url}'): ").strip()
+        if not url: url = default_url
+        
+        username = input("Usuario CDO: ").strip()
+        password = getpass("Contraseña CDO: ").strip()
+    
+    if not url.startswith("http"): url = "http://" + url
     url = url.rstrip("/")
     
-    # Check for /api or /server_api path if user just entered domain
-    # Assuming the FastAPI is mounted or accessible directly. 
-    # Based on server_api.py, it runs on port 8000 usually.
-    # If behind Nginx, it might be /api/v1...
-    # For now, we assume the user enters the base URL where the API is reachable.
-    
     print(f"Conectando a: {url}")
-    
-    username = input("Usuario CDO: ").strip()
-    password = getpass("Contraseña CDO: ").strip()
     
     # Verify connection
     print("Verificando credenciales...")
