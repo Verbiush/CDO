@@ -50,23 +50,22 @@ def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
     except Exception as e:
         # En modo Web, esto puede pasar si force_native_mode no se detecta correctamente
         # Intentar fallback al Agente Local si falla Tkinter (ej: headless server)
-        if "DISPLAY" in str(e) or "screen" in str(e) or "application has been destroyed" in str(e):
-            try:
-                # Lazy import
-                try: import agent_client
-                except ImportError: from src import agent_client
-                
-                username = st.session_state.get("username", "admin")
-                st.toast("Conectando con Agente Local...", icon="🔌")
-                
-                # Usar el agente para abrir el diálogo en el PC del usuario
-                return agent_client.select_folder(username, title=title)
-            except Exception as agent_e:
-                st.error(f"Error: No se puede abrir ventana nativa y el agente falló: {agent_e}")
-                return None
-        else:
-            st.error(f"Error al abrir selector nativo: {e}")
-        return None
+        # Hacemos el fallback SIEMPRE que falle Tkinter, sin importar el mensaje de error específico
+        print(f"DEBUG: Tkinter failed ({e}). Trying Agent fallback...")
+        
+        try:
+            # Lazy import
+            try: import agent_client
+            except ImportError: from src import agent_client
+            
+            username = st.session_state.get("username", "admin")
+            st.toast("Conectando con Agente Local...", icon="🔌")
+            
+            # Usar el agente para abrir el diálogo en el PC del usuario
+            return agent_client.select_folder(username, title=title)
+        except Exception as agent_e:
+            st.error(f"Error: No se puede abrir ventana nativa y el agente falló: {agent_e}")
+            return None
 
 def abrir_dialogo_archivo_nativo(title="Seleccionar Archivo", initial_dir=None, file_types=None):
     """

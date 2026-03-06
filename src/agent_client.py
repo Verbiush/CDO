@@ -47,12 +47,17 @@ def select_folder(username, title="Seleccionar Carpeta"):
     """
     Request the agent to open a folder selection dialog on the user's PC.
     """
+    print(f"DEBUG: Requesting select_folder for user {username}")
     task_id = send_command(username, "browse_folder", {"title": title})
     if not task_id:
+        print("DEBUG: Failed to create task (task_id is None)")
         return None
     
+    print(f"DEBUG: Task created with ID {task_id}. Waiting for result...")
     with st.spinner("Esperando a que seleccione la carpeta en su PC..."):
         result = wait_for_result(task_id)
+    
+    print(f"DEBUG: Result received: {result}")
         
     if result and "path" in result:
         return result["path"]
