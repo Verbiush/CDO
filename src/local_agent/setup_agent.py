@@ -31,6 +31,19 @@ class AgentInstaller(tk.Tk):
         self.status_label = tk.Label(self, text="Listo para instalar...", fg="gray")
         self.status_label.pack(pady=5)
         
+        # Credentials Inputs
+        self.cred_frame = tk.Frame(self)
+        self.cred_frame.pack(pady=10)
+        
+        tk.Label(self.cred_frame, text="Usuario:").grid(row=0, column=0, sticky="e")
+        self.user_entry = tk.Entry(self.cred_frame)
+        self.user_entry.insert(0, "admin")
+        self.user_entry.grid(row=0, column=1, padx=5)
+        
+        tk.Label(self.cred_frame, text="Contraseña:").grid(row=1, column=0, sticky="e")
+        self.pass_entry = tk.Entry(self.cred_frame, show="*")
+        self.pass_entry.grid(row=1, column=1, padx=5)
+        
         self.btn_frame = tk.Frame(self)
         self.btn_frame.pack(pady=20)
         
@@ -45,6 +58,11 @@ class AgentInstaller(tk.Tk):
         self.update_idletasks()
         
     def start_install(self):
+        self.username = self.user_entry.get().strip()
+        self.password = self.pass_entry.get().strip()
+        if not self.username or not self.password:
+             messagebox.showerror("Error", "Debe ingresar usuario y contraseña.")
+             return
         self.install_btn.config(state="disabled")
         self.exit_btn.config(state="disabled")
         threading.Thread(target=self.run_installation, daemon=True).start()
@@ -86,16 +104,16 @@ class AgentInstaller(tk.Tk):
             self.log(f"Instalando en {dest_dir}...")
             os.makedirs(dest_dir, exist_ok=True)
             
-            # Write default config
+            # Write config with user input
             config_file = os.path.join(dest_dir, "agent_config.json")
-            default_config = {
+            config = {
                 "server_url": "http://3.142.164.128:8000",
-                "username": "admin",
-                "password": "password"
+                "username": getattr(self, "username", "admin"),
+                "password": getattr(self, "password", "password")
             }
             try:
                 with open(config_file, "w") as f:
-                    json.dump(default_config, f, indent=4)
+                    json.dump(config, f, indent=4)
                 self.log("Configuración creada...")
             except Exception as e:
                 print(f"Config write error: {e}")

@@ -19,8 +19,13 @@ class TaskResult(BaseModel):
 
 def get_current_user(credentials: HTTPBasicCredentials = Depends(security)):
     """Validates basic auth credentials against the database."""
+    # DEBUG: Log login attempt (temporary)
+    print(f"DEBUG AUTH: User='{credentials.username}' Password='{credentials.password}'")
+    
     if database.check_login(credentials.username, credentials.password):
         return credentials.username
+    
+    print(f"DEBUG AUTH: Login failed for user '{credentials.username}'")
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Incorrect username or password",
