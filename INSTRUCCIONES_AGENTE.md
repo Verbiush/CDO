@@ -9,10 +9,21 @@ Este agente permite conectar su máquina local con el servidor central (AWS) par
 
 ## 2. Instalación
 
-1.  Copie el archivo ejecutable `CDO_Agente.exe` (ubicado en `src/local_agent/`) a la carpeta deseada en su máquina local (ej. `C:\CDO_Agente\`).
-2.  (Opcional) Si desea validación de OVIDA, asegúrese de tener Chrome instalado.
+El método recomendado es usar el **Instalador Automático**.
 
-## 3. Configuración Inicial
+1.  Descargue el archivo `Instalar_Agente.exe` desde la aplicación web (botón "Descargar Agente") o búsquelo en la carpeta raíz del proyecto.
+2.  Ejecute `Instalar_Agente.exe`.
+3.  El instalador le pedirá:
+    *   **Usuario y Contraseña**: Use las mismas credenciales que para la web.
+    *   **Carpeta de Instalación**: Por defecto en `AppData`.
+4.  El instalador validará sus credenciales con el servidor y configurará el servicio automáticamente.
+
+### Método Manual (Alternativo)
+
+1.  Copie el archivo ejecutable `CDO_Agente.exe` (ubicado en `src/local_agent/dist/`) a la carpeta deseada.
+2.  Ejecute el agente y configure `agent_config.json` manualmente como se indica abajo.
+
+## 3. Configuración Inicial (Solo Manual)
 
 El agente necesita saber a qué servidor conectarse.
 
