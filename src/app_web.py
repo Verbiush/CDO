@@ -108,63 +108,63 @@ def create_standalone_agent_zip():
 
     return None, False, None
 
-def create_lightweight_agent_zip():
+def create_cdo_agent_zip():
     """
-    Creates a ZIP with the Python source script for the agent.
+    Creates a full installer ZIP for the CDO Local Agent.
     """
     import zipfile
     import io
     import os
     
     output = io.BytesIO()
+    base_dir = os.path.dirname(os.path.abspath(__file__)) # src/
     
-    # Locate main.py for the agent
-    agent_script = os.path.join(os.path.dirname(__file__), "local_agent", "main.py")
-    if not os.path.exists(agent_script):
-        # Fallback for dev structure
-        agent_script = os.path.join(os.path.dirname(__file__), "..", "local_agent", "main.py")
-        
-    if os.path.exists(agent_script):
-        with open(agent_script, 'r', encoding='utf-8') as f:
-            agent_code = f.read()
-            
-        with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as z:
-            z.writestr("agent.py", agent_code)
-            
-            # requirements.txt
-            z.writestr("requirements.txt", "flask\nflask-cors")
-            
-            # readme
-            readme = """# Agente Local CDO
-
-Este agente permite que la aplicación web CDO acceda a sus archivos locales.
-
-## Instrucciones:
-1. Asegúrese de tener Python instalado (https://www.python.org/downloads/).
-2. Abra una terminal en esta carpeta.
-3. Instale las dependencias:
-   pip install -r requirements.txt
-4. Ejecute el agente:
-   python agent.py
-5. Vuelva a la aplicación web y conecte.
-"""
-            z.writestr("LEER_ANTES_DE_USAR.txt", readme)
-            
-            # run_agent.bat (Windows convenience)
-            bat_code = """@echo off
-echo Instalando dependencias si faltan...
-pip install -r requirements.txt
-cls
-echo Iniciando Agente CDO...
-python agent.py
-pause
-"""
-            z.writestr("iniciar_agente.bat", bat_code)
-            
-        output.seek(0)
-        return output.getvalue()
+    # Define files to include
+    # (source_path_rel_to_src, archive_path)
+    files_to_zip = [
+        ("local_agent/install_agent.ps1", "install_agent.ps1"),
+        ("local_agent/main.py", "src/local_agent/main.py"),
+        ("local_agent/cert_gen.py", "src/local_agent/cert_gen.py"),
+        ("local_agent/README.md", "src/local_agent/README.md"),
+        ("bot_zeus.py", "src/bot_zeus.py")
+    ]
     
-    return None
+    with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as z:
+        for src_rel, archive_path in files_to_zip:
+            full_path = os.path.join(base_dir, src_rel)
+            if not os.path.exists(full_path):
+                # Fallback for dev environment where src might be parent
+                # If app_web.py is in src, base_dir is src.
+                # src_rel is local_agent/...
+                pass
+                
+            if os.path.exists(full_path):
+                z.write(full_path, archive_path)
+            else:
+                # Try absolute path fallback if base_dir is wrong
+                pass
+                
+        # Add a README at root
+        readme_root = """# Instalación Agente CDO
+
+1. Descomprima este archivo ZIP en una carpeta permanente (ej: C:\CDO_Agent).
+2. Abra PowerShell como Administrador.
+3. Navegue a la carpeta descomprimida:
+   cd C:\CDO_Agent
+4. Ejecute el instalador:
+   Set-ExecutionPolicy Bypass -Scope Process -Force; ./install_agent.ps1
+
+El agente se instalará como un servicio de inicio y se ejecutará en segundo plano.
+"""
+        z.writestr("LEEME.txt", readme_root)
+
+    output.seek(0)
+    return output.getvalue(), "CDO_Agente_Installer.zip"
+
+def create_lightweight_agent_zip():
+    # Legacy wrapper
+    content, name = create_cdo_agent_zip()
+    return content
 
 # --- DATABASE / USER MANAGEMENT ---
 try:
@@ -414,6 +414,20 @@ else:
                     st.success("✅ Modo Nativo Activo")
                 else:
                     st.info("☁️ Modo Web Activo")
+                    st.markdown("##### 🔌 Agente Local")
+                    st.caption("Para habilitar funciones nativas en Modo Web, instale el Agente Local.")
+                    try:
+                        zip_bytes, filename = create_cdo_agent_zip()
+                        st.download_button(
+                            label="⬇️ Descargar Instalador",
+                            data=zip_bytes,
+                            file_name=filename,
+                            mime="application/zip",
+                            help="Descargue el instalador para conectar su PC.",
+                            key="btn_download_agent_sidebar"
+                        )
+                    except Exception as e:
+                        st.error(f"Error generando instalador: {e}")
                 
                 st.markdown("---")
                 st.markdown("### Configuración de IA (Gemini)")
