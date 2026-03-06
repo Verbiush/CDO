@@ -69,6 +69,26 @@ class AgentInstaller(tk.Tk):
         
     def run_installation(self):
         try:
+            # 0. Validate Credentials
+            self.log("Validando credenciales...")
+            try:
+                import requests
+                auth = (self.username, self.password)
+                url = "http://3.142.164.128:8000"
+                res = requests.get(f"{url}/auth/verify", auth=auth, timeout=10)
+                if res.status_code == 200:
+                    self.log("✅ Credenciales válidas.")
+                elif res.status_code == 401:
+                    self.log("❌ Error: Usuario o contraseña incorrectos.")
+                    messagebox.showerror("Error de Autenticación", "Usuario o contraseña incorrectos.")
+                    self.install_btn.config(state="normal")
+                    self.exit_btn.config(state="normal")
+                    return
+                else:
+                    self.log(f"⚠️ Advertencia: No se pudo validar credenciales (HTTP {res.status_code}). Continuando...")
+            except Exception as e:
+                self.log(f"⚠️ Advertencia: Error conectando al servidor: {e}")
+
             self.progress['value'] = 0
             self.log("Buscando archivos...")
             

@@ -40,6 +40,11 @@ def read_root():
 def ping():
     return {"pong": True}
 
+@app.get("/auth/verify")
+def verify_auth(username: str = Depends(get_current_user)):
+    """Verifies that the provided credentials are valid."""
+    return {"status": "valid", "username": username}
+
 @app.get("/tasks/poll")
 def poll_tasks(username: str = Depends(get_current_user)):
     """Agent polls for new tasks."""
