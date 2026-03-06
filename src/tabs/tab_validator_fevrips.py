@@ -118,6 +118,8 @@ def on_click_update_config(key, new_value):
 def dialog_generar_cuv():
     st.write("Genera el Código Único de Validación (CUV) enviando los archivos RIPS a la API local.")
     
+    is_native = st.session_state.get("force_native_mode", True)
+    
     current_global_path = st.session_state.get("current_path", os.getcwd())
     if not current_global_path: current_global_path = os.getcwd()
 
@@ -679,7 +681,7 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
                         count_copied += 1
                 
                 if count_copied > 0:
-                    render_download_button(temp_dir, "btn_download_fevrips", "📦 Descargar Resultados (ZIP)")
+                    render_download_button(temp_dir, "btn_download_fevrips", "📦 Descargar Resultados (ZIP)", cleanup=not is_native)
                 else:
                     st.warning("No se pudieron copiar los archivos generados para descarga.")
                     

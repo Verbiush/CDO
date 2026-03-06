@@ -413,18 +413,32 @@ def render_download_button(folder_path, key, label="📦 Descargar ZIP", cleanup
             if is_file:
                 # Direct download for single file
                 try:
+                    # Read into memory to allow cleanup
                     with open(folder_path, "rb") as f:
-                        file_name = os.path.basename(folder_path)
-                        # Use provided label if it's not the default generic one, otherwise make it specific
-                        btn_label = label if label != "📦 Descargar ZIP" else f"📥 Descargar {file_name}"
-                        
-                        st.download_button(
-                            label=btn_label,
-                            data=f,
-                            file_name=file_name,
-                            mime="application/octet-stream",
-                            key=f"dl_btn_file_{key}"
-                        )
+                        file_content = f.read()
+                    
+                    # Cleanup if requested (BEFORE showing button, since we have content in memory)
+                    if cleanup:
+                        try:
+                            os.remove(folder_path)
+                            # Optional: Try to remove parent dir if it looks like a temp dir and is empty
+                            parent_dir = os.path.dirname(folder_path)
+                            if "temp" in parent_dir.lower() and not os.listdir(parent_dir):
+                                os.rmdir(parent_dir)
+                        except Exception as e:
+                            print(f"Error cleaning up file {folder_path}: {e}")
+                            
+                    file_name = os.path.basename(folder_path)
+                    # Use provided label if it's not the default generic one, otherwise make it specific
+                    btn_label = label if label != "📦 Descargar ZIP" else f"📥 Descargar {file_name}"
+                    
+                    st.download_button(
+                        label=btn_label,
+                        data=file_content,
+                        file_name=file_name,
+                        mime="application/octet-stream",
+                        key=f"dl_btn_file_{key}"
+                    )
                 except Exception as e:
                     st.error(f"Error al leer archivo: {e}")
             else:

@@ -762,6 +762,8 @@ def render():
              st.session_state.gd_base_path = default_hardcoded
              st.session_state.input_base_path_struct = default_hardcoded
         
+        is_native = st.session_state.get("force_native_mode", True)
+
         # Selector de Ruta Estandarizado
         base_path = render_path_selector(
             label="Carpeta Raíz / ZIP Base (Modo Web)",
@@ -770,6 +772,17 @@ def render():
             omit_checkbox=False,
             help_text="Seleccione la carpeta donde se crearán las subcarpetas. En Modo Web, suba un ZIP (puede estar vacío) para usarlo como base."
         )
+        
+        # In Web Mode, if no ZIP uploaded, create a temp dir to start fresh
+        if not is_native and (not base_path or not os.path.exists(base_path)):
+             # Create a temp dir for this session/action if not exists
+             temp_base = os.path.join(os.getcwd(), "temp_downloads", f"struct_{int(time.time())}")
+             if "temp_struct_path" not in st.session_state:
+                 os.makedirs(temp_base, exist_ok=True)
+                 st.session_state.temp_struct_path = temp_base
+             base_path = st.session_state.temp_struct_path
+             st.info(f"Modo Web: Usando directorio temporal para generar estructura: {base_path}")
+
         st.session_state.input_base_path_struct = base_path
 
         st.caption("Patrón de Carpetas: Use `{eps}`, `{fecha_ingreso}`, `{nombre_completo}`, etc.")
@@ -825,7 +838,7 @@ def render():
              # Verify path still exists (temp might be cleaned up if server restarts, but usually persists in session)
              if os.path.exists(st.session_state.last_created_folders_path):
                  st.info(f"📂 Última creación: {st.session_state.get('last_created_folders_count', 0)} carpetas listas para descargar.")
-                 render_download_button(st.session_state.last_created_folders_path, "dl_struct", "📦 Descargar Estructura (ZIP)")
+                 render_download_button(st.session_state.last_created_folders_path, "dl_struct", "📦 Descargar Estructura (ZIP)", cleanup=not is_native)
              else:
                  # Clean up invalid state
                  if "last_created_folders_path" in st.session_state:
@@ -952,7 +965,7 @@ def render():
                         st.success(f"Carpetas Renombradas: {count_ren}. Errores/Omis: {errors_ren}")
                         
                         # --- DOWNLOAD BUTTON (WEB MODE) ---
-                        render_download_button(source_path, "dl_ren", "📦 Descargar Carpetas Renombradas (ZIP)")
+                        render_download_button(source_path, "dl_ren", "📦 Descargar Carpetas Renombradas (ZIP)", cleanup=not is_native)
                     except Exception as e:
                         st.error(f"Error accediendo a la carpeta: {e}")
 
@@ -980,6 +993,16 @@ def render():
                     key="gd_dest_path_mov_selector",
                     omit_checkbox=False
                 )
+                
+                # In Web Mode, if no ZIP uploaded for destination, create a temp dir
+                if not is_native and (not base_dest or not os.path.exists(base_dest)):
+                     temp_mov = os.path.join(os.getcwd(), "temp_downloads", f"mov_{int(time.time())}")
+                     if "temp_mov_path" not in st.session_state:
+                         os.makedirs(temp_mov, exist_ok=True)
+                         st.session_state.temp_mov_path = temp_mov
+                     base_dest = st.session_state.temp_mov_path
+                     st.info(f"Modo Web: Usando directorio temporal para destino: {base_dest}")
+
                 st.session_state.input_base_path_struct_mov = base_dest
                 
                 if st.button("Ejecutar Movimiento", key="btn_run_mov"):
@@ -1028,7 +1051,7 @@ def render():
                         st.success(f"Items Movidos: {count_mov}. Errores: {errors_mov}")
                         
                         # --- DOWNLOAD BUTTON (WEB MODE) ---
-                        render_download_button(base_dest, "dl_mov", "📦 Descargar Archivos Organizados (ZIP)")
+                        render_download_button(base_dest, "dl_mov", "📦 Descargar Archivos Organizados (ZIP)", cleanup=not is_native)
                     except Exception as e:
                          st.error(f"Error accediendo a la carpeta: {e}")
 
@@ -1178,7 +1201,7 @@ def render():
                     st.success(f"Archivos renombrados con sufijo: {count_suf}. Errores/Omitidos: {errors_suf}")
                     
                     # --- DOWNLOAD BUTTON (WEB MODE) ---
-                    render_download_button(source_path, "dl_suf", "📦 Descargar Archivos con Sufijo (ZIP)")
+                    render_download_button(source_path, "dl_suf", "📦 Descargar Archivos con Sufijo (ZIP)", cleanup=not is_native)
                 except Exception as e:
                      st.error(f"Error general: {e}")
 
@@ -1199,6 +1222,15 @@ def render():
             key="input_base_path_content",
             omit_checkbox=False
         )
+
+        # In Web Mode, if no ZIP uploaded, create a temp dir
+        if not is_native and (not base_path_content or not os.path.exists(base_path_content)):
+             temp_content = os.path.join(os.getcwd(), "temp_downloads", f"content_{int(time.time())}")
+             if "temp_content_path" not in st.session_state:
+                 os.makedirs(temp_content, exist_ok=True)
+                 st.session_state.temp_content_path = temp_content
+             base_path_content = st.session_state.temp_content_path
+             st.info(f"Modo Web: Usando directorio temporal para contenido: {base_path_content}")
         
         st.caption("Patrón de Carpetas (Debe coincidir con la estructura creada)")
         folder_structure_content = st.text_input("Patrón de Carpetas", value="{eps}/{no_factura} - {nombre_completo}", key="input_folder_structure_content")
@@ -1590,7 +1622,7 @@ def render():
                                 st.error(err)
                                 
                     # --- DOWNLOAD BUTTON (WEB MODE) ---
-                    render_download_button(base_path_content, "dl_docs", "📦 Descargar Documentos Generados (ZIP)")
+                    render_download_button(base_path_content, "dl_docs", "📦 Descargar Documentos Generados (ZIP)", cleanup=not is_native)
 
         # ACTION 3: DOWNLOAD SIGNATURES
         with col_act3:
@@ -1632,7 +1664,7 @@ def render():
                 st.success(f"✅ Firmas Descargadas: {count_sign_download}")
                 
                 # --- DOWNLOAD BUTTON (WEB MODE) ---
-                render_download_button(base_path_content, "dl_sign_dl", "📦 Descargar Firmas (ZIP)")
+                render_download_button(base_path_content, "dl_sign_dl", "📦 Descargar Firmas (ZIP)", cleanup=not is_native)
 
         # ACTION 4: CREATE DIGITAL SIGNATURES
         with col_act4:
@@ -1701,7 +1733,7 @@ def render():
                 st.success(f"✅ Firmas Creadas: {count_sign_create}")
                 
                 # --- DOWNLOAD BUTTON (WEB MODE) ---
-                render_download_button(base_path_content, "dl_sign_cr", "📦 Descargar Firmas Digitales (ZIP)")
+                render_download_button(base_path_content, "dl_sign_cr", "📦 Descargar Firmas Digitales (ZIP)", cleanup=not is_native)
 
         # --- ACTION 5: DOWNLOAD OVIDA HISTORY ---
         st.divider()

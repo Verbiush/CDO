@@ -449,26 +449,13 @@ def render(container=None):
                                     target_file_path = actual_input_path
                                 
                                 if os.path.exists(target_file_path):
-                                    # Logic for Web Mode (In-Memory Download) vs Native Mode (Open Folder/File)
-                                    if not is_native:
-                                        with open(target_file_path, "rb") as f:
-                                            file_data = f.read()
-                                        
-                                        st.download_button(
-                                            label=f"📥 Descargar {out_file_name}",
-                                            data=file_data,
-                                            file_name=out_file_name,
-                                            mime="application/octet-stream"
-                                        )
-                                        
-                                        # Cleanup temp file immediately after reading
-                                        try:
-                                            os.remove(target_file_path)
-                                        except:
-                                            pass
-                                    else:
-                                        # Native Mode
-                                        render_download_button(target_file_path, "dl_ind_conv", f"📥 Abrir/Descargar {out_file_name}")
+                                    # Use standardized download button with cleanup
+                                    render_download_button(
+                                        target_file_path, 
+                                        f"dl_ind_file_{int(time.time())}", 
+                                        f"📥 Descargar {out_file_name}", 
+                                        cleanup=not is_native
+                                    )
                             
                             elif conv_type_code == "PDF2JPG":
                                 # Find generated JPGs
@@ -488,7 +475,19 @@ def render(container=None):
                                             for jpg in jpgs:
                                                 zf.write(jpg, os.path.basename(jpg))
                                         
-                                        render_download_button(zip_path, "dl_ind_jpgs", "📦 Descargar Imágenes (ZIP)")
+                                        render_download_button(
+                                            zip_path, 
+                                            "dl_ind_jpgs", 
+                                            "📦 Descargar Imágenes (ZIP)", 
+                                            cleanup=not is_native
+                                        )
+                                        
+                                        # Cleanup temp output folder containing raw JPGs
+                                        if not is_native and "temp_downloads" in actual_output_folder:
+                                            try:
+                                                shutil.rmtree(actual_output_folder, ignore_errors=True)
+                                            except:
+                                                pass
                                     except Exception as e:
                                         st.error(f"Error preparando ZIP: {e}")
                             # ----------------------
@@ -548,7 +547,7 @@ def render(container=None):
                     count, msg = worker_convertir_masivo(source_path, conv_type_mass, output_folder=out_path, sep=sep_mass)
                     if count > 0:
                         st.success(msg)
-                        render_download_button(out_path, "dl_mass_conv", "📦 Descargar Archivos Convertidos (ZIP)")
+                        render_download_button(out_path, "dl_mass_conv", "📦 Descargar Archivos Convertidos (ZIP)", cleanup=not is_native)
                     else:
                         st.warning(msg)
                 else:
