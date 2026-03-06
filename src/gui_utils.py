@@ -213,76 +213,20 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         # --- WEB MODE ---
         st.markdown(f"**{label}**")
         
-        # Options: Upload ZIP vs Manual/Agent
-        opts = ["Subir Archivos (ZIP)", "Ruta del Servidor / Manual"]
-        if database:
-            opts.append("Agente Local")
-            
-        method = st.radio("Método de Selección:", opts, 
-                          key=f"method_{key}", horizontal=True, label_visibility="collapsed")
+        # En modo Web, forzamos la carga de ZIP (sin opciones manuales ni agente)
+        st.write("Sube un ZIP para trabajar con sus carpetas/archivos.")
+        uploaded = st.file_uploader(f"Subir ZIP con archivos para '{label}'", type="zip", key=f"upload_{key}", label_visibility="collapsed")
         
-        if method == "Subir Archivos (ZIP)":
-            st.write("Sube un ZIP para trabajar con sus carpetas/archivos.")
-            uploaded = st.file_uploader(f"Subir ZIP con archivos para '{label}'", type="zip", key=f"upload_{key}", label_visibility="collapsed")
-            if uploaded:
-                path = extract_uploaded_zip(uploaded)
-                if path:
-                    st.success(f"✅ Archivos extraídos en: {path}")
-                    st.session_state[key] = path
-                    target_path = path
-                    # Show preview of extracted files?
-                    # st.caption(f"Contenido: {os.listdir(path)[:5]}...")
-            else:
-                st.info("Esperando archivo ZIP...")
-                
-        elif method == "Ruta del Servidor / Manual":
-            input_key = f"input_man_{key}"
-            st.text_input("Ruta en el Servidor", value=target_path, key=input_key, help=help_text,
-                          on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
-            
-        elif method == "Agente Local":
-            col1, col2 = st.columns([0.8, 0.2])
-            with col1:
-                st.text_input("Ruta (desde Agente)", value=target_path, disabled=True, key=f"disp_agent_{key}")
-            with col2:
-                st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-                btn_key = f"btn_agent_{key}"
-                if st.button("🖥️", key=btn_key, help="Solicitar selección al Agente Local"):
-                     if not database:
-                         st.error("Módulo de base de datos no disponible.")
-                     else:
-                         username = st.session_state.get("username", "admin")
-                         success, task_id = database.create_task(username, "SELECT_FOLDER")
-                         
-                         if success and task_id:
-                             progress_text = "Esperando agente..."
-                             status_area = st.empty()
-                             status_area.info(progress_text)
-                             
-                             found = False
-                             for _ in range(60):
-                                 time.sleep(1)
-                                 result = database.get_task_result(task_id)
-                                 if result and result.get("status") == "COMPLETED":
-                                     res_data = result.get("result", {})
-                                     if res_data and res_data.get("success"):
-                                         path = res_data.get("data")
-                                         if path:
-                                             update_path_key(key, path)
-                                             status_area.success("Seleccionado!")
-                                             found = True
-                                             time.sleep(0.5)
-                                             st.rerun()
-                                     break
-                                 elif result and result.get("status") == "ERROR":
-                                     status_area.error(f"Error: {result.get('result', {}).get('error')}")
-                                     found = True
-                                     break
-                             
-                             if not found:
-                                 status_area.warning("Tiempo agotado.")
-                         else:
-                             st.error("No se pudo crear la tarea. Verifique la conexión con la base de datos.")
+        if uploaded:
+            path = extract_uploaded_zip(uploaded)
+            if path:
+                st.success(f"✅ Archivos extraídos en: {path}")
+                st.session_state[key] = path
+                target_path = path
+                # Show preview of extracted files?
+                # st.caption(f"Contenido: {os.listdir(path)[:5]}...")
+        else:
+            st.info("Esperando archivo ZIP...")
 
     return target_path
 
@@ -342,92 +286,38 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
         # --- WEB MODE ---
         st.markdown(f"**{label}**")
         
-        opts = ["Subir Archivo", "Ruta del Servidor / Manual"]
-        if database:
-            opts.append("Agente Local")
-            
-        method = st.radio("Método de Selección:", opts, key=f"method_file_{key}", horizontal=True, label_visibility="collapsed")
+        # En modo Web, simplificamos a solo subida de archivo
+        # Map file_types to extensions for uploader
+        allowed_exts = None
+        if file_types:
+            # file_types is usually list of tuples [("Excel", "*.xlsx"), ...]
+            allowed_exts = []
+            for _, pat in file_types:
+                if pat == "*.*": continue
+                allowed_exts.append(pat.replace("*.", ""))
         
-        if method == "Subir Archivo":
-            # Map file_types to extensions for uploader
-            allowed_exts = None
-            if file_types:
-                # file_types is usually list of tuples [("Excel", "*.xlsx"), ...]
-                allowed_exts = []
-                for _, pat in file_types:
-                    if pat == "*.*": continue
-                    allowed_exts.append(pat.replace("*.", ""))
-            
-            uploaded = st.file_uploader(f"Subir archivo para '{label}'", type=allowed_exts, key=f"upload_file_{key}", label_visibility="collapsed")
-            if uploaded:
-                # Save to temp
-                try:
-                    timestamp = int(time.time())
-                    safe_name = "".join([c for c in uploaded.name if c.isalnum() or c in ('-', '_', '.')])
-                    temp_dir = os.path.join(os.getcwd(), "temp_uploads", f"{timestamp}_file")
-                    os.makedirs(temp_dir, exist_ok=True)
-                    file_path = os.path.join(temp_dir, safe_name)
+        uploaded = st.file_uploader(f"Subir archivo para '{label}'", type=allowed_exts, key=f"upload_file_{key}", label_visibility="collapsed")
+        
+        if uploaded:
+            # Save to temp
+            try:
+                timestamp = int(time.time())
+                safe_name = "".join([c for c in uploaded.name if c.isalnum() or c in ('-', '_', '.')])
+                temp_dir = os.path.join(os.getcwd(), "temp_uploads", f"{timestamp}_file")
+                os.makedirs(temp_dir, exist_ok=True)
+                file_path = os.path.join(temp_dir, safe_name)
+                
+                # Only write if not exists or if we want to overwrite
+                with open(file_path, "wb") as f:
+                    f.write(uploaded.getbuffer())
                     
-                    # Only write if not exists or if we want to overwrite
-                    with open(file_path, "wb") as f:
-                        f.write(uploaded.getbuffer())
-                        
-                    st.success(f"✅ Archivo cargado: {safe_name}")
-                    st.session_state[key] = file_path
-                    target_path = file_path
-                except Exception as e:
-                    st.error(f"Error guardando archivo: {e}")
-            else:
-                st.info("Esperando archivo...")
-
-        elif method == "Ruta del Servidor / Manual":
-            input_key = f"input_man_file_{key}"
-            st.text_input("Ruta en el Servidor", value=target_path, key=input_key, help=help_text,
-                          on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
-                          
-        elif method == "Agente Local":
-             col1, col2 = st.columns([0.8, 0.2])
-             with col1:
-                 st.text_input("Ruta (desde Agente)", value=target_path, disabled=True, key=f"disp_agent_file_{key}")
-             with col2:
-                 st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-                 btn_key = f"btn_agent_file_{key}"
-                 if st.button("🖥️", key=btn_key, help="Solicitar selección de archivo al Agente Local", disabled=not use_custom):
-                     if not database:
-                         st.error("Módulo de base de datos no disponible.")
-                     else:
-                         username = st.session_state.get("username", "admin")
-                         success, task_id = database.create_task(username, "SELECT_FILE")
-                         
-                         if success and task_id:
-                             progress_text = "Esperando agente..."
-                             status_area = st.empty()
-                             status_area.info(progress_text)
-                             
-                             found = False
-                             for _ in range(60):
-                                 time.sleep(1)
-                                 result = database.get_task_result(task_id)
-                                 if result and result.get("status") == "COMPLETED":
-                                     res_data = result.get("result", {})
-                                     if res_data and res_data.get("success"):
-                                         path = res_data.get("data")
-                                         if path:
-                                             update_path_key(key, path)
-                                             status_area.success(f"Seleccionado: {path}")
-                                             found = True
-                                             time.sleep(1)
-                                             st.rerun()
-                                     break
-                                 elif result and result.get("status") == "ERROR":
-                                     status_area.error(f"Error: {result.get('result', {}).get('error')}")
-                                     found = True
-                                     break
-                             
-                             if not found:
-                                 status_area.warning("Tiempo agotado.")
-                         else:
-                             st.error("Error al crear tarea.")
+                st.success(f"✅ Archivo cargado: {safe_name}")
+                st.session_state[key] = file_path
+                target_path = file_path
+            except Exception as e:
+                st.error(f"Error guardando archivo: {e}")
+        else:
+            st.info("Esperando archivo...")
 
     return target_path
 
