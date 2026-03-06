@@ -195,6 +195,10 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths, ret
     if not return_zip and not os.path.isdir(download_path):
         return "Error: Carpeta de descarga inválida."
 
+    is_native = st.session_state.get("force_native_mode", True)
+    if not is_native:
+        return "⚠️ Esta funcionalidad requiere iniciar sesión manualmente en OVIDA, lo cual no es posible en el modo Web. Por favor, use la aplicación de escritorio (Modo Nativo) para descargar historias clínicas."
+
     driver = None
     try:
         options = webdriver.ChromeOptions()
@@ -212,6 +216,11 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths, ret
         }
         options.add_experimental_option("prefs", prefs)
         
+        # Add stability options
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--start-maximized")
+
         # Open visible browser for login
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)

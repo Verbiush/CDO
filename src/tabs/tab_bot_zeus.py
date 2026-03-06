@@ -93,7 +93,11 @@ def render(tab_container):
             if st.button("🚀 Abrir Navegador / Conectar", use_container_width=True):
                 success, msg = bot_zeus.abrir_navegador_inicial()
                 if success:
-                    st.success(msg)
+                    if not is_native:
+                         st.success(f"{msg} (Modo Headless/Segundo Plano)")
+                         st.info("ℹ️ En modo Web, el navegador se ejecuta en el servidor y no es visible. Use las funciones de captura de pantalla o logs para depurar si es necesario.")
+                    else:
+                        st.success(msg)
                 else:
                     st.error(msg)
             

@@ -114,18 +114,21 @@ def extract_uploaded_zip(uploaded_file):
     session_id = getattr(st.session_state, "session_id", "default_session")
     timestamp = int(time.time())
     
-    # Cleanup old temp files (older than 1 hour) to prevent "No space left on device"
+    # Cleanup old temp files (older than 10 minutes) to prevent "No space left on device"
     try:
         base_temp = os.path.join(os.getcwd(), "temp_uploads")
         if os.path.exists(base_temp):
             for item in os.listdir(base_temp):
                 item_path = os.path.join(base_temp, item)
-                # If item is older than 1 hour (3600 seconds)
-                if os.path.getmtime(item_path) < time.time() - 3600:
-                    if os.path.isdir(item_path):
-                        shutil.rmtree(item_path, ignore_errors=True)
-                    else:
-                        os.remove(item_path)
+                try:
+                    # If item is older than 10 minutes (600 seconds)
+                    if os.path.getmtime(item_path) < time.time() - 600:
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path, ignore_errors=True)
+                        else:
+                            os.remove(item_path)
+                except Exception:
+                    pass
     except Exception as e:
         # Just log error, don't stop execution
         print(f"Warning: Cleanup failed: {e}")
