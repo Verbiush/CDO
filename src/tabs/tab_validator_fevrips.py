@@ -193,10 +193,20 @@ def dialog_generar_cuv():
         # --- MODO DOCKER AWS (INTERNO) ---
         elif conn_mode == "Docker AWS (Interno)":
             st.success("☁️ Modo Nube Activo")
-            # Usamos HTTP interno (puerto 5000) ya que estamos en la red Docker
-            api_url = "http://fevrips-api:5000/api/Validacion/ValidarArchivo"
-            st.code(api_url, language="text")
-            st.caption("ℹ️ Esta URL es interna para la red Docker de AWS.")
+            
+            # Usamos HTTP interno (puerto 5000) por defecto
+            default_url = "http://fevrips-api:5000/api/Validacion/ValidarArchivo"
+            
+            # Permitir editar la URL (útil si el host cambia o si se quiere probar localhost)
+            api_url = st.text_input("URL Interna API:", value=default_url, help="URL del servicio FEVRIPS.")
+            
+            # Verificación de resolución de nombre para ayudar al usuario
+            if "fevrips-api" in api_url:
+                try:
+                    socket.gethostbyname("fevrips-api")
+                except socket.gaierror:
+                    st.warning("⚠️ No se puede resolver el host 'fevrips-api'.")
+                    st.info("💡 Si está ejecutando la aplicación LOCALMENTE (fuera de la red Docker), por favor seleccione el modo **'Docker Integrado'** en su lugar.")
 
         # Modo Local: Permitir URL personalizada para flexibilidad (Docker o Nativo Windows)
         elif conn_mode == "Local (Nativo)":
