@@ -351,6 +351,7 @@ def init_db():
                     factura_id INT,
                     nro_estudio VARCHAR(255),
                     descripcion_cups TEXT,
+                    valor_servicio VARCHAR(255),
                     fecha_ingreso VARCHAR(50),
                     fecha_salida VARCHAR(50),
                     autorizacion VARCHAR(255),

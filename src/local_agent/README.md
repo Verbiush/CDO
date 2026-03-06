@@ -1,31 +1,23 @@
 # CDO Local Agent
 
-This agent enables the Web Application (running in AWS/Docker) to interact with your local computer securely.
-
-## Features
-- **File System Access**: Allows the Web App to browse local drives and folders to select download/upload locations.
-- **Local Browser Automation**: Allows the Web App to launch a Selenium browser on your machine to perform tasks (e.g., OVIDA downloads) that require local credentials or access.
-- **Secure Connection**: Uses a self-signed SSL certificate to allow secure communication with the Web App (`https://localhost:12345`).
+This agent connects your local PC to the CDO Web Cloud, enabling native features like:
+- File System Browsing (for selecting upload/download folders)
+- Local Browser Automation (Selenium)
 
 ## Installation
 
-1. Open PowerShell as **Administrator**.
-2. Navigate to the project root directory.
-3. Run the installation script:
-   ```powershell
-   Set-ExecutionPolicy Bypass -Scope Process -Force; ./src/local_agent/install_agent.ps1
-   ```
-4. The script will:
-   - Install required Python dependencies.
-   - Generate a self-signed SSL certificate.
-   - Trust the certificate in your system's Root Store (to prevent browser warnings).
-   - Create a System Tray application ("CDO Agent").
-   - Add the agent to your Windows Startup folder.
+1. Unzip the installer package.
+2. Run `install_agent.ps1` with PowerShell (Administrator).
+3. A shortcut "CDO_Agent" will be created on your Desktop.
+
+## Configuration
+
+1. Double-click the "CDO_Agent" shortcut.
+2. Enter the Server URL (e.g., `https://cdo-aws.com` or `http://localhost:8000`).
+3. Enter your CDO Username and Password.
+4. The agent will verify the connection and save your configuration.
 
 ## Usage
 
-- The agent runs in the background. You will see a blue/white icon in your System Tray.
-- **Right-click** the icon to:
-  - Open **Dashboard** (API Docs).
-  - **Exit** the agent.
-- When using the CDO Web App, enable "Local Mode" (if available) to use these features.
+- Keep the agent window open (or minimized) while using the Web App.
+- When you perform actions in the Web App that require local access (e.g., "Browse Folder"), the agent will execute them on your PC.

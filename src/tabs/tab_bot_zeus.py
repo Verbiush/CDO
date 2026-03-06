@@ -59,6 +59,18 @@ def render(tab_container):
             st.error("⛔ Acceso Denegado: No tiene permisos para acceder al módulo Bot Zeus.")
             st.stop()
 
+        # Configuración de Agente Local
+        if "use_local_agent_bot" not in st.session_state:
+            st.session_state.use_local_agent_bot = False
+            
+        use_agent = st.checkbox("🔌 Usar Agente Local (PC)", value=st.session_state.use_local_agent_bot, key="chk_use_agent_bot", help="Ejecutar el navegador en su PC local a través del Agente CDO.")
+        st.session_state.use_local_agent_bot = use_agent
+        
+        if use_agent:
+            st.info("ℹ️ Modo Agente: Las acciones se ejecutarán en su PC. Asegúrese de que el Agente CDO esté corriendo.")
+
+        # Badge de Rol
+
         # Badge de Rol
         perm_labels = {
             "full": "✅ Control Total (Crear/Editar/Ejecutar)", 
@@ -99,15 +111,37 @@ def render(tab_container):
                 st.info(f"📂 Descargas en entorno temporal: {st.session_state.bot_download_dir}")
 
             if st.button("🚀 Abrir Navegador / Conectar", use_container_width=True):
-                success, msg = bot_zeus.abrir_navegador_inicial()
-                if success:
-                    if not is_native:
-                         st.success(f"{msg} (Modo Headless/Segundo Plano)")
-                         st.info("ℹ️ En modo Web, el navegador se ejecuta en el servidor y no es visible. Use las funciones de captura de pantalla o logs para depurar si es necesario.")
-                    else:
-                        st.success(msg)
+                if use_agent:
+                    try:
+                        try:
+                            import agent_client
+                        except ImportError:
+                            from src import agent_client
+                        
+                        username = st.session_state.get("username", "admin")
+                        # Send command to agent
+                        task_id = agent_client.send_command(username, "launch_browser", {"url": "https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php"})
+                        if task_id:
+                            with st.spinner("Esperando al agente..."):
+                                res = agent_client.wait_for_result(task_id)
+                                if res and res.get("status") == "success":
+                                    st.success("✅ Navegador abierto en el Agente Local.")
+                                else:
+                                    st.error(f"Error del agente: {res.get('message') if res else 'Sin respuesta'}")
+                        else:
+                            st.error("No se pudo conectar con el servidor para enviar la tarea.")
+                    except Exception as e:
+                        st.error(f"Error comunicando con agente: {e}")
                 else:
-                    st.error(msg)
+                    success, msg = bot_zeus.abrir_navegador_inicial()
+                    if success:
+                        if not is_native:
+                             st.success(f"{msg} (Modo Headless/Segundo Plano)")
+                             st.info("ℹ️ En modo Web, el navegador se ejecuta en el servidor y no es visible. Use las funciones de captura de pantalla o logs para depurar si es necesario.")
+                        else:
+                            st.success(msg)
+                    else:
+                        st.error(msg)
             
             # Botón para descargar resultados (especialmente útil en Web Mode)
             if "bot_download_dir" in st.session_state and os.path.exists(st.session_state.bot_download_dir):
@@ -226,16 +260,66 @@ def render(tab_container):
                     saltar_click = st.checkbox("⏩ Saltar al Final si Éxito", key="saltar_click_foco", help="Si este paso se ejecuta correctamente, el bot saltará inmediatamente al último paso.")
                     
                     if st.button("Grabar Foco (Click)", use_container_width=True):
-                        ok, msg = bot_zeus.agregar_paso_foco("click", indice_insercion=indice_real, saltar_al_final=saltar_click)
-                        if ok: st.success(msg)
-                        else: st.error(msg)
+                        if use_agent:
+                            try:
+                                try: import agent_client
+                                except ImportError: from src import agent_client
+                                username = st.session_state.get("username", "admin")
+                                task_id = agent_client.send_command(username, "bot_get_focused_element")
+                                if task_id:
+                                    with st.spinner("Obteniendo foco del agente..."):
+                                        res = agent_client.wait_for_result(task_id)
+                                        if res and "xpath" in res:
+                                            xpath = res["xpath"]
+                                            frames = res.get("frames", [])
+                                            
+                                            # Construct step manually
+                                            paso = {
+                                                "accion": "click",
+                                                "xpath": xpath,
+                                                "frames": frames,
+                                                "descripcion": f"Click en {xpath}" + (f" (dentro de {len(frames)} frames)" if frames else "")
+                                            }
+                                            if saltar_click:
+                                                paso["saltar_al_final"] = True
+                                                paso["descripcion"] += " [⏩ SALTAR AL FINAL]"
+                                            
+                                            bot_zeus._insertar_paso(paso, indice_real)
+                                            st.success(f"Paso agregado (Agente): {paso['descripcion']}")
+                                        else:
+                                            st.error(f"Error obteniendo foco: {res.get('error') if res else 'Sin respuesta'}")
+                            except Exception as e:
+                                st.error(f"Excepción agente: {e}")
+                        else:
+                            ok, msg = bot_zeus.agregar_paso_foco("click", indice_insercion=indice_real, saltar_al_final=saltar_click)
+                            if ok: st.success(msg)
+                            else: st.error(msg)
                 
                     st.divider()
                     if st.button("🔄 Cambiar Ventana/Pestaña (Foco)", use_container_width=True, help="Cambia el foco del driver a la última ventana abierta o alterna entre ellas."):
-                         # Por defecto cambiamos a la última (-1). Si hay muchas, podría necesitarse un selector.
-                         ok, msg = bot_zeus.agregar_paso_cambiar_ventana(-1, indice_insercion=indice_real) # No soporta saltar al final aun, o si? Verifiquemos bot_zeus
-                         if ok: st.success(msg)
-                         else: st.error(msg)
+                        if use_agent:
+                            try:
+                                try: import agent_client
+                                except ImportError: from src import agent_client
+                                username = st.session_state.get("username", "admin")
+                                task_id = agent_client.send_command(username, "bot_switch_window", {"index": -1})
+                                if task_id:
+                                    with st.spinner("Cambiando ventana en agente..."):
+                                        res = agent_client.wait_for_result(task_id)
+                                        if res and res.get("status") == "success":
+                                            # Add step locally for sequence recording
+                                            ok, msg = bot_zeus.agregar_paso_cambiar_ventana(-1, indice_insercion=indice_real)
+                                            if ok: st.success(f"{msg} (En Agente)")
+                                            else: st.warning(f"Ventana cambiada en agente, pero error local: {msg}")
+                                        else:
+                                            st.error(f"Error cambiando ventana en agente: {res.get('error') if res else 'Sin respuesta'}")
+                            except Exception as e:
+                                st.error(f"Excepción agente: {e}")
+                        else:
+                             # Por defecto cambiamos a la última (-1). Si hay muchas, podría necesitarse un selector.
+                             ok, msg = bot_zeus.agregar_paso_cambiar_ventana(-1, indice_insercion=indice_real) # No soporta saltar al final aun, o si? Verifiquemos bot_zeus
+                             if ok: st.success(msg)
+                             else: st.error(msg)
 
                 with tab_write:
                     st.markdown("##### ✍️ Escribir Dato")
@@ -244,9 +328,41 @@ def render(tab_container):
                     saltar_write = st.checkbox("⏩ Saltar al Final si Éxito", key="saltar_write", help="Si este paso se ejecuta correctamente, el bot saltará inmediatamente al último paso.")
                     
                     if st.button("Grabar Foco (Escribir)", use_container_width=True, disabled=len(excel_cols)==0):
-                        ok, msg = bot_zeus.agregar_paso_foco("escribir", columna=col_sel, indice_insercion=indice_real, saltar_al_final=saltar_write)
-                        if ok: st.success(msg)
-                        else: st.error(msg)
+                        if use_agent:
+                            try:
+                                try: import agent_client
+                                except ImportError: from src import agent_client
+                                username = st.session_state.get("username", "admin")
+                                task_id = agent_client.send_command(username, "bot_get_focused_element")
+                                if task_id:
+                                    with st.spinner("Obteniendo foco del agente..."):
+                                        res = agent_client.wait_for_result(task_id)
+                                        if res and "xpath" in res:
+                                            xpath = res["xpath"]
+                                            frames = res.get("frames", [])
+                                            
+                                            # Construct step manually
+                                            paso = {
+                                                "accion": "escribir",
+                                                "columna": col_sel,
+                                                "xpath": xpath,
+                                                "frames": frames,
+                                                "descripcion": f"Escribir [{col_sel}] en {xpath}" + (f" (dentro de {len(frames)} frames)" if frames else "")
+                                            }
+                                            if saltar_write:
+                                                paso["saltar_al_final"] = True
+                                                paso["descripcion"] += " [⏩ SALTAR AL FINAL]"
+                                            
+                                            bot_zeus._insertar_paso(paso, indice_real)
+                                            st.success(f"Paso agregado (Agente): {paso['descripcion']}")
+                                        else:
+                                            st.error(f"Error obteniendo foco: {res.get('error') if res else 'Sin respuesta'}")
+                            except Exception as e:
+                                st.error(f"Excepción agente: {e}")
+                        else:
+                            ok, msg = bot_zeus.agregar_paso_foco("escribir", columna=col_sel, indice_insercion=indice_real, saltar_al_final=saltar_write)
+                            if ok: st.success(msg)
+                            else: st.error(msg)
                 
                     st.divider()
                     st.markdown("##### 📅 Escribir Fecha")
@@ -260,9 +376,42 @@ def render(tab_container):
                     saltar_date = st.checkbox("⏩ Saltar al Final si Éxito", key="saltar_date", help="Si este paso se ejecuta correctamente, el bot saltará inmediatamente al último paso.")
 
                     if st.button("Grabar Foco (Escribir Fecha)", use_container_width=True, disabled=len(excel_cols)==0):
-                        ok, msg = bot_zeus.agregar_paso_foco("escribir_fecha", columna=col_date_sel, formato=fmt_date, indice_insercion=indice_real, saltar_al_final=saltar_date)
-                        if ok: st.success(msg)
-                        else: st.error(msg)
+                        if use_agent:
+                            try:
+                                try: import agent_client
+                                except ImportError: from src import agent_client
+                                username = st.session_state.get("username", "admin")
+                                task_id = agent_client.send_command(username, "bot_get_focused_element")
+                                if task_id:
+                                    with st.spinner("Obteniendo foco del agente..."):
+                                        res = agent_client.wait_for_result(task_id)
+                                        if res and "xpath" in res:
+                                            xpath = res["xpath"]
+                                            frames = res.get("frames", [])
+                                            
+                                            # Construct step manually
+                                            paso = {
+                                                "accion": "escribir_fecha",
+                                                "columna": col_date_sel,
+                                                "formato": fmt_date,
+                                                "xpath": xpath,
+                                                "frames": frames,
+                                                "descripcion": f"Escribir Fecha [{col_date_sel}] en {xpath} (Fmt: {fmt_date})" + (f" (dentro de {len(frames)} frames)" if frames else "")
+                                            }
+                                            if saltar_date:
+                                                paso["saltar_al_final"] = True
+                                                paso["descripcion"] += " [⏩ SALTAR AL FINAL]"
+                                            
+                                            bot_zeus._insertar_paso(paso, indice_real)
+                                            st.success(f"Paso agregado (Agente): {paso['descripcion']}")
+                                        else:
+                                            st.error(f"Error obteniendo foco: {res.get('error') if res else 'Sin respuesta'}")
+                            except Exception as e:
+                                st.error(f"Excepción agente: {e}")
+                        else:
+                            ok, msg = bot_zeus.agregar_paso_foco("escribir_fecha", columna=col_date_sel, formato=fmt_date, indice_insercion=indice_real, saltar_al_final=saltar_date)
+                            if ok: st.success(msg)
+                            else: st.error(msg)
 
                     st.divider()
                     st.markdown("##### 🧹 Borrar Dato")
@@ -271,9 +420,40 @@ def render(tab_container):
                     saltar_clean = st.checkbox("⏩ Saltar al Final si Éxito", key="saltar_clean", help="Si este paso se ejecuta correctamente, el bot saltará inmediatamente al último paso.")
 
                     if st.button("Grabar Foco (Limpiar Campo)", use_container_width=True):
-                         ok, msg = bot_zeus.agregar_paso_foco("limpiar_campo", indice_insercion=indice_real, saltar_al_final=saltar_clean)
-                         if ok: st.success(msg)
-                         else: st.error(msg)
+                         if use_agent:
+                             try:
+                                 try: import agent_client
+                                 except ImportError: from src import agent_client
+                                 username = st.session_state.get("username", "admin")
+                                 task_id = agent_client.send_command(username, "bot_get_focused_element")
+                                 if task_id:
+                                     with st.spinner("Obteniendo foco del agente..."):
+                                         res = agent_client.wait_for_result(task_id)
+                                         if res and "xpath" in res:
+                                             xpath = res["xpath"]
+                                             frames = res.get("frames", [])
+                                             
+                                             # Construct step manually
+                                             paso = {
+                                                 "accion": "limpiar_campo",
+                                                 "xpath": xpath,
+                                                 "frames": frames,
+                                                 "descripcion": f"Limpiar Campo {xpath}" + (f" (dentro de {len(frames)} frames)" if frames else "")
+                                             }
+                                             if saltar_clean:
+                                                 paso["saltar_al_final"] = True
+                                                 paso["descripcion"] += " [⏩ SALTAR AL FINAL]"
+                                             
+                                             bot_zeus._insertar_paso(paso, indice_real)
+                                             st.success(f"Paso agregado (Agente): {paso['descripcion']}")
+                                         else:
+                                             st.error(f"Error obteniendo foco: {res.get('error') if res else 'Sin respuesta'}")
+                             except Exception as e:
+                                 st.error(f"Excepción agente: {e}")
+                         else:
+                             ok, msg = bot_zeus.agregar_paso_foco("limpiar_campo", indice_insercion=indice_real, saltar_al_final=saltar_clean)
+                             if ok: st.success(msg)
+                             else: st.error(msg)
             
                 with tab_key:
                     key_sel = st.selectbox("Tecla Especial:", ["ENTER", "TAB", "ESCAPE", "DOWN", "UP"])
@@ -310,14 +490,50 @@ def render(tab_container):
                     col_win1, col_win2 = st.columns(2)
                     with col_win1:
                         if st.button("🔄 Ir a Popup (Última)", use_container_width=True):
-                             ok, msg = bot_zeus.agregar_paso_cambiar_ventana(-1, indice_insercion=indice_real)
-                             if ok: st.success(msg)
-                             else: st.error(msg)
+                            if use_agent:
+                                try:
+                                    try: import agent_client
+                                    except ImportError: from src import agent_client
+                                    username = st.session_state.get("username", "admin")
+                                    task_id = agent_client.send_command(username, "bot_switch_window", {"index": -1})
+                                    if task_id:
+                                        with st.spinner("Cambiando ventana en agente..."):
+                                            res = agent_client.wait_for_result(task_id)
+                                            if res and res.get("status") == "success":
+                                                ok, msg = bot_zeus.agregar_paso_cambiar_ventana(-1, indice_insercion=indice_real)
+                                                if ok: st.success(f"{msg} (En Agente)")
+                                                else: st.warning(f"Ventana cambiada en agente, pero error local: {msg}")
+                                            else:
+                                                st.error(f"Error: {res.get('error') if res else 'Sin respuesta'}")
+                                except Exception as e:
+                                    st.error(f"Excepción agente: {e}")
+                            else:
+                                 ok, msg = bot_zeus.agregar_paso_cambiar_ventana(-1, indice_insercion=indice_real)
+                                 if ok: st.success(msg)
+                                 else: st.error(msg)
                     with col_win2:
                         if st.button("🏠 Ir a Principal (0)", use_container_width=True):
-                             ok, msg = bot_zeus.agregar_paso_cambiar_ventana(0, indice_insercion=indice_real)
-                             if ok: st.success(msg)
-                             else: st.error(msg)
+                            if use_agent:
+                                try:
+                                    try: import agent_client
+                                    except ImportError: from src import agent_client
+                                    username = st.session_state.get("username", "admin")
+                                    task_id = agent_client.send_command(username, "bot_switch_window", {"index": 0})
+                                    if task_id:
+                                        with st.spinner("Cambiando ventana en agente..."):
+                                            res = agent_client.wait_for_result(task_id)
+                                            if res and res.get("status") == "success":
+                                                ok, msg = bot_zeus.agregar_paso_cambiar_ventana(0, indice_insercion=indice_real)
+                                                if ok: st.success(f"{msg} (En Agente)")
+                                                else: st.warning(f"Ventana cambiada en agente, pero error local: {msg}")
+                                            else:
+                                                st.error(f"Error: {res.get('error') if res else 'Sin respuesta'}")
+                                except Exception as e:
+                                    st.error(f"Excepción agente: {e}")
+                            else:
+                                 ok, msg = bot_zeus.agregar_paso_cambiar_ventana(0, indice_insercion=indice_real)
+                                 if ok: st.success(msg)
+                                 else: st.error(msg)
                     
                 with tab_text:
                     st.info("💡 Click en elementos por su contenido (Texto, ID, Título o Clase).")
@@ -343,21 +559,55 @@ def render(tab_container):
                         col_sel1, col_sel2 = st.columns(2)
                         with col_sel1:
                             if st.button("🚀 Activar Selector", use_container_width=True):
-                                ok, msg = bot_zeus.iniciar_selector_visual()
-                                if ok: 
-                                    st.toast(msg, icon="🎯")
-                                    st.session_state.selector_activo = True
-                                else: st.error(msg)
+                                if use_agent:
+                                    try:
+                                        try: import agent_client
+                                        except ImportError: from src import agent_client
+                                        username = st.session_state.get("username", "admin")
+                                        task_id = agent_client.send_command(username, "bot_start_visual_selector")
+                                        if task_id:
+                                            with st.spinner("Iniciando selector en agente..."):
+                                                res = agent_client.wait_for_result(task_id)
+                                                if res and "message" in res:
+                                                    st.toast(res["message"], icon="🎯")
+                                                    st.session_state.selector_activo = True
+                                                else:
+                                                    st.error(f"Error agente: {res.get('error') if res else 'Sin respuesta'}")
+                                    except Exception as e:
+                                        st.error(f"Error agente: {e}")
+                                else:
+                                    ok, msg = bot_zeus.iniciar_selector_visual()
+                                    if ok: 
+                                        st.toast(msg, icon="🎯")
+                                        st.session_state.selector_activo = True
+                                    else: st.error(msg)
                     
                         with col_sel2:
                             if st.button("✅ Capturar Selección", use_container_width=True):
-                                ok, result = bot_zeus.obtener_seleccion_visual()
-                                if ok:
-                                    # Autollenar campos para que el usuario guarde
-                                    st.success(f"Elemento capturado: {result}")
-                                    st.session_state.xpath_capturado = result
+                                if use_agent:
+                                    try:
+                                        try: import agent_client
+                                        except ImportError: from src import agent_client
+                                        username = st.session_state.get("username", "admin")
+                                        task_id = agent_client.send_command(username, "bot_get_visual_selection")
+                                        if task_id:
+                                            with st.spinner("Obteniendo selección del agente..."):
+                                                res = agent_client.wait_for_result(task_id)
+                                                if res and "xpath" in res and res["xpath"]:
+                                                    st.success(f"Elemento capturado: {res['xpath']}")
+                                                    st.session_state.xpath_capturado = res["xpath"]
+                                                else:
+                                                    st.warning("No se detectó selección en el agente.")
+                                    except Exception as e:
+                                        st.error(f"Error agente: {e}")
                                 else:
-                                    st.warning("No se detectó selección o navegador desconectado.")
+                                    ok, result = bot_zeus.obtener_seleccion_visual()
+                                    if ok:
+                                        # Autollenar campos para que el usuario guarde
+                                        st.success(f"Elemento capturado: {result}")
+                                        st.session_state.xpath_capturado = result
+                                    else:
+                                        st.warning("No se detectó selección o navegador desconectado.")
 
                         if "xpath_capturado" in st.session_state:
                             txt_buscar = st.text_input("XPath Capturado:", value=st.session_state.xpath_capturado)
@@ -853,20 +1103,69 @@ def render(tab_container):
             
         # Wrapper para el hilo
         def run_bot_thread(df, delay):
-            try:
-                for msg in bot_zeus.ejecutar_secuencia(df, delay_pasos=delay):
+            if use_agent:
+                try:
+                    try: import agent_client
+                    except ImportError: from src import agent_client
+                    username = st.session_state.get("username", "admin")
+                    
+                    # Convert df to records
+                    data = df.to_dict(orient="records")
+                    # Get steps
+                    steps = bot_zeus.get_pasos()
+                    
                     if "bot_logs" in st.session_state:
-                        st.session_state.bot_logs.append(msg)
+                        st.session_state.bot_logs.append("🚀 Enviando secuencia al agente...")
+                    
+                    # Send command
+                    # Note: delay is not passed currently to agent command, could add it
+                    task_id = agent_client.send_command(username, "bot_run_sequence", {"steps": steps, "data": data})
+                    
+                    if task_id:
+                        if "bot_logs" in st.session_state:
+                            st.session_state.bot_logs.append("⏳ Ejecutando en agente (espere el resultado final)...")
+                        
+                        # Wait with long timeout (30 min)
+                        res = agent_client.wait_for_result(task_id, timeout=1800)
+                        
+                        if "bot_logs" in st.session_state:
+                            if res:
+                                if "logs" in res:
+                                    for log in res["logs"]:
+                                        st.session_state.bot_logs.append(log)
+                                
+                                if "error" in res:
+                                    st.session_state.bot_logs.append(f"❌ Error reportado por agente: {res['error']}")
+                                else:
+                                    st.session_state.bot_logs.append("✅ Secuencia finalizada en agente.")
+                            else:
+                                st.session_state.bot_logs.append("❌ Timeout o error de comunicación con agente.")
                     else:
-                        # Fallback si se pierde el contexto
-                        pass
-                    time.sleep(0.01)
-            except Exception as e:
-                if "bot_logs" in st.session_state:
-                    st.session_state.bot_logs.append(f"❌ Error en hilo: {e}")
-            finally:
-                if "bot_running" in st.session_state:
-                    st.session_state.bot_running = False
+                        if "bot_logs" in st.session_state:
+                            st.session_state.bot_logs.append("❌ No se pudo enviar la tarea al agente.")
+
+                except Exception as e:
+                    if "bot_logs" in st.session_state:
+                        st.session_state.bot_logs.append(f"❌ Error en hilo agente: {e}")
+                finally:
+                    if "bot_running" in st.session_state:
+                        st.session_state.bot_running = False
+
+            else:
+                try:
+                    for msg in bot_zeus.ejecutar_secuencia(df, delay_pasos=delay):
+                        if "bot_logs" in st.session_state:
+                            st.session_state.bot_logs.append(msg)
+                        else:
+                            # Fallback si se pierde el contexto
+                            pass
+                        time.sleep(0.01)
+                except Exception as e:
+                    if "bot_logs" in st.session_state:
+                        st.session_state.bot_logs.append(f"❌ Error en hilo: {e}")
+                finally:
+                    if "bot_running" in st.session_state:
+                        st.session_state.bot_running = False
 
         col_ctrl1, col_ctrl2 = st.columns([1, 1])
         

@@ -1,58 +1,106 @@
+import time
+import requests
+import json
 import os
-import sys
-import uvicorn
-import shutil
 import platform
-import subprocess
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional
+import sys
+import threading
+from getpass import getpass
 
-# Add parent directory to path to allow imports from src
+# Add parent directory to path to allow imports from src (if running from source)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
+def log_error(msg):
+    try:
+        with open("agent_error.log", "a") as f:
+            f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+    except:
+        pass
+
 try:
+    import bot_zeus
+    # Ensure we have access to necessary functions
     from bot_zeus import abrir_navegador_inicial, obtener_driver
-except ImportError:
-    # Fallback if running standalone
+except ImportError as e:
+    # Fallback if running standalone without full src context
+    bot_zeus = None
     abrir_navegador_inicial = None
     obtener_driver = None
+    log_error(f"Failed to import bot_zeus: {e}")
 
-app = FastAPI(title="CDO Local Agent", version="1.0.0")
+try:
+    import pandas as pd
+except ImportError as e:
+    pd = None
+    log_error(f"Failed to import pandas: {e}")
 
-# Configure CORS to allow requests from the Web App (AWS)
-origins = [
-    "https://cdo-aws.com", # Replace with actual domain
-    "http://localhost:8501", # Local Streamlit dev
-    "*" # For testing, restrict later
-]
+CONFIG_FILE = "agent_config.json"
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return None
+    return None
 
-class PathRequest(BaseModel):
-    path: str
+def save_config(url, username, password):
+    config = {"url": url, "username": username, "password": password}
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f)
+    return config
 
-class BrowserRequest(BaseModel):
-    url: Optional[str] = None
-    headless: bool = False
+def setup():
+    print("\n=== Configuración del Agente CDO ===")
+    print("Este agente conectará su PC con la nube para permitir funciones nativas.")
+    
+    default_url = "https://cdo-aws.com" # Replace with actual default if known
+    url = input(f"URL del Servidor (Enter para '{default_url}'): ").strip()
+    if not url: url = default_url
+    
+    if not url.startswith("http"): url = "https://" + url
+    url = url.rstrip("/")
+    
+    # Check for /api or /server_api path if user just entered domain
+    # Assuming the FastAPI is mounted or accessible directly. 
+    # Based on server_api.py, it runs on port 8000 usually.
+    # If behind Nginx, it might be /api/v1...
+    # For now, we assume the user enters the base URL where the API is reachable.
+    
+    print(f"Conectando a: {url}")
+    
+    username = input("Usuario CDO: ").strip()
+    password = getpass("Contraseña CDO: ").strip()
+    
+    # Verify connection
+    print("Verificando credenciales...")
+    try:
+        auth = (username, password)
+        # Try to ping or poll to verify auth
+        res = requests.get(f"{url}/tasks/poll", auth=auth, timeout=10)
+        
+        if res.status_code == 200:
+            print("✅ Conexión exitosa!")
+            return save_config(url, username, password)
+        elif res.status_code == 401:
+            print("❌ Error de autenticación: Usuario o contraseña incorrectos.")
+            return None
+        elif res.status_code == 404:
+            print("❌ Error: No se encontró el servicio del agente en esa URL (404).")
+            print("Asegúrese de incluir el puerto si es necesario (ej: :8000)")
+            return None
+        else:
+            print(f"❌ Error inesperado: {res.status_code}")
+            return None
+    except Exception as e:
+        print(f"❌ Error de conexión: {e}")
+        return None
 
-@app.get("/")
-def read_root():
-    return {"status": "online", "agent": "CDO Local Agent", "system": platform.system()}
-
-@app.get("/fs/drives")
 def list_drives():
-    """List available drives on Windows."""
     drives = []
     if platform.system() == "Windows":
         import string
@@ -64,20 +112,14 @@ def list_drives():
             bitmask >>= 1
     else:
         drives.append("/")
-    return {"drives": drives}
+    return drives
 
-@app.post("/fs/list")
-def list_files(request: PathRequest):
-    """List files in a directory."""
-    path = request.path
+def list_files(path):
     if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Path not found")
+        return {"error": "Path not found"}
     
-    if not os.path.isdir(path):
-        raise HTTPException(status_code=400, detail="Path is not a directory")
-        
+    items = []
     try:
-        items = []
         with os.scandir(path) as it:
             for entry in it:
                 items.append({
@@ -85,36 +127,292 @@ def list_files(request: PathRequest):
                     "is_dir": entry.is_dir(),
                     "path": entry.path
                 })
-        return {"items": items}
-    except PermissionError:
-        raise HTTPException(status_code=403, detail="Permission denied")
+        return items
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e)}
 
-@app.post("/browser/launch")
-def launch_browser(request: BrowserRequest):
-    """Launch local browser via Selenium."""
+def launch_browser(url=None, headless=False):
     if abrir_navegador_inicial is None:
-        raise HTTPException(status_code=500, detail="Bot Zeus module not found")
-    
-    # Force native mode in a way compatible with bot_zeus logic
-    # bot_zeus checks streamlit session state, which we don't have here.
-    # We might need to monkeypatch or modify bot_zeus to accept params.
-    # For now, let's assume obtaining driver works.
+        return {"error": "Bot Zeus module not found"}
     
     try:
-        # TODO: Refactor bot_zeus to accept headless param directly
-        driver = obtener_driver() 
+        # We need to ensure this runs in the main thread or compatible way
+        # Since we are in a loop, it should be fine.
+        # However, bot_zeus uses streamlit session state usually.
+        # We might need to mock it or adjust bot_zeus to work standalone.
+        # The modified bot_zeus checks for 'st' but handles it being None.
+        
+        driver = obtener_driver()
         if driver:
-            if request.url:
-                driver.get(request.url)
+            if url:
+                driver.get(url)
             return {"status": "success", "message": "Browser launched"}
         else:
-            return {"status": "error", "message": "Failed to launch browser"}
+             # Try initializing
+            success, msg = abrir_navegador_inicial()
+            if success and url:
+                driver = obtener_driver()
+                if driver: driver.get(url)
+            return {"status": "success" if success else "error", "message": msg}
+            
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"error": str(e)}
+
+def process_task(task):
+    command = task.get("command")
+    params = task.get("params", {})
+    
+    print(f"[{time.strftime('%H:%M:%S')}] Ejecutando comando: {command}")
+    
+    result = {"status": "COMPLETED", "result": None}
+    
+    try:
+        if command == "list_drives":
+            drives = list_drives()
+            result["result"] = {"drives": drives}
+            
+        elif command == "list_files":
+            path = params.get("path", "")
+            files = list_files(path)
+            result["result"] = {"items": files}
+            
+        elif command == "browse_folder":
+            title = params.get("title", "Seleccionar Carpeta")
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                
+                root = tk.Tk()
+                root.withdraw() # Hide main window
+                root.attributes('-topmost', True) # Bring to front
+                
+                path = filedialog.askdirectory(title=title)
+                root.destroy()
+                
+                result["result"] = {"path": path if path else None}
+            except Exception as e:
+                result["status"] = "ERROR"
+                result["result"] = {"error": f"Tkinter error: {str(e)}"}
+
+        elif command == "browse_file":
+            title = params.get("title", "Seleccionar Archivo")
+            file_types_list = params.get("file_types", [])
+            
+            # Convert list of lists to list of tuples for tkinter
+            file_types = []
+            if file_types_list:
+                for ft in file_types_list:
+                    if len(ft) >= 2:
+                        file_types.append((ft[0], ft[1]))
+            
+            if not file_types:
+                file_types = [("All Files", "*.*")]
+                
+            try:
+                import tkinter as tk
+                from tkinter import filedialog
+                
+                root = tk.Tk()
+                root.withdraw()
+                root.attributes('-topmost', True)
+                
+                path = filedialog.askopenfilename(title=title, filetypes=file_types)
+                root.destroy()
+                
+                result["result"] = {"path": path if path else None}
+            except Exception as e:
+                result["status"] = "ERROR"
+                result["result"] = {"error": f"Tkinter error: {str(e)}"}
+            
+        elif command == "launch_browser":
+            url = params.get("url")
+            res = launch_browser(url)
+            result["result"] = res
+            if "error" in res:
+                result["status"] = "ERROR"
+                
+        # --- BOT ZEUS COMMANDS ---
+        elif command == "bot_get_focused_element":
+            if not bot_zeus:
+                result["status"] = "ERROR"
+                result["result"] = {"error": "Module bot_zeus not found"}
+            else:
+                driver = bot_zeus.obtener_driver(create_if_missing=False)
+                if not driver:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Browser not open"}
+                else:
+                    # Use internal function to get xpath with frames
+                    xpath, frames, error = bot_zeus._detectar_foco_con_frames(driver)
+                    if error:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": error}
+                    else:
+                        result["result"] = {"xpath": xpath, "frames": frames}
+
+        elif command == "bot_start_visual_selector":
+            if not bot_zeus:
+                result["status"] = "ERROR"
+                result["result"] = {"error": "Module bot_zeus not found"}
+            else:
+                ok, msg = bot_zeus.iniciar_selector_visual()
+                if ok:
+                    result["result"] = {"message": msg}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": msg}
+
+        elif command == "bot_get_visual_selection":
+            if not bot_zeus:
+                result["status"] = "ERROR"
+                result["result"] = {"error": "Module bot_zeus not found"}
+            else:
+                ok, xpath = bot_zeus.obtener_seleccion_visual()
+                if ok:
+                    result["result"] = {"xpath": xpath}
+                else:
+                    # Not an error, just no selection yet
+                    result["result"] = {"xpath": None}
+
+        elif command == "bot_switch_window":
+            if not bot_zeus:
+                result["status"] = "ERROR"
+                result["result"] = {"error": "Module bot_zeus not found"}
+            else:
+                driver = bot_zeus.obtener_driver(create_if_missing=False)
+                if not driver:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Browser not open"}
+                else:
+                    try:
+                        index = params.get("index", -1)
+                        handles = driver.window_handles
+                        target = None
+                        if index == -1:
+                            target = handles[-1]
+                        elif 0 <= index < len(handles):
+                            target = handles[index]
+                        
+                        if target:
+                            driver.switch_to.window(target)
+                            result["result"] = {"status": "success", "title": driver.title}
+                        else:
+                            result["status"] = "ERROR"
+                            result["result"] = {"error": f"Index {index} out of range"}
+                    except Exception as e:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": str(e)}
+
+        elif command == "bot_run_sequence":
+            if not bot_zeus or not pd:
+                result["status"] = "ERROR"
+                result["result"] = {"error": "Module bot_zeus or pandas not found"}
+            else:
+                steps = params.get("steps", [])
+                data = params.get("data", []) # List of dicts
+                
+                # Setup
+                bot_zeus.set_pasos(steps)
+                
+                # Create DataFrame
+                if data:
+                    df = pd.DataFrame(data)
+                else:
+                    df = pd.DataFrame()
+
+                # Run
+                logs = []
+                try:
+                    # Consume generator
+                    for log in bot_zeus.ejecutar_secuencia(df):
+                        print(f"[Bot] {log}")
+                        logs.append(log)
+                    
+                    result["result"] = {"logs": logs}
+                except Exception as e:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": str(e), "logs": logs}
+
+        else:
+            result["status"] = "ERROR"
+            result["result"] = {"error": f"Unknown command: {command}"}
+            
+    except Exception as e:
+        result["status"] = "ERROR"
+        result["result"] = {"error": str(e)}
+        print(f"Error executing {command}: {e}")
+        
+    return result
+
+def main():
+    print("Iniciando Agente CDO...")
+    
+    # Ensure we are in the directory of the script to find config
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    
+    config = load_config()
+    if not config:
+        config = setup()
+        
+    if not config:
+        print("No se pudo configurar el agente. Saliendo.")
+        input("Presione Enter para cerrar...")
+        return
+
+    url = config["url"]
+    auth = (config["username"], config["password"])
+    
+    print(f"Agente conectado a {url} como {config['username']}")
+    print("Esperando comandos... (Presione Ctrl+C para salir)")
+    
+    error_count = 0
+    
+    while True:
+        try:
+            res = requests.get(f"{url}/tasks/poll", auth=auth, timeout=30)
+            
+            if res.status_code == 200:
+                error_count = 0
+                data = res.json()
+                tasks = data.get("tasks", [])
+                
+                if tasks:
+                    print(f"Recibidas {len(tasks)} tareas.")
+                
+                for task in tasks:
+                    res_data = process_task(task)
+                    
+                    # Submit result
+                    try:
+                        post_res = requests.post(
+                            f"{url}/tasks/{task['id']}/result",
+                            json=res_data,
+                            auth=auth,
+                            timeout=30
+                        )
+                        if post_res.status_code != 200:
+                            print(f"Error enviando resultado: {post_res.text}")
+                    except Exception as e:
+                        print(f"Error enviando resultado: {e}")
+                        
+            elif res.status_code == 401:
+                print("Error de autenticación. Credenciales inválidas.")
+                # Delete config to force re-login
+                if os.path.exists(CONFIG_FILE):
+                    os.remove(CONFIG_FILE)
+                print("Reinicie el agente para configurar nuevamente.")
+                break
+            else:
+                print(f"Error del servidor: {res.status_code}")
+                error_count += 1
+                
+        except Exception as e:
+            print(f"Error de conexión: {e}")
+            error_count += 1
+            
+        # Exponential backoff for errors
+        sleep_time = 2 if error_count == 0 else min(30, 2 * error_count)
+        time.sleep(sleep_time)
 
 if __name__ == "__main__":
-    # SSL is handled by uvicorn arguments or reverse proxy
-    # Use 12345 as the agent port
-    uvicorn.run(app, host="127.0.0.1", port=12345)
+    main()

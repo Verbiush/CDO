@@ -54,8 +54,23 @@ def build_installer():
         "--hidden-import=fastapi",
         "--hidden-import=email_validator",
         "--hidden-import=pydantic",
-        "--hidden-import=pydantic.deprecated.decorator"
+        "--hidden-import=pydantic.deprecated.decorator",
+        "--hidden-import=selenium",
+        "--hidden-import=selenium.webdriver",
+        "--hidden-import=selenium.webdriver.chrome.service",
+        "--hidden-import=selenium.webdriver.common.by",
+        "--hidden-import=selenium.webdriver.common.keys",
+        "--hidden-import=selenium.webdriver.support.ui",
+        "--hidden-import=selenium.webdriver.support.expected_conditions",
+        "--hidden-import=selenium.common.exceptions",
+        "--hidden-import=webdriver_manager",
+        "--hidden-import=webdriver_manager.chrome",
+        "--hidden-import=webdriver_manager.microsoft",
+        "--hidden-import=pandas"
     ]
+    
+    # Add parent directory (src) to paths so bot_zeus.py can be found
+    src_path = os.path.dirname(current_dir)
     
     cmd_agent = [
         sys.executable, "-m", "PyInstaller",
@@ -63,6 +78,7 @@ def build_installer():
         "--onefile",
         "--name=CDO_Agente",
         "--clean",
+        f"--paths={src_path}",
         os.path.join(current_dir, "main.py")
     ] + hidden_imports
     

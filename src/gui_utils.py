@@ -216,7 +216,46 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         # --- WEB MODE ---
         st.markdown(f"**{label}**")
         
-        # En modo Web, forzamos la carga de ZIP (sin opciones manuales ni agente)
+        # Opcion: Usar Agente Local
+        use_agent_key = f"use_agent_folder_{key}"
+        use_agent = st.checkbox("🔌 Usar Agente Local (PC)", key=use_agent_key, help="Seleccionar carpeta en tu PC usando el Agente instalado.")
+        
+        if use_agent:
+            username = st.session_state.get("username", "admin")
+            col1, col2 = st.columns([0.7, 0.3])
+            
+            # Display current selected path (or empty)
+            current_val = st.session_state.get(key, "")
+            with col1:
+                st.text_input("Ruta remota:", value=current_val, key=f"remote_path_display_{key}", disabled=True)
+            
+            with col2:
+                # Button to trigger agent
+                if st.button("📂 Explorar", key=f"btn_agent_folder_{key}"):
+                    try:
+                        # Lazy import to avoid circular dependency
+                        try:
+                            import agent_client
+                        except ImportError:
+                            from src import agent_client
+                            
+                        # Call agent (blocking with spinner)
+                        selected = agent_client.select_folder(username, title=label)
+                        
+                        if selected:
+                            st.session_state[key] = selected
+                            target_path = selected
+                            st.success(f"Seleccionado: {selected}")
+                            st.rerun()
+                        else:
+                            st.warning("No se seleccionó ninguna carpeta o el agente no respondió.")
+                    except Exception as e:
+                        st.error(f"Error comunicando con agente: {e}")
+            
+            # If path is set, return it
+            return st.session_state.get(key, target_path)
+
+        # En modo Web (sin agente), forzamos la carga de ZIP
         st.write("Sube un ZIP para trabajar con sus carpetas/archivos.")
         uploaded = st.file_uploader(f"Subir ZIP con archivos para '{label}'", type="zip", key=f"upload_{key}", label_visibility="collapsed")
         
@@ -226,8 +265,6 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                 st.success(f"✅ Archivos extraídos en: {path}")
                 st.session_state[key] = path
                 target_path = path
-                # Show preview of extracted files?
-                # st.caption(f"Contenido: {os.listdir(path)[:5]}...")
         else:
             st.info("Esperando archivo ZIP...")
 
@@ -288,6 +325,45 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
     else:
         # --- WEB MODE ---
         st.markdown(f"**{label}**")
+        
+        # Opcion: Usar Agente Local
+        use_agent_key = f"use_agent_file_{key}"
+        use_agent = st.checkbox("🔌 Usar Agente Local (PC)", key=use_agent_key, help="Seleccionar archivo en tu PC usando el Agente instalado.")
+        
+        if use_agent:
+            username = st.session_state.get("username", "admin")
+            col1, col2 = st.columns([0.7, 0.3])
+            
+            # Display current selected path (or empty)
+            current_val = st.session_state.get(key, "")
+            with col1:
+                st.text_input("Ruta remota:", value=current_val, key=f"remote_path_file_display_{key}", disabled=True)
+            
+            with col2:
+                # Button to trigger agent
+                if st.button("📄 Explorar", key=f"btn_agent_file_{key}"):
+                    try:
+                        # Lazy import to avoid circular dependency
+                        try:
+                            import agent_client
+                        except ImportError:
+                            from src import agent_client
+                            
+                        # Call agent (blocking with spinner)
+                        selected = agent_client.select_file(username, title=label, file_types=file_types)
+                        
+                        if selected:
+                            st.session_state[key] = selected
+                            target_path = selected
+                            st.success(f"Seleccionado: {selected}")
+                            st.rerun()
+                        else:
+                            st.warning("No se seleccionó ningún archivo o el agente no respondió.")
+                    except Exception as e:
+                        st.error(f"Error comunicando con agente: {e}")
+            
+            # If path is set, return it
+            return st.session_state.get(key, target_path)
         
         # En modo Web, simplificamos a solo subida de archivo
         # Map file_types to extensions for uploader
