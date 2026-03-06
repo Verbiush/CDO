@@ -1,5 +1,7 @@
 import time
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import json
 import os
 import platform
@@ -426,11 +428,33 @@ def main():
     print(f"Agente conectado a {url} como {username}")
     print("Esperando comandos... (Presione Ctrl+C para salir)")
     
+    # Configure session with retry logic and browser-like headers
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=5,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "POST", "PUT", "DELETE", "OPTIONS", "TRACE"]
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Connection': 'keep-alive'
+    })
+
     error_count = 0
     
     while True:
         try:
-            res = requests.get(f"{url}/tasks/poll", auth=auth, timeout=30)
+            # Check connection first (optional, but good for debug)
+            # if error_count > 0 and error_count % 5 == 0:
+            #     print(f"Reintentando conexión a {url}...")
+
+            res = session.get(f"{url}/tasks/poll", auth=auth, timeout=30)
             
             if res.status_code == 200:
                 error_count = 0
@@ -445,7 +469,7 @@ def main():
                     
                     # Submit result
                     try:
-                        post_res = requests.post(
+                        post_res = session.post(
                             f"{url}/tasks/{task['id']}/result",
                             json=res_data,
                             auth=auth,

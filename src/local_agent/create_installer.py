@@ -66,7 +66,9 @@ def build_installer():
         "--hidden-import=webdriver_manager",
         "--hidden-import=webdriver_manager.chrome",
         "--hidden-import=webdriver_manager.microsoft",
-        "--hidden-import=pandas"
+        "--hidden-import=pandas",
+        "--hidden-import=urllib3.util.retry",
+        "--hidden-import=requests.adapters"
     ]
     
     # Add parent directory (src) to paths so bot_zeus.py can be found
