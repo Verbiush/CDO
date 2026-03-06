@@ -506,7 +506,17 @@ else:
                 if st.button("Limpiar Caché de Aplicación"):
                     st.cache_data.clear()
                     st.cache_resource.clear()
-                    st.success("Caché limpiada exitosamente.")
+                    
+                    # Cleanup temp folders
+                    import shutil
+                    try:
+                        shutil.rmtree("temp_uploads", ignore_errors=True)
+                        shutil.rmtree("temp_downloads", ignore_errors=True)
+                        os.makedirs("temp_uploads", exist_ok=True)
+                        os.makedirs("temp_downloads", exist_ok=True)
+                        st.success("Caché y archivos temporales limpiados exitosamente.")
+                    except Exception as e:
+                        st.error(f"Error limpiando archivos temporales: {e}")
 
         # Task Center in Sidebar
         with st.expander("📋 Centro de Tareas", expanded=False):

@@ -874,6 +874,9 @@ def dialogo_confirmar_eliminar():
         if len(results) > 50:
             st.text(f"... y {len(results)-50} más.")
 
+    # Opción de forzar borrado permanente si falla la papelera
+    force_delete = st.checkbox("Forzar borrado permanente si falla la papelera (Irreversible)", value=False, help="Si la papelera no está disponible (ej. unidades de red), los archivos se borrarán definitivamente.")
+
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
         if st.button("🗑️ Sí, eliminar", type="primary", use_container_width=True):
@@ -886,20 +889,36 @@ def dialogo_confirmar_eliminar():
                 path = item["Ruta completa"]
                 try:
                     if os.path.exists(path):
-                        if send2trash is None:
-                             st.error("Librería 'send2trash' no instalada. No se puede eliminar.")
-                             break
                         safe_path = os.path.normpath(path)
-                        send2trash(safe_path)
-                        count_del += 1
+                        try:
+                            if send2trash is not None:
+                                send2trash(safe_path)
+                                count_del += 1
+                            else:
+                                raise ImportError("send2trash no disponible")
+                        except Exception as e_trash:
+                            if force_delete:
+                                # Fallback to permanent delete
+                                if os.path.isdir(safe_path):
+                                    shutil.rmtree(safe_path)
+                                else:
+                                    os.remove(safe_path)
+                                count_del += 1
+                                log(f"Borrado permanente (fallback): {safe_path}")
+                            else:
+                                log(f"Error enviando a papelera {path}: {e_trash}")
+                                st.error(f"No se pudo enviar a papelera: {os.path.basename(path)}. Active 'Forzar borrado' si desea eliminarlo permanentemente.")
                 except Exception as e:
                     log(f"Error eliminando {path}: {e}")
             
             progress_bar.progress(1.0, text="Finalizado.")
-            st.success(f"Se enviaron {count_del} archivos a la papelera.")
-            st.session_state.search_results = [] 
-            time.sleep(1.5)
-            st.rerun()
+            if count_del > 0:
+                st.success(f"Se eliminaron {count_del} elementos.")
+                st.session_state.search_results = [] 
+                time.sleep(1.5)
+                st.rerun()
+            else:
+                st.warning("No se pudieron eliminar los archivos. Verifique permisos o active el borrado forzado.")
             
     with col_cancel:
         if st.button("Cancelar", use_container_width=True):
@@ -914,39 +933,21 @@ def handle_zip_upload():
     uploaded_file = st.file_uploader("📂 Cargar Entorno de Trabajo (ZIP)", type="zip", key="zip_uploader", help="Sube un archivo ZIP con las carpetas y archivos que deseas modificar.")
     
     if uploaded_file is not None:
-        # Check if we already processed this specific file to avoid re-extracting on every rerun
-        # Use file size and name as a simple hash
-        file_id = f"{uploaded_file.name}_{uploaded_file.size}"
-        
-        if st.session_state.get("last_uploaded_zip") != file_id:
-            try:
-                # Create temp directory
-                temp_dir = tempfile.mkdtemp(prefix="cdo_web_work_")
-                
-                # Extract ZIP
-                with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
-                    zip_ref.extractall(temp_dir)
-                
-                # Update current path logic:
-                # If the zip contains a single top-level folder, usually users want to work INSIDE that folder.
-                items = os.listdir(temp_dir)
-                final_path = temp_dir
-                
-                # Heuristic: If 1 folder and no files, go into it.
-                if len(items) == 1:
-                    potential_subdir = os.path.join(temp_dir, items[0])
-                    if os.path.isdir(potential_subdir):
-                        final_path = potential_subdir
-                
+        try:
+            from gui_utils import extract_uploaded_zip
+            final_path = extract_uploaded_zip(uploaded_file)
+            
+            if final_path:
                 st.session_state.current_path = final_path
                 st.session_state.path_input = final_path
-                st.session_state["path_input_widget"] = final_path
-                st.session_state["last_uploaded_zip"] = file_id
+                # st.session_state["path_input_widget"] = final_path # Evitar conflicto con el widget
                 
                 st.success(f"✅ Entorno cargado: {os.path.basename(final_path)}")
                 st.rerun()
-            except Exception as e:
-                st.error(f"Error al procesar ZIP: {e}")
+        except ImportError:
+            st.error("Error importando utilidad de ZIP (gui_utils).")
+        except Exception as e:
+            st.error(f"Error al procesar ZIP: {e}")
 
 def handle_zip_download(current_path):
     """Muestra botón de descarga para la carpeta actual."""

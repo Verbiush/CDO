@@ -299,65 +299,118 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
         # Sync key if needed
         st.session_state[key] = target_path
 
-    col1, col2 = st.columns([0.8, 0.2])
-    
-    with col1:
-        input_key = f"input_{key}"
-        if use_custom:
-            # Active input with on_change sync
-            st.text_input(label, value=target_path, key=input_key, help=help_text,
-                          on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
-        else:
-            # Disabled input
-            st.text_input(label, value=target_path, key=f"{input_key}_disabled", disabled=True, help=help_text)
+    is_native = st.session_state.get("force_native_mode", True)
 
-    with col2:
-        st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
-        # Button to open dialog
-        btn_key = f"btn_{key}"
+    if is_native:
+        # --- NATIVE MODE ---
+        col1, col2 = st.columns([0.8, 0.2])
         
-        is_native = st.session_state.get("force_native_mode", True)
-        
-        if is_native:
+        with col1:
+            input_key = f"input_{key}"
+            if use_custom:
+                # Active input with on_change sync
+                st.text_input(label, value=target_path, key=input_key, help=help_text,
+                              on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
+            else:
+                # Disabled input
+                st.text_input(label, value=target_path, key=f"{input_key}_disabled", disabled=True, help=help_text)
+
+        with col2:
+            st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
+            # Button to open dialog
+            btn_key = f"btn_{key}"
             st.button("📄", key=btn_key, help="Seleccionar Archivo", disabled=not use_custom,
                   on_click=lambda: update_path_key(key, abrir_dialogo_archivo_nativo(initial_dir=os.path.dirname(target_path) if os.path.isfile(target_path) else target_path, file_types=file_types), widget_key=input_key))
-        else:
-             if st.button("🖥️", key=btn_key, help="Solicitar selección de archivo al Agente Local", disabled=not use_custom):
-                 username = st.session_state.get("username", "admin")
-                 success, task_id = database.create_task(username, "SELECT_FILE")
-                 
-                 if success and task_id:
-                     progress_text = "Esperando que el agente seleccione el archivo... (Revise su PC local)"
-                     status_area = st.empty()
-                     status_area.info(progress_text)
-                     
-                     found = False
-                     for _ in range(60):
-                         time.sleep(1)
-                         result = database.get_task_result(task_id)
-                         if result and result.get("status") == "COMPLETED":
-                             res_data = result.get("result", {})
-                             if res_data and res_data.get("success"):
-                                 path = res_data.get("data")
-                                 if path:
-                                     update_path_key(key, path, widget_key=input_key)
-                                     status_area.success(f"Archivo seleccionado: {path}")
+    else:
+        # --- WEB MODE ---
+        st.markdown(f"**{label}**")
+        
+        opts = ["Subir Archivo", "Ruta del Servidor / Manual"]
+        if database:
+            opts.append("Agente Local")
+            
+        method = st.radio("Método de Selección:", opts, key=f"method_file_{key}", horizontal=True, label_visibility="collapsed")
+        
+        if method == "Subir Archivo":
+            # Map file_types to extensions for uploader
+            allowed_exts = None
+            if file_types:
+                # file_types is usually list of tuples [("Excel", "*.xlsx"), ...]
+                allowed_exts = []
+                for _, pat in file_types:
+                    if pat == "*.*": continue
+                    allowed_exts.append(pat.replace("*.", ""))
+            
+            uploaded = st.file_uploader(f"Subir archivo para '{label}'", type=allowed_exts, key=f"upload_file_{key}", label_visibility="collapsed")
+            if uploaded:
+                # Save to temp
+                try:
+                    timestamp = int(time.time())
+                    safe_name = "".join([c for c in uploaded.name if c.isalnum() or c in ('-', '_', '.')])
+                    temp_dir = os.path.join(os.getcwd(), "temp_uploads", f"{timestamp}_file")
+                    os.makedirs(temp_dir, exist_ok=True)
+                    file_path = os.path.join(temp_dir, safe_name)
+                    
+                    # Only write if not exists or if we want to overwrite
+                    with open(file_path, "wb") as f:
+                        f.write(uploaded.getbuffer())
+                        
+                    st.success(f"✅ Archivo cargado: {safe_name}")
+                    st.session_state[key] = file_path
+                    target_path = file_path
+                except Exception as e:
+                    st.error(f"Error guardando archivo: {e}")
+            else:
+                st.info("Esperando archivo...")
+
+        elif method == "Ruta del Servidor / Manual":
+            input_key = f"input_man_file_{key}"
+            st.text_input("Ruta en el Servidor", value=target_path, key=input_key, help=help_text,
+                          on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
+                          
+        elif method == "Agente Local":
+             col1, col2 = st.columns([0.8, 0.2])
+             with col1:
+                 st.text_input("Ruta (desde Agente)", value=target_path, disabled=True, key=f"disp_agent_file_{key}")
+             with col2:
+                 st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
+                 btn_key = f"btn_agent_file_{key}"
+                 if st.button("🖥️", key=btn_key, help="Solicitar selección de archivo al Agente Local", disabled=not use_custom):
+                     if not database:
+                         st.error("Módulo de base de datos no disponible.")
+                     else:
+                         username = st.session_state.get("username", "admin")
+                         success, task_id = database.create_task(username, "SELECT_FILE")
+                         
+                         if success and task_id:
+                             progress_text = "Esperando agente..."
+                             status_area = st.empty()
+                             status_area.info(progress_text)
+                             
+                             found = False
+                             for _ in range(60):
+                                 time.sleep(1)
+                                 result = database.get_task_result(task_id)
+                                 if result and result.get("status") == "COMPLETED":
+                                     res_data = result.get("result", {})
+                                     if res_data and res_data.get("success"):
+                                         path = res_data.get("data")
+                                         if path:
+                                             update_path_key(key, path)
+                                             status_area.success(f"Seleccionado: {path}")
+                                             found = True
+                                             time.sleep(1)
+                                             st.rerun()
+                                     break
+                                 elif result and result.get("status") == "ERROR":
+                                     status_area.error(f"Error: {result.get('result', {}).get('error')}")
                                      found = True
-                                     time.sleep(1)
-                                     st.rerun()
-                             else:
-                                 status_area.warning("Selección cancelada o fallida.")
-                                 found = True
-                             break
-                         elif result and result.get("status") == "ERROR":
-                             status_area.error(f"Error del agente: {result.get('result', {}).get('error')}")
-                             found = True
-                             break
-                     
-                     if not found:
-                         status_area.warning("Tiempo de espera agotado. Asegúrese de que el agente esté ejecutándose.")
-                 else:
-                     st.error("Error al crear la tarea para el agente.")
+                                     break
+                             
+                             if not found:
+                                 status_area.warning("Tiempo agotado.")
+                         else:
+                             st.error("Error al crear tarea.")
 
     return target_path
 
@@ -365,6 +418,7 @@ def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
     """
     Renderiza un botón para descargar el contenido de una carpeta como ZIP,
     o un archivo individual directamente.
+    Soporta modo Nativo (Guardar Como) y Web (Descarga navegador).
     """
     if not folder_path or not os.path.exists(folder_path):
         return
@@ -387,33 +441,68 @@ def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
         st.info(f"Ruta: {folder_path}")
         
     with col2:
-        if is_file:
-            # Direct download for single file
-            try:
-                with open(folder_path, "rb") as f:
-                    file_name = os.path.basename(folder_path)
-                    # Use provided label if it's not the default generic one, otherwise make it specific
-                    btn_label = label if label != "📦 Descargar ZIP" else f"📥 Descargar {file_name}"
-                    
-                    st.download_button(
-                        label=btn_label,
-                        data=f,
-                        file_name=file_name,
-                        mime="application/octet-stream",
-                        key=f"dl_btn_file_{key}"
-                    )
-            except Exception as e:
-                st.error(f"Error al leer archivo: {e}")
+        is_native = st.session_state.get("force_native_mode", True)
+        
+        if is_native:
+            # --- NATIVE MODE: SAVE AS DIALOG ---
+            btn_label = label.replace("Descargar", "Guardar en") if "Descargar" in label else f"Guardar {label}"
+            if st.button(f"💾 {btn_label}", key=f"native_save_{key}"):
+                try:
+                    if is_file:
+                        # Save File
+                        initial_file = os.path.basename(folder_path)
+                        save_path = filedialog.asksaveasfilename(
+                            title="Guardar archivo como...",
+                            initialfile=initial_file,
+                            defaultextension=os.path.splitext(initial_file)[1]
+                        )
+                        if save_path:
+                            shutil.copy2(folder_path, save_path)
+                            st.success(f"✅ Archivo guardado en: {save_path}")
+                    else:
+                        # Save ZIP
+                        save_path = filedialog.asksaveasfilename(
+                            title="Guardar ZIP como...",
+                            initialfile=f"backup_{int(time.time())}.zip",
+                            defaultextension=".zip",
+                            filetypes=[("Zip files", "*.zip")]
+                        )
+                        if save_path:
+                            with st.spinner("Comprimiendo y guardando..."):
+                                shutil.make_archive(os.path.splitext(save_path)[0], 'zip', folder_path)
+                                st.success(f"✅ ZIP guardado en: {save_path}")
+                except Exception as e:
+                    st.error(f"Error al guardar: {e}")
         else:
-            # ZIP logic for folders
-            gen_key = f"gen_zip_{key}"
-            
-            if st.button("Preparar Descarga (ZIP)", key=gen_key):
-                with st.spinner("Comprimiendo archivos..."):
-                    try:
-                        # Create zip in temp
-                        timestamp = int(time.time())
-                        zip_name = f"download_{timestamp}" # make_archive adds .zip
+            # --- WEB MODE: BROWSER DOWNLOAD ---
+            if is_file:
+                # Direct download for single file
+                try:
+                    with open(folder_path, "rb") as f:
+                        file_name = os.path.basename(folder_path)
+                        # Use provided label if it's not the default generic one, otherwise make it specific
+                        btn_label = label if label != "📦 Descargar ZIP" else f"📥 Descargar {file_name}"
+                        
+                        st.download_button(
+                            label=btn_label,
+                            data=f,
+                            file_name=file_name,
+                            mime="application/octet-stream",
+                            key=f"dl_btn_file_{key}"
+                        )
+                except Exception as e:
+                    st.error(f"Error al leer archivo: {e}")
+            else:
+                # ZIP logic for folders
+                gen_key = f"gen_zip_{key}"
+                
+                if st.button("Preparar Descarga (ZIP)", key=gen_key):
+                    with st.spinner("Comprimiendo archivos..."):
+                        try:
+                            # Create zip in temp
+                            timestamp = int(time.time())
+                            zip_name = f"download_{timestamp}" # make_archive adds .zip
+
                         
                         # Ensure temp dir exists
                         temp_dl_dir = os.path.join(os.getcwd(), "temp_downloads")
