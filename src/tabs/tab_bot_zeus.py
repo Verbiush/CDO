@@ -5,12 +5,16 @@ import json
 import threading
 import sys
 import os
+import sys
 
+# Try importing render_path_selector
 try:
     from src.gui_utils import render_path_selector
 except ImportError:
     try:
-        from gui_utils import render_path_selector
+        # Fallback if src is not in path or running as script
+        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+        from src.gui_utils import render_path_selector
     except ImportError:
         render_path_selector = None
 
@@ -94,12 +98,16 @@ def render(tab_container):
             # Configuración de Carpeta de Descargas
             is_native = st.session_state.get("force_native_mode", True)
             if is_native:
-                dl_path = render_path_selector(
-                    label="Carpeta de Descargas (Bot)",
-                    key="bot_dl_path_sel",
-                    default_path=os.path.join(os.getcwd(), "downloads")
-                )
-                st.session_state.bot_download_dir = dl_path
+                if render_path_selector is None:
+                     st.error("Error: render_path_selector no pudo ser importado. Verifique src.gui_utils.")
+                else:
+                     dl_path = render_path_selector(
+                         "Carpeta de Descargas (Bot)",
+                         "bot_dl_path_sel",
+                         default_path=os.path.join(os.getcwd(), "downloads"),
+                         omit_checkbox=True
+                     )
+                     st.session_state.bot_download_dir = dl_path
             else:
                 # Web Mode: Use temp folder
                 if "bot_download_dir" not in st.session_state or not st.session_state.bot_download_dir.startswith(os.path.join(os.getcwd(), "temp_downloads")):
