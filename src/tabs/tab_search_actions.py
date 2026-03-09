@@ -8,6 +8,15 @@ import pandas as pd
 import zipfile
 import tempfile
 import io
+
+try:
+    import agent_client
+except ImportError:
+    try:
+        from src import agent_client
+    except ImportError:
+        agent_client = None
+
 try:
     from send2trash import send2trash
 except ImportError:
@@ -130,77 +139,110 @@ def buscar_archivos():
     results = []
     log(f"Iniciando búsqueda en: {path} | Patrones: '{patterns}' | Excluir: '{exclusion}' | Carpetas vacías: {search_empty_folders}")
 
-    for root, dirs, files in os.walk(path):
-        # Si no es recursivo, limpiar dirs para que os.walk no baje más, 
-        # PERO debemos procesar la raíz actual.
-        # os.walk yielda (root, dirs, files). Si modificamos dirs in-place, afecta la recursión.
-        
-        items_to_check = []
-        if search_empty_folders:
-             # Si buscamos carpetas vacías, iteramos sobre dirs
-             items_to_check = dirs
-        elif item_type == "archivos":
-            items_to_check = files
-        elif item_type == "carpetas":
-            items_to_check = dirs
-        
-        for item in items_to_check:
-            item_lower = item.lower()
-            full_path = os.path.join(root, item)
-            
-            # Verificar exclusiones
-            if any(excl in item_lower for excl in exclusion_list):
-                continue
+    is_native = st.session_state.get("force_native_mode", True)
+    
+    if is_native:
+        if agent_client:
+            try:
+                 username = st.session_state.get("username", "admin")
+                 task_id = agent_client.send_command(username, "search_files", {
+                     "path": path,
+                     "patterns": patterns,
+                     "exclusion_list": exclusion_list,
+                     "search_by": search_by,
+                     "item_type": item_type,
+                     "recursive": recursive,
+                     "search_empty_folders": search_empty_folders
+                 })
+                 
+                 if task_id:
+                      with st.spinner("Buscando en equipo local (vía Agente)..."):
+                          res = agent_client.wait_for_result(task_id, timeout=60)
+                          if res and res.get("status") == "success":
+                               items = res.get("items", [])
+                               # Ensure consistency in keys if needed, agent returns 'Ruta completa' and 'Fecha'
+                               results.extend(items)
+                          else:
+                               st.error(f"Error en la búsqueda del agente: {res.get('message') if res else 'Sin respuesta'}")
+                  else:
+                     st.error("No se pudo conectar con el agente para iniciar la búsqueda.")
+            except Exception as e:
+                st.error(f"Error al comunicar con el agente: {e}")
+        else:
+             st.error("Módulo de agente no disponible.")
 
-            match = False
+    else:
+        for root, dirs, files in os.walk(path):
+            # Si no es recursivo, limpiar dirs para que os.walk no baje más, 
+            # PERO debemos procesar la raíz actual.
+            # os.walk yielda (root, dirs, files). Si modificamos dirs in-place, afecta la recursión.
             
+            items_to_check = []
             if search_empty_folders:
-                # Lógica específica para carpetas vacías
-                try:
-                    if os.path.isdir(full_path) and not os.listdir(full_path):
-                         match = True
-                except PermissionError:
-                    continue
-                except Exception as e:
-                    log(f"Error accediendo a {full_path}: {e}")
-                    continue
-            else:
-                # Lógica normal de patrones
-                if not patterns:
-                    match = True
-                else:
-                    # Verificar si coincide con ALGUNO de los patrones
-                    for pat in patterns:
-                        if search_by == "extensión":
-                            # Solo aplica a archivos
-                            if item_type == "archivos" and item_lower.endswith(pat):
-                                match = True
-                                break
-                        elif search_by == "nombre":
-                            # Nombre sin extensión para archivos, o nombre carpeta
-                            name_only = os.path.splitext(item_lower)[0] if item_type == "archivos" else item_lower
-                            if pat in name_only:
-                                match = True
-                                break
-                        else: # todo
-                            if pat in item_lower:
-                                match = True
-                                break
+                 # Si buscamos carpetas vacías, iteramos sobre dirs
+                 items_to_check = dirs
+            elif item_type == "archivos":
+                items_to_check = files
+            elif item_type == "carpetas":
+                items_to_check = dirs
             
-            if match:
-                try:
-                    stats = os.stat(full_path)
-                    mtime = datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
-                except:
-                    mtime = "N/A"
+            for item in items_to_check:
+                item_lower = item.lower()
+                full_path = os.path.join(root, item)
                 
-                results.append({
-                    "Ruta completa": full_path,
-                    "Fecha": mtime
-                })
+                # Verificar exclusiones
+                if any(excl in item_lower for excl in exclusion_list):
+                    continue
 
-        if not recursive:
-            break
+                match = False
+                
+                if search_empty_folders:
+                    # Lógica específica para carpetas vacías
+                    try:
+                        if os.path.isdir(full_path) and not os.listdir(full_path):
+                             match = True
+                    except PermissionError:
+                        continue
+                    except Exception as e:
+                        log(f"Error accediendo a {full_path}: {e}")
+                        continue
+                else:
+                    # Lógica normal de patrones
+                    if not patterns:
+                        match = True
+                    else:
+                        # Verificar si coincide con ALGUNO de los patrones
+                        for pat in patterns:
+                            if search_by == "extensión":
+                                # Solo aplica a archivos
+                                if item_type == "archivos" and item_lower.endswith(pat):
+                                    match = True
+                                    break
+                            elif search_by == "nombre":
+                                # Nombre sin extensión para archivos, o nombre carpeta
+                                name_only = os.path.splitext(item_lower)[0] if item_type == "archivos" else item_lower
+                                if pat in name_only:
+                                    match = True
+                                    break
+                            else: # todo
+                                if pat in item_lower:
+                                    match = True
+                                    break
+                
+                if match:
+                    try:
+                        stats = os.stat(full_path)
+                        mtime = datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                    except:
+                        mtime = "N/A"
+                    
+                    results.append({
+                        "Ruta completa": full_path,
+                        "Fecha": mtime
+                    })
+
+            if not recursive:
+                break
             
     st.session_state.search_results = results
     if not results:

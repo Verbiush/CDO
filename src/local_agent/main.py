@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -267,6 +268,76 @@ class AgentWorker(threading.Thread):
                 if "error" in res:
                     result["status"] = "ERROR"
             
+            elif command == "search_files":
+                path = params.get("path")
+                patterns = params.get("patterns", [])
+                exclusion_list = params.get("exclusion_list", [])
+                search_by = params.get("search_by", "todo")
+                item_type = params.get("item_type", "archivos")
+                recursive = params.get("recursive", True)
+                search_empty_folders = params.get("search_empty_folders", False)
+                
+                found_items = []
+                
+                if os.path.exists(path):
+                    for root, dirs, files in os.walk(path):
+                        items_to_check = []
+                        if search_empty_folders:
+                             items_to_check = dirs
+                        elif item_type == "archivos":
+                            items_to_check = files
+                        elif item_type == "carpetas":
+                            items_to_check = dirs
+                        
+                        for item in items_to_check:
+                            item_lower = item.lower()
+                            full_path = os.path.join(root, item)
+                            
+                            # Exclusions
+                            if any(excl in item_lower for excl in exclusion_list):
+                                continue
+
+                            match = False
+                            
+                            if search_empty_folders:
+                                try:
+                                    if os.path.isdir(full_path) and not os.listdir(full_path):
+                                         match = True
+                                except:
+                                    continue
+                            else:
+                                if not patterns:
+                                    match = True
+                                else:
+                                    for pat in patterns:
+                                        if search_by == "extensión":
+                                            if item_type == "archivos" and item_lower.endswith(pat):
+                                                match = True; break
+                                        elif search_by == "nombre":
+                                            name_only = os.path.splitext(item_lower)[0] if item_type == "archivos" else item_lower
+                                            if pat in name_only:
+                                                match = True; break
+                                        else:
+                                            if pat in item_lower:
+                                                match = True; break
+                            
+                            if match:
+                                try:
+                                    stats = os.stat(full_path)
+                                    mtime = datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+                                except:
+                                    mtime = "N/A"
+                                
+                                found_items.append({
+                                    "Ruta completa": full_path,
+                                    "Fecha": mtime
+                                })
+                        
+                        if not recursive:
+                            break
+                
+                result["result"] = {"status": "success", "items": found_items}
+
             # ... (Add other commands like bot_zeus here if needed) ...
             else:
                 result["status"] = "ERROR"
