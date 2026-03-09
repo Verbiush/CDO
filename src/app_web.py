@@ -1,11 +1,9 @@
 import streamlit as st
 
 # --- CONFIGURACIÓN INICIAL DEL ESTADO ---
-# Forzamos MODO WEB (sin ventanas nativas) siempre
+# En AWS queremos que se comporte como la APP NATIVA (usando el Agente para diálogos)
 if "force_native_mode" not in st.session_state:
-    st.session_state["force_native_mode"] = False
-# Aseguramos que se mantenga False incluso si se recarga
-st.session_state["force_native_mode"] = False
+    st.session_state["force_native_mode"] = True
 
 import pandas as pd
 import datetime
@@ -270,7 +268,7 @@ def login_page():
     
     with login_container:
         st.title("🔐 Iniciar Sesión")
-        st.markdown("Versión Web (Nube) v2.6")
+        st.markdown("Versión Nube v2.7 (Modo Nativo)")
         
         col1, col2 = st.columns([1, 2])
         with col1:

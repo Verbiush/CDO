@@ -3,6 +3,7 @@ import os
 import time
 import zipfile
 import shutil
+import platform
 from pathlib import Path
 
 try:
@@ -26,7 +27,10 @@ def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
     Retorna la ruta seleccionada o None si se cancela.
     """
     # Intentar Tkinter primero si estamos en modo nativo
-    if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE:
+    # Optimizacion: Solo usar Tkinter si estamos en Windows (asumimos que es local)
+    # En Linux (AWS) pasamos directo al Agente para evitar errores/delays
+    is_windows = platform.system() == "Windows"
+    if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE and is_windows:
         try:
             # Verificar si estamos en un entorno compatible (local)
             root = tk.Tk()
@@ -59,7 +63,7 @@ def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
         return agent_client.select_folder(username, title=title)
     except Exception as agent_e:
         if st.session_state.get("force_native_mode", True):
-             st.error(f"Error: No se puede abrir ventana nativa y el agente falló: {agent_e}")
+             st.error(f"⚠️ No se pudo abrir la ventana en su PC via Agente. Verifique que el Agente Local esté conectado. (Error: {agent_e})")
         else:
              # En web es normal que falle si no hay agente, no mostramos error intrusivo
              print(f"Agent fallback failed: {agent_e}")
@@ -71,7 +75,8 @@ def abrir_dialogo_archivo_nativo(title="Seleccionar Archivo", initial_dir=None, 
     Retorna la ruta seleccionada o None si se cancela.
     """
     # Intentar Tkinter primero si estamos en modo nativo
-    if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE:
+    is_windows = platform.system() == "Windows"
+    if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE and is_windows:
         try:
             root = tk.Tk()
             root.withdraw()
@@ -103,7 +108,7 @@ def abrir_dialogo_archivo_nativo(title="Seleccionar Archivo", initial_dir=None, 
         return agent_client.select_file(username, title=title, file_types=file_types)
     except Exception as agent_e:
         if st.session_state.get("force_native_mode", True):
-             st.error(f"Error: No se puede abrir ventana nativa y el agente falló: {agent_e}")
+             st.error(f"⚠️ No se pudo abrir selección de archivo via Agente. Verifique conexión. (Error: {agent_e})")
         else:
              print(f"Agent fallback failed: {agent_e}")
         return None
