@@ -767,30 +767,31 @@ def render():
         default_hardcoded = os.path.join(os.path.expanduser("~"), "Documents", "GestionDocumental")
         
         # Initialize fallback if somehow missing
-        if "gd_base_path" not in st.session_state:
-             st.session_state.gd_base_path = default_hardcoded
-             st.session_state.input_base_path_struct = default_hardcoded
-        
-        is_native = st.session_state.get("force_native_mode", True)
+    if "gd_base_path" not in st.session_state:
+         st.session_state.gd_base_path = default_hardcoded
+         st.session_state.input_base_path_struct = default_hardcoded
+    
+    is_native = st.session_state.get("force_native_mode", True)
 
-        # Selector de Ruta Estandarizado
-        base_path = render_path_selector(
-            label="Carpeta Raíz / ZIP Base (Modo Web)",
-            key="gd_base_path_struct",
-            default_path=st.session_state.get("gd_base_path", st.session_state.get("current_path", os.getcwd())),
-            omit_checkbox=False,
-            help_text="Seleccione la carpeta donde se crearán las subcarpetas. En Modo Web, suba un ZIP (puede estar vacío) para usarlo como base."
-        )
-        
-        # In Web Mode, if no ZIP uploaded, create a temp dir to start fresh
-        if not is_native and (not base_path or not os.path.exists(base_path)):
-             # Create a temp dir for this session/action if not exists
-             temp_base = os.path.join(os.getcwd(), "temp_downloads", f"struct_{int(time.time())}")
-             if "temp_struct_path" not in st.session_state:
-                 os.makedirs(temp_base, exist_ok=True)
-                 st.session_state.temp_struct_path = temp_base
-             base_path = st.session_state.temp_struct_path
-             st.info(f"Modo Web: Usando directorio temporal para generar estructura: {base_path}")
+    # Selector de Ruta Estandarizado
+    base_path = render_path_selector(
+        label="Carpeta Raíz / ZIP Base (Modo Web)",
+        key="gd_base_path_struct",
+        default_path=st.session_state.get("gd_base_path", st.session_state.get("current_path", os.getcwd())),
+        omit_checkbox=False,
+        help_text="Seleccione la carpeta donde se crearán las subcarpetas. En Modo Web, suba un ZIP (puede estar vacío) para usarlo como base."
+    )
+    
+    # In Web Mode, if no ZIP uploaded, create a temp dir to start fresh
+    # In Native Mode, path might not exist on server but exist on client (Agent). Skip server check if Native.
+    if not is_native and (not base_path or not os.path.exists(base_path)):
+         # Create a temp dir for this session/action if not exists
+         temp_base = os.path.join(os.getcwd(), "temp_downloads", f"struct_{int(time.time())}")
+         if "temp_struct_path" not in st.session_state:
+             os.makedirs(temp_base, exist_ok=True)
+             st.session_state.temp_struct_path = temp_base
+         base_path = st.session_state.temp_struct_path
+         st.info(f"Modo Web: Usando directorio temporal para generar estructura: {base_path}")
 
         st.session_state.input_base_path_struct = base_path
 
@@ -860,25 +861,25 @@ def render():
         
         # Configuración común
         # --- SYNC LOGIC: Auto-update from Search Tab ---
-        if "current_path" in st.session_state and os.path.exists(st.session_state.current_path):
-             # Check if we should sync (either first run or path changed)
-             # We use a tracking variable to know if current_path changed since we last looked
-             if "last_synced_search_path" not in st.session_state:
-                 st.session_state.last_synced_search_path = None
-             
-             if st.session_state.current_path != st.session_state.last_synced_search_path:
-                 # Sync!
-                 st.session_state.gd_source_path = st.session_state.current_path
-                 st.session_state.gd_source_path_mov = st.session_state.current_path # Sync Move Tool Source
-                 st.session_state.input_base_path_struct_mov = st.session_state.current_path # Sync Move Tool Dest
-                 st.session_state.last_synced_search_path = st.session_state.current_path
-                 # Force update the widget key to reflect the change immediately
-                 st.session_state.input_gd_source_path = st.session_state.current_path
-                 st.session_state.input_gd_source_path_mov = st.session_state.current_path
+    if "current_path" in st.session_state:
+         # Check if we should sync (either first run or path changed)
+         # We use a tracking variable to know if current_path changed since we last looked
+         if "last_synced_search_path" not in st.session_state:
+             st.session_state.last_synced_search_path = None
+         
+         if st.session_state.current_path != st.session_state.last_synced_search_path:
+             # Sync!
+             st.session_state.gd_source_path = st.session_state.current_path
+             st.session_state.gd_source_path_mov = st.session_state.current_path # Sync Move Tool Source
+             st.session_state.input_base_path_struct_mov = st.session_state.current_path # Sync Move Tool Dest
+             st.session_state.last_synced_search_path = st.session_state.current_path
+             # Force update the widget key to reflect the change immediately
+             st.session_state.input_gd_source_path = st.session_state.current_path
+             st.session_state.input_gd_source_path_mov = st.session_state.current_path
 
         if "gd_source_path" not in st.session_state:
              # Intenta heredar la ruta de Búsqueda y Acciones si existe
-             if "current_path" in st.session_state and os.path.exists(st.session_state.current_path):
+             if "current_path" in st.session_state:
                  st.session_state.gd_source_path = st.session_state.current_path
              else:
                  st.session_state.gd_source_path = os.path.join(os.path.expanduser("~"), "Documents")
@@ -1175,23 +1176,30 @@ def render():
                         # Usually user has either folders OR flat files. Doing both is safe.
                         for filename in root_files:
                             # Loose match: filename contains match_key
-                            if match_key in filename:
-                                try:
-                                    file_full_path = os.path.join(source_path, filename)
-                                    if not os.path.exists(file_full_path): continue # Moved or renamed already
+                        if match_key in filename:
+                            try:
+                                file_full_path = os.path.join(source_path, filename)
+                                # Skip check if native mode (path on client)
+                                if not is_native and not os.path.exists(file_full_path): continue # Moved or renamed already
+                                
+                                base_name, ext = os.path.splitext(filename)
+                                
+                                # Check if already ends with suffix
+                                if not base_name.endswith(f"{separator_suf}{suffix_val}"):
+                                    new_name = f"{base_name}{separator_suf}{suffix_val}{ext}"
+                                    new_file_path = os.path.join(source_path, new_name)
                                     
-                                    base_name, ext = os.path.splitext(filename)
-                                    
-                                    # Check if already ends with suffix
-                                    if not base_name.endswith(f"{separator_suf}{suffix_val}"):
-                                        new_name = f"{base_name}{separator_suf}{suffix_val}{ext}"
-                                        new_file_path = os.path.join(source_path, new_name)
+                                    # Avoid collision (skip check if native)
+                                    if not is_native and os.path.exists(new_file_path):
+                                        # Skip or timestamp? Skip to be safe
+                                        continue
                                         
-                                        # Avoid collision
-                                        if os.path.exists(new_file_path):
-                                            # Skip or timestamp? Skip to be safe
-                                            continue
-                                            
+                                    if is_native:
+                                         # Add to agent queue (simulated here, needs real agent integration)
+                                         # For now, just count as "would be processed" or add to a list to send to agent
+                                         # TODO: Implement bulk rename via Agent
+                                         count_suf += 1 
+                                    else:
                                         os.rename(file_full_path, new_file_path)
                                         count_suf += 1
                                         
