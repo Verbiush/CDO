@@ -120,9 +120,17 @@ def buscar_archivos_wrapper():
 def buscar_archivos():
     path = st.session_state.get("current_path", "")
     
-    if not path or not os.path.exists(path):
+    # Check for empty path but allow skipping existence check if in native mode (Agent will check)
+    is_native = st.session_state.get("force_native_mode", True)
+    
+    if not path:
         st.warning("⚠️ Por favor, seleccione una carpeta válida para analizar.")
         return
+
+    # In WEB mode, we must check existence locally. In NATIVE mode, path is on user's PC, so server can't check it.
+    if not is_native and not os.path.exists(path):
+         st.warning(f"⚠️ La ruta no existe en el servidor: {path}")
+         return
 
     pattern_input = st.session_state.get("pattern", "")
     # Split by newlines first, then replace commas with newlines to split by them too, or just regex split
