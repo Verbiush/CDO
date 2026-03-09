@@ -1,9 +1,11 @@
 import streamlit as st
 
 # --- CONFIGURACIÓN INICIAL DEL ESTADO ---
-# En modo Web (este archivo), forzamos force_native_mode = False
+# Forzamos MODO WEB (sin ventanas nativas) siempre
 if "force_native_mode" not in st.session_state:
     st.session_state["force_native_mode"] = False
+# Aseguramos que se mantenga False incluso si se recarga
+st.session_state["force_native_mode"] = False
 
 import pandas as pd
 import datetime
@@ -268,6 +270,7 @@ def login_page():
     
     with login_container:
         st.title("🔐 Iniciar Sesión")
+        st.markdown("Versión Web (Nube) v2.6")
         
         col1, col2 = st.columns([1, 2])
         with col1:
