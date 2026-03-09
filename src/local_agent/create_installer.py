@@ -11,9 +11,9 @@ def build_installer():
     build_dir = os.path.join(current_dir, "build")
     
     # Clean previous builds
-    # if os.path.exists(dist_dir): shutil.rmtree(dist_dir)
-    # if os.path.exists(build_dir):
-    #     shutil.rmtree(build_dir)
+    if os.path.exists(dist_dir): shutil.rmtree(dist_dir)
+    if os.path.exists(build_dir):
+        shutil.rmtree(build_dir)
         
     # --- Helper to Sign Code ---
     def sign_executable(file_path):
@@ -38,7 +38,7 @@ def build_installer():
     
     print("\n2. Building Agent Executable (CDO_Agente.exe)...")
     
-    # Build main.py -> CDO_Agente.exe (noconsole)
+    # Build main.py -> CDO_Agente.exe (noconsole for GUI)
     # Hidden imports for FastAPI/Uvicorn
     hidden_imports = [
         "--hidden-import=uvicorn.logging",
@@ -68,7 +68,12 @@ def build_installer():
         "--hidden-import=webdriver_manager.microsoft",
         "--hidden-import=pandas",
         "--hidden-import=urllib3.util.retry",
-        "--hidden-import=requests.adapters"
+        "--hidden-import=requests.adapters",
+        "--hidden-import=tkinter",
+        "--hidden-import=tkinter.filedialog",
+        "--hidden-import=tkinter.messagebox",
+        "--hidden-import=tkinter.scrolledtext",
+        "--hidden-import=tkinter.ttk"
     ]
     
     # Add parent directory (src) to paths so bot_zeus.py can be found
@@ -76,7 +81,7 @@ def build_installer():
     
     cmd_agent = [
         sys.executable, "-m", "PyInstaller",
-        "--console", # Show console for debugging
+        "--noconsole", # Hide console for GUI app
         "--onefile",
         "--name=CDO_Agente",
         "--clean",

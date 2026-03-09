@@ -25,94 +25,87 @@ def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
     Abre un diálogo de selección de carpeta nativo usando Tkinter.
     Retorna la ruta seleccionada o None si se cancela.
     """
-    if not st.session_state.get("force_native_mode", True):
-        # En modo Web, no usamos Tkinter nativo
-        return None
-
-    if not TKINTER_AVAILABLE:
-        st.error("Error: Tkinter no está disponible en este entorno.")
-        return None
-
-    try:
-        # Verificar si estamos en un entorno compatible (local)
-        # En Streamlit Cloud esto no funcionará, pero asumimos entorno local Windows
-        root = tk.Tk()
-        root.withdraw()  # Ocultar la ventana principal
-        root.wm_attributes('-topmost', 1)  # Mantener siempre encima
-        
-        if not initial_dir:
-            initial_dir = os.getcwd()
-            
-        folder_path = filedialog.askdirectory(title=title, initialdir=initial_dir)
-        
-        root.destroy()
-        return folder_path if folder_path else None
-    except Exception as e:
-        # En modo Web, esto puede pasar si force_native_mode no se detecta correctamente
-        # Intentar fallback al Agente Local si falla Tkinter (ej: headless server)
-        # Hacemos el fallback SIEMPRE que falle Tkinter, sin importar el mensaje de error específico
-        print(f"DEBUG: Tkinter failed ({e}). Trying Agent fallback...")
-        
+    # Intentar Tkinter primero si estamos en modo nativo
+    if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE:
         try:
-            # Lazy import
-            try: import agent_client
-            except ImportError: from src import agent_client
+            # Verificar si estamos en un entorno compatible (local)
+            root = tk.Tk()
+            root.withdraw()  # Ocultar la ventana principal
+            root.wm_attributes('-topmost', 1)  # Mantener siempre encima
             
-            username = st.session_state.get("username", "admin")
-            st.toast("Conectando con Agente Local...", icon="🔌")
+            if not initial_dir:
+                initial_dir = os.getcwd()
+                
+            folder_path = filedialog.askdirectory(title=title, initialdir=initial_dir)
             
-            # Usar el agente para abrir el diálogo en el PC del usuario
-            return agent_client.select_folder(username, title=title)
-        except Exception as agent_e:
-            st.error(f"Error: No se puede abrir ventana nativa y el agente falló: {agent_e}")
-            return None
+            root.destroy()
+            return folder_path if folder_path else None
+        except Exception as e:
+            print(f"DEBUG: Tkinter failed ({e}). Trying Agent fallback...")
+    
+    # Fallback al Agente Local (funciona en Web y Nativo si Tkinter falla)
+    try:
+        # Lazy import
+        try: import agent_client
+        except ImportError: from src import agent_client
+        
+        username = st.session_state.get("username", "admin")
+        
+        # Solo intentar si parece que estamos en un entorno donde podría haber un agente
+        # O si el usuario explícitamente quiere usar el agente (podríamos añadir un flag)
+        st.toast("Solicitando al Agente Local...", icon="🔌")
+        
+        # Usar el agente para abrir el diálogo en el PC del usuario
+        return agent_client.select_folder(username, title=title)
+    except Exception as agent_e:
+        if st.session_state.get("force_native_mode", True):
+             st.error(f"Error: No se puede abrir ventana nativa y el agente falló: {agent_e}")
+        else:
+             # En web es normal que falle si no hay agente, no mostramos error intrusivo
+             print(f"Agent fallback failed: {agent_e}")
+        return None
 
 def abrir_dialogo_archivo_nativo(title="Seleccionar Archivo", initial_dir=None, file_types=None):
     """
     Abre un diálogo de selección de archivo nativo usando Tkinter.
     Retorna la ruta seleccionada o None si se cancela.
     """
-    if not st.session_state.get("force_native_mode", True):
-        return None
-    
-    if not TKINTER_AVAILABLE:
-        st.error("Error: Tkinter no está disponible en este entorno.")
-        return None
-
+    # Intentar Tkinter primero si estamos en modo nativo
+    if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE:
+        try:
+            root = tk.Tk()
+            root.withdraw()
+            root.wm_attributes('-topmost', 1)
+            
+            if not initial_dir:
+                initial_dir = os.getcwd()
+                
+            if not file_types:
+                file_types = [("Todos los archivos", "*.*")]
+                
+            file_path = filedialog.askopenfilename(title=title, initialdir=initial_dir, filetypes=file_types)
+            
+            root.destroy()
+            return file_path if file_path else None
+        except Exception as e:
+            print(f"DEBUG: Tkinter failed ({e}). Trying Agent fallback...")
+            
+    # Fallback al Agente Local
     try:
-        root = tk.Tk()
-        root.withdraw()
-        root.wm_attributes('-topmost', 1)
+        # Lazy import
+        try: import agent_client
+        except ImportError: from src import agent_client
         
-        if not initial_dir:
-            initial_dir = os.getcwd()
-            
-        if not file_types:
-            file_types = [("Todos los archivos", "*.*")]
-            
-        file_path = filedialog.askopenfilename(title=title, initialdir=initial_dir, filetypes=file_types)
+        username = st.session_state.get("username", "admin")
+        st.toast("Solicitando al Agente Local...", icon="🔌")
         
-        root.destroy()
-        return file_path if file_path else None
-    except Exception as e:
-        # En modo Web, esto puede pasar si force_native_mode no se detecta correctamente
-        # Intentar fallback al Agente Local si falla Tkinter (ej: headless server)
-        if "DISPLAY" in str(e) or "screen" in str(e) or "application has been destroyed" in str(e):
-            try:
-                # Lazy import
-                try: import agent_client
-                except ImportError: from src import agent_client
-                
-                username = st.session_state.get("username", "admin")
-                st.toast("Conectando con Agente Local...", icon="🔌")
-                
-                # Usar el agente para abrir el diálogo en el PC del usuario
-                return agent_client.select_file(username, title=title, file_types=file_types)
-            except Exception as agent_e:
-                st.error(f"Error: No se puede abrir ventana nativa y el agente falló: {agent_e}")
-                return None
+        # Usar el agente para abrir el diálogo en el PC del usuario
+        return agent_client.select_file(username, title=title, file_types=file_types)
+    except Exception as agent_e:
+        if st.session_state.get("force_native_mode", True):
+             st.error(f"Error: No se puede abrir ventana nativa y el agente falló: {agent_e}")
         else:
-            st.error(f"Error al abrir selector de archivo nativo: {e}")
+             print(f"Agent fallback failed: {agent_e}")
         return None
 
 def update_path_key(key, new_path, widget_key=None):
@@ -249,20 +242,31 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         
         # Opcion: Usar Agente Local
         use_agent_key = f"use_agent_folder_{key}"
-        use_agent = st.checkbox("🔌 Usar Agente Local (PC)", key=use_agent_key, help="Seleccionar carpeta en tu PC usando el Agente instalado.")
+        
+        # Check if agent is likely available (optional heuristic)
+        agent_available = True 
+        
+        col_agent_check, col_agent_status = st.columns([0.6, 0.4])
+        with col_agent_check:
+            use_agent = st.checkbox("🔌 Usar Agente Local", key=use_agent_key, help="Conectar con el agente instalado en tu PC para seleccionar carpetas locales.")
         
         if use_agent:
             username = st.session_state.get("username", "admin")
+            # Show connection info
+            with col_agent_status:
+                st.caption(f"Usuario: {username}")
+
             col1, col2 = st.columns([0.7, 0.3])
             
             # Display current selected path (or empty)
             current_val = st.session_state.get(key, "")
             with col1:
-                st.text_input("Ruta remota:", value=current_val, key=f"remote_path_display_{key}", disabled=True)
+                st.text_input("Ruta remota:", value=current_val, key=f"remote_path_display_{key}", disabled=True, label_visibility="collapsed")
             
             with col2:
                 # Button to trigger agent
-                if st.button("📂 Explorar", key=f"btn_agent_folder_{key}"):
+                # Usamos un icono de carpeta para que sea familiar
+                if st.button("📁 Examinar PC", key=f"btn_agent_folder_{key}", type="primary"):
                     try:
                         # Lazy import to avoid circular dependency
                         try:
@@ -271,22 +275,24 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                             from src import agent_client
                             
                         # Call agent (blocking with spinner)
-                        selected = agent_client.select_folder(username, title=label)
+                        with st.spinner(f"Esperando selección en el Agente ({username})..."):
+                            selected = agent_client.select_folder(username, title=label)
                         
                         if selected:
                             st.session_state[key] = selected
                             target_path = selected
-                            st.success(f"Seleccionado: {selected}")
+                            st.success(f"Ruta: {selected}")
                             st.rerun()
                         else:
-                            st.warning("No se seleccionó ninguna carpeta o el agente no respondió.")
+                            st.warning("Cancelado o sin respuesta.")
                     except Exception as e:
-                        st.error(f"Error comunicando con agente: {e}")
+                        st.error(f"Error: {e}")
             
             # If path is set, return it
             return st.session_state.get(key, target_path)
 
         # En modo Web (sin agente), forzamos la carga de ZIP
+        st.write("--- O ---")
         st.write("Sube un ZIP para trabajar con sus carpetas/archivos.")
         uploaded = st.file_uploader(f"Subir ZIP con archivos para '{label}'", type="zip", key=f"upload_{key}", label_visibility="collapsed")
         
