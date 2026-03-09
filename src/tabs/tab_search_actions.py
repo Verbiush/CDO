@@ -164,7 +164,7 @@ def buscar_archivos():
                                results.extend(items)
                           else:
                                st.error(f"Error en la búsqueda del agente: {res.get('message') if res else 'Sin respuesta'}")
-                  else:
+                 else:
                      st.error("No se pudo conectar con el agente para iniciar la búsqueda.")
             except Exception as e:
                 st.error(f"Error al comunicar con el agente: {e}")
