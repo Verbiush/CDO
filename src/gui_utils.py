@@ -201,6 +201,11 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         # Evitar ruta predeterminada para obligar a la selección explícita
         default_path = ""
 
+    # En modo nativo, forzamos omit_checkbox para que siempre esté activo y no muestre el checkbox
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native:
+        omit_checkbox = True
+
     # Checkbox state for "Use Custom"
     cb_key = f"cb_use_custom_{key}"
     if omit_checkbox:

@@ -11,4 +11,8 @@ services:
       - ASPNETCORE_Kestrel__Certificates__Default__Password=fevrips2024*
       - ASPNETCORE_Kestrel__Certificates__Default__Path=/certificates/server.pfx
     volumes:
-      - C:/Certificates:/certificates
+      # AWS/Linux friendly volume mapping
+      # Ensure 'certificates' folder exists in the same directory as docker-compose.yml
+      # and contains 'server.pfx'
+      - ./certificates:/certificates
+    restart: always

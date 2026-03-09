@@ -9,8 +9,15 @@ import shutil
 try:
     from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, render_download_button, extract_uploaded_zip
 except ImportError:
-    abrir_dialogo_carpeta_nativo = None
-    # Fallback implementation if import fails
+    try:
+        from gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, render_download_button, extract_uploaded_zip
+    except ImportError:
+        try:
+            # Try relative import if we are in a package
+            from ..gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, render_download_button, extract_uploaded_zip
+        except ImportError:
+            abrir_dialogo_carpeta_nativo = None
+            # Fallback implementation if import fails
     def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
         st.warning("Componente de selección de rutas no disponible. Usando entrada de texto simple.")
         return st.text_input(label, value=default_path or "", key=key, help=help_text)
@@ -668,7 +675,7 @@ def render(container=None):
             - Organiza los datos en hojas separadas (Consultas, Procedimientos, etc.) listas para la conversión a JSON.
             """)
             
-            path_flat = render_path_selector("Carpeta con Archivos Planos (o subir ZIP)", key="path_rips_flat")
+            path_flat = render_path_selector("Carpeta con Archivos Planos (o subir ZIP)", key="path_rips_flat", omit_checkbox=True)
             
             if st.button("🔄 Convertir a Excel", key="btn_convert_flat_native"):
                 if path_flat and os.path.isdir(path_flat):
@@ -740,7 +747,7 @@ def render(container=None):
                         st.error(f"Error: {err}")
 
             with st.expander("XLSX a JSON (Individual)", expanded=False):
-                path_xls_to_json = render_path_selector("Seleccionar Excel (RIPS)", key="rips_xlsx_ind_path")
+                path_xls_to_json = render_path_selector("Seleccionar Excel (RIPS)", key="rips_xlsx_ind_path", omit_checkbox=True)
                 if st.button("Convertir a JSON", key="btn_xlsx_json"):
                     if path_xls_to_json:
                         with st.spinner("Generando JSON..."):
@@ -776,7 +783,7 @@ def render(container=None):
 
             with st.expander("JSON Evento a XLSX (Masivo - Consolidar)", expanded=False):
                 st.markdown("Consolida múltiples archivos JSON de una carpeta en un único Excel.")
-                path_consol = render_path_selector("Carpeta con JSONs", key="path_rips_consol")
+                path_consol = render_path_selector("Carpeta con JSONs", key="path_rips_consol", omit_checkbox=True)
                 if st.button("Consolidar", key="btn_consol_rips"):
                     if path_consol:
                         xlsx_data, msg = worker_consolidar_json_xlsx(path_consol)
@@ -820,7 +827,7 @@ def render(container=None):
 
         with tab_ops[1]:
             st.subheader("Cambio de CUPS Masivo")
-            path_cups = render_path_selector("Carpeta Raíz (busca recursivamente JSONs)", key="path_cups_mass")
+            path_cups = render_path_selector("Carpeta Raíz (busca recursivamente JSONs)", key="path_cups_mass", omit_checkbox=True)
             col1, col2 = st.columns(2)
             with col1:
                 old_cup = st.text_input("CUP Anterior (codServicio)", key="cup_old")
@@ -845,7 +852,7 @@ def render(container=None):
             st.subheader("Notas de Ajuste (Actualización Masiva)")
             st.markdown("Actualiza recursivamente notas o textos en todos los archivos JSON de una carpeta.")
             
-            path_notes = render_path_selector("Carpeta Raíz (busca recursivamente JSONs)", key="path_notes_mass")
+            path_notes = render_path_selector("Carpeta Raíz (busca recursivamente JSONs)", key="path_notes_mass", omit_checkbox=True)
             col1, col2 = st.columns(2)
             with col1:
                 target_note = st.text_input("Texto a buscar (Coincidencia Parcial)", key="note_target")
@@ -871,7 +878,7 @@ def render(container=None):
             st.subheader("Validación y Limpieza")
             st.markdown("Elimina espacios en blanco innecesarios en claves y valores de todos los archivos JSON en una carpeta.")
             
-            path_clean = render_path_selector("Carpeta a Limpiar", key="path_rips_clean")
+            path_clean = render_path_selector("Carpeta a Limpiar", key="path_rips_clean", omit_checkbox=True)
             if st.button("Limpiar JSONs (Espacios)", key="btn_clean_json"):
                 if path_clean:
                     count, errs = worker_limpiar_json_rips(path_clean)
