@@ -1,4 +1,10 @@
 import streamlit as st
+
+# --- CONFIGURACIÓN INICIAL DEL ESTADO ---
+# En modo Web (este archivo), forzamos force_native_mode = False
+if "force_native_mode" not in st.session_state:
+    st.session_state["force_native_mode"] = False
+
 import pandas as pd
 import datetime
 import time
