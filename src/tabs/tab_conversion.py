@@ -428,7 +428,8 @@ def render(container=None):
                 
                 current_path = render_path_selector(
                     label="Carpeta Origen (Individual)",
-                    key="conv_ind_source_path"
+                    key="conv_ind_source_path",
+                    default_path=current_path_default
                 )
                 
                 if not current_path:
@@ -465,7 +466,8 @@ def render(container=None):
             if is_native:
                 output_folder = render_path_selector(
                     label="Carpeta Destino",
-                    key="conv_ind_out"
+                    key="conv_ind_out",
+                    default_path=current_path_default
                 )
             else:
                 # En modo Web, usamos una carpeta temporal automática
@@ -610,7 +612,8 @@ def render(container=None):
             # Source
             source_path = render_path_selector(
                 label="Carpeta Origen (Masivo)",
-                key="conv_mass_source"
+                key="conv_mass_source",
+                default_path=st.session_state.get("current_path")
             )
 
             # Output
@@ -620,7 +623,8 @@ def render(container=None):
             if is_native:
                 out_path = render_path_selector(
                     label="Carpeta Destino",
-                    key="conv_mass_out"
+                    key="conv_mass_out",
+                    default_path=st.session_state.get("current_path")
                 )
             else:
                 # Web Mode: Use temp folder

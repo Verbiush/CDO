@@ -1149,7 +1149,7 @@ def dialogo_zip_carpetas_individual():
         st.warning("No hay carpetas en la lista actual.")
         return
 
-    target_zip_ind_path = render_path_selector("Carpeta Destino:", "zip_ind_dest", help_text="Donde se guardarán los ZIPs generados.")
+    target_zip_ind_path = render_path_selector("Carpeta Destino:", "zip_ind_dest", default_path=st.session_state.get("current_path", os.getcwd()), help_text="Donde se guardarán los ZIPs generados.")
         
     if st.button("🚀 Comprimir Carpetas"):
         dest = st.session_state.get("zip_ind_dest", st.session_state.get("current_path", os.path.expanduser("~")))
@@ -1335,6 +1335,7 @@ def render(container):
         current_path = render_path_selector(
             "Ruta a analizar:", 
             key="current_path", 
+            default_path=st.session_state.get("current_path", os.getcwd()),
             help_text="Selecciona la carpeta base para realizar búsquedas y operaciones.",
             omit_checkbox=True
         )

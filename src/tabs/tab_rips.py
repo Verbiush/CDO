@@ -836,7 +836,12 @@ def render(container=None):
             - Organiza los datos en hojas separadas (Consultas, Procedimientos, etc.) listas para la conversión a JSON.
             """)
             
-            path_flat = render_path_selector("Carpeta con Archivos Planos (o subir ZIP)", key="path_rips_flat", omit_checkbox=True)
+            path_flat = render_path_selector(
+                "Carpeta con Archivos Planos (o subir ZIP)", 
+                key="path_rips_flat", 
+                default_path=st.session_state.get("current_path"),
+                omit_checkbox=True
+            )
             
             if st.button("🔄 Convertir a Excel", key="btn_convert_flat_native"):
                 # --- MODO NATIVO (Agente) ---

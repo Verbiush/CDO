@@ -496,16 +496,23 @@ def render():
     st.info("ℹ️ Ruta Inicial: Define el directorio de trabajo para todas las pestañas.")
     
     # 1. Global Path Selector - Single source of truth
-    if "current_path" not in st.session_state:
-         st.session_state.current_path = os.getcwd()
-         
+    # We use a unique key 'gd_working_path' to avoid conflicts with other tabs using 'current_path'
+    # But we sync it bi-directionally with the global 'current_path'
+    
+    global_current_path = st.session_state.get("current_path", os.getcwd())
+    if not global_current_path: global_current_path = os.getcwd()
+
     current_main_path = render_path_selector(
         label="Carpeta de Trabajo (Ruta Inicial)",
-        key="current_path",
-        default_path=st.session_state.get("current_path", os.getcwd()),
+        key="gd_working_path", 
+        default_path=global_current_path,
         omit_checkbox=False
     )
     
+    # Update global path if this one changes
+    if current_main_path and current_main_path != global_current_path:
+        st.session_state.current_path = current_main_path
+
     # 2. Sync Logic - Propagate to all sub-states
     last_synced = st.session_state.get("gd_last_synced_path")
     
@@ -844,6 +851,7 @@ def render():
         source_path = render_path_selector(
             label="Carpeta Origen de Archivos",
             key="gd_source_path",
+            default_path=current_global_path,
             omit_checkbox=False
         )
             
@@ -958,6 +966,7 @@ def render():
                 base_dest = render_path_selector(
                     label="Destino Base",
                     key="gd_dest_path_mov_selector",
+                    default_path=current_global_path,
                     omit_checkbox=False
                 )
                 
@@ -1174,6 +1183,7 @@ def render():
         base_path_content = render_path_selector(
             label="Carpeta Raíz",
             key="input_base_path_content",
+            default_path=current_global_path,
             omit_checkbox=False
         )
 

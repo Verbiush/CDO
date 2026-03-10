@@ -104,7 +104,7 @@ def render(tab_container):
                      dl_path = render_path_selector(
                          "Carpeta de Descargas (Bot)",
                          "bot_dl_path_sel",
-                         default_path=os.path.join(os.getcwd(), "downloads"),
+                         default_path=st.session_state.get("current_path", os.path.join(os.getcwd(), "downloads")),
                          omit_checkbox=True
                      )
                      st.session_state.bot_download_dir = dl_path

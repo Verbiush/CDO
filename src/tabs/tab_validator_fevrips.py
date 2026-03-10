@@ -126,7 +126,8 @@ def dialog_generar_cuv():
     target_cuv_path = render_path_selector(
         label="Carpeta de Facturas (Raíz)",
         key="path_cuv",
-        help_text="Se usará la carpeta seleccionada para buscar los archivos RIPS."
+        help_text="Se usará la carpeta seleccionada para buscar los archivos RIPS.",
+        default_path=current_global_path
     )
     
     # --- NUEVA SECCIÓN: MODO SERVICIO WEB ---

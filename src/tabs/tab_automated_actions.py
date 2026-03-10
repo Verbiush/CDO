@@ -3260,7 +3260,8 @@ def dialog_importar_excel():
     st.write("### Renombrar archivos usando Excel")
     uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"])
     if uploaded:
-        target_path = render_path_selector("Carpeta donde aplicar cambios", "ren_excel_folder")
+        default_path = st.session_state.get("current_path", os.getcwd())
+        target_path = render_path_selector("Carpeta donde aplicar cambios", "ren_excel_folder", default_path=default_path)
         folder = target_path
         
         if st.button("Aplicar Renombrado"):
@@ -3292,7 +3293,8 @@ def dialog_sufijo():
             
             use_filter = st.checkbox("Usar filtro de Excel (Filas visibles)", value=False, key="suf_filter")
             
-            target_path = render_path_selector("Carpeta Raíz (donde están las carpetas)", "suf_folder")
+            default_path = st.session_state.get("current_path", os.getcwd())
+            target_path = render_path_selector("Carpeta Raíz (donde están las carpetas)", "suf_folder", default_path=default_path)
             folder = target_path
             
             if st.button("Aplicar Sufijos"):
@@ -3338,7 +3340,8 @@ def dialog_renombrar_mapeo_excel():
 
     st.write("Carpeta Objetivo:")
     
-    target_path = render_path_selector("Ruta", "ren_map_folder")
+    default_path = st.session_state.get("current_path", os.getcwd())
+    target_path = render_path_selector("Ruta", "ren_map_folder", default_path=default_path)
     folder = target_path
     
     if st.button("Renombrar"):
@@ -3374,7 +3377,8 @@ def dialog_modif_docx_completo():
 
     st.write("Carpeta Objetivo:")
     
-    target_path = render_path_selector("Ruta", "mod_full_folder")
+    default_path = st.session_state.get("current_path", os.getcwd())
+    target_path = render_path_selector("Ruta", "mod_full_folder", default_path=default_path)
     folder = target_path
     
     if st.button("Ejecutar Modificación"):
@@ -3402,7 +3406,8 @@ def dialog_insertar_firma_docx():
 
     st.write("Carpeta Base:")
     
-    target_path = render_path_selector("Ruta", "firma_docx_base")
+    default_path = st.session_state.get("current_path", os.getcwd())
+    target_path = render_path_selector("Ruta", "firma_docx_base", default_path=default_path)
     
     base_path = target_path
     docx_name = st.text_input("Nombre del DOCX", value="Consentimiento.docx")
@@ -4828,9 +4833,11 @@ def dialog_descargar_firmas():
         col_id = st.text_input("Columna ID Firma", value="id_firma", key="firmas_col_id")
         col_folder = st.text_input("Columna Nombre Carpeta", value="nombre_carpeta", key="firmas_col_folder")
     
+    default_path = st.session_state.get("current_path", os.getcwd())
     root_path = render_path_selector(
         key="firmas_path",
-        label="Ruta Raíz Descarga"
+        label="Ruta Raíz Descarga",
+        default_path=default_path
     )
     
     if st.button("Iniciar Descarga"):
@@ -4884,9 +4891,11 @@ def dialog_descargar_historias_ovida():
             col_egreso = st.text_input("Columna Fecha Egreso", value="f_egreso", key="ovida_egr")
             col_carpeta = st.text_input("Columna Carpeta Destino", value="carpeta", key="ovida_carp")
         
+    default_path = st.session_state.get("current_path", os.getcwd())
     download_path = render_path_selector(
         key="ovida_path",
-        label="Ruta Descarga Base"
+        label="Ruta Descarga Base",
+        default_path=default_path
     )
     
     if st.button("Iniciar Descarga Masiva"):
@@ -5542,9 +5551,11 @@ def dialog_crear_firma():
     # Folder Selector
     st.write("Carpeta Base de Trabajo:")
     
+    default_path = st.session_state.get("current_path", os.getcwd())
     target_path = render_path_selector(
         key="crear_firma_path",
-        label="Ruta"
+        label="Ruta",
+        default_path=default_path
     )
     current_path = target_path
 
@@ -5608,16 +5619,20 @@ def dialog_organizar_feov_avanzado():
     
     st.write("1. Carpeta Destino (contiene subcarpetas con PDFs FEOV...)")
     
+    default_path = st.session_state.get("current_path", os.getcwd())
+    
     path_dest = render_path_selector(
         key="feov_adv_dest",
-        label="Ruta Destino"
+        label="Ruta Destino",
+        default_path=default_path
     )
     
     st.write("2. Carpeta Origen (archivos a mover)")
     
     path_orig = render_path_selector(
         key="feov_adv_orig",
-        label="Ruta Origen"
+        label="Ruta Origen",
+        default_path=default_path
     )
     
     if st.button("Iniciar Organización Avanzada"):
@@ -5656,9 +5671,11 @@ def dialog_autorizacion_docx():
         except Exception as e:
             st.error(f"Error: {e}")
 
+    default_path = st.session_state.get("current_path", os.getcwd())
     base_path = render_path_selector(
         key="auth_base",
-        label="Carpeta Base"
+        label="Carpeta Base",
+        default_path=default_path
     )
     
     if st.button("Iniciar Modificación"):
@@ -5697,9 +5714,11 @@ def dialog_regimen_docx():
         except Exception as e:
             st.error(f"Error: {e}")
 
+    default_path = st.session_state.get("current_path", os.getcwd())
     base_path = render_path_selector(
         key="reg_base",
-        label="Carpeta Base"
+        label="Carpeta Base",
+        default_path=default_path
     )
     
     if st.button("Iniciar Modificación"):
@@ -5816,10 +5835,12 @@ def dialog_distribuir_base():
 
     # 3. Carpeta Destino Base
     st.divider()
+    default_path = st.session_state.get("current_path", os.getcwd())
     base_dest_path = render_path_selector(
         key="dist_base_dest",
         label="Carpeta Destino (Raíz)",
-        help_text="Donde se encuentran o crearán las carpetas del Excel."
+        help_text="Donde se encuentran o crearán las carpetas del Excel.",
+        default_path=default_path
     )
     
     # 4. Action
@@ -5870,9 +5891,11 @@ def dialog_crear_carpetas_excel():
         except Exception as e:
             st.error(f"Error leyendo Excel: {e}")
             
+    default_path = st.session_state.get("current_path", os.getcwd())
     base_path = render_path_selector(
         key="create_fold_base",
-        label="Carpeta Base"
+        label="Carpeta Base",
+        default_path=default_path
     )
     
     if st.button("Crear Carpetas"):
@@ -5915,14 +5938,18 @@ def dialog_copiar_mapeo():
     
     st.write("Rutas Base:")
     
+    default_path = st.session_state.get("current_path", os.getcwd())
+    
     src_base = render_path_selector(
         key="copy_map_src_base",
-        label="Carpeta Origen Base"
+        label="Carpeta Origen Base",
+        default_path=default_path
     )
 
     dst_base = render_path_selector(
         key="copy_map_dst_base",
-        label="Carpeta Destino Base"
+        label="Carpeta Destino Base",
+        default_path=default_path
     )
     
     if st.button("Iniciar Copia"):
@@ -5970,14 +5997,18 @@ def dialog_copiar_raiz():
 
     st.write("Rutas:")
     
+    default_path = st.session_state.get("current_path", os.getcwd())
+    
     root_src = render_path_selector(
         key="copy_root_src_base",
-        label="Carpeta Origen (Archivos)"
+        label="Carpeta Origen (Archivos)",
+        default_path=default_path
     )
 
     root_dst = render_path_selector(
         key="copy_root_dst_base",
-        label="Carpeta Destino (Carpetas)"
+        label="Carpeta Destino (Carpetas)",
+        default_path=default_path
     )
     
     if st.button("Iniciar Copia"):
@@ -6005,9 +6036,11 @@ def dialog_rips_masivos():
     mode = st.radio("Modo", ["JSON -> Excel", "Excel -> JSON"])
     
     if mode == "JSON -> Excel":
+        default_path = st.session_state.get("current_path", os.getcwd())
         folder_src = render_path_selector(
             key="rips_json_src",
-            label="Carpeta JSONs"
+            label="Carpeta JSONs",
+            default_path=default_path
         )
 
         file_dst = st.text_input("Nombre Archivo Salida (.xlsx)", "Consolidado.xlsx")
@@ -6029,9 +6062,11 @@ def dialog_rips_masivos():
     else:
         file_src = st.file_uploader("Excel Eventos", type=["xlsx"])
         
+        default_path = st.session_state.get("current_path", os.getcwd())
         folder_dst = render_path_selector(
             key="rips_excel_dst",
-            label="Carpeta Destino JSONs"
+            label="Carpeta Destino JSONs",
+            default_path=default_path
         )
 
         if st.button("Convertir Excel a JSONs"):
@@ -6058,9 +6093,11 @@ def dialog_exportar_renombrado():
     
     c1, c2 = st.columns([0.8, 0.2])
     
+    default_path = st.session_state.get("current_path", os.getcwd())
     folder = render_path_selector(
         key="renombrar_export_src",
-        label="Carpeta"
+        label="Carpeta",
+        default_path=default_path
     )
     
     if st.button("Generar Excel"):
@@ -6092,9 +6129,11 @@ def dialog_aplicar_renombrado():
     
     c1, c2 = st.columns([0.8, 0.2])
     
+    default_path = st.session_state.get("current_path", os.getcwd())
     folder = render_path_selector(
         key="renombrar_apply_src",
-        label="Carpeta"
+        label="Carpeta",
+        default_path=default_path
     )
     
     if st.button("Aplicar Cambios"):
@@ -6125,9 +6164,11 @@ def dialog_copiar_archivo_a_subcarpetas():
     
     c1, c2 = st.columns([0.8, 0.2])
     
+    default_path = st.session_state.get("current_path", os.getcwd())
     dest_base_path = render_path_selector(
         key="copy_sub_dest",
-        label="Carpeta Destino Base"
+        label="Carpeta Destino Base",
+        default_path=default_path
     )
     
     if st.button("Iniciar Copia a Subcarpetas"):
@@ -6156,14 +6197,18 @@ def dialog_organizar_feov():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible. Use las rutas manuales.")
 
+    default_path = st.session_state.get("current_path", os.getcwd())
+    
     target_path = render_path_selector(
         key="feov_target",
-        label="Carpeta DESTINO"
+        label="Carpeta DESTINO",
+        default_path=default_path
     )
 
     source_path = render_path_selector(
         key="feov_source",
-        label="Carpeta ORIGEN"
+        label="Carpeta ORIGEN",
+        default_path=default_path
     )
     
     if st.button("Organizar Facturas"):
@@ -6209,7 +6254,8 @@ def render():
                 # Selector de ruta estandarizado
             path_unif = render_path_selector(
                 label="Carpeta de Trabajo",
-                key="tab_unif_folder"
+                key="tab_unif_folder",
+                default_path=default_path
             )
             
             if st.button("🗂️ Unificar PDF por Carpeta", key="btn_unif_pdf"):
@@ -6322,7 +6368,8 @@ def render():
         # Selector de ruta estandarizado
         path_org = render_path_selector(
             label="Carpeta de Trabajo",
-            key="tab_org_folder"
+            key="tab_org_folder",
+            default_path=default_path
         )
         
         col_o1, col_o2 = st.columns(2)
@@ -6397,7 +6444,8 @@ def render():
         # Selector de ruta estandarizado
         path_an = render_path_selector(
             label="Carpeta de Análisis",
-            key="tab_an_folder"
+            key="tab_an_folder",
+            default_path=default_path
         )
         
         # Obtener lista de PDFs para análisis (Recursivo)
