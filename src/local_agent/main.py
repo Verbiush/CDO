@@ -1501,20 +1501,30 @@ class AgentGUI:
         self.config = load_config()
         self.worker = None
         
+        # Determine default URLs based on server_url or hardcoded default
+        # Prioritize config 'server_url', otherwise use default AWS IP
+        base_url = self.config.get("server_url", "http://3.142.164.128:8000")
+        # Strip trailing slash if present
+        if base_url.endswith("/"):
+            base_url = base_url[:-1]
+            
+        default_task_url = f"{base_url}/api/tasks"
+        default_res_url = f"{base_url}/api/results"
+        
         # UI Elements
         frame = ttk.Frame(root, padding="10")
         frame.pack(fill=tk.BOTH, expand=True)
         
         ttk.Label(frame, text="Usuario:").grid(row=0, column=0, sticky=tk.W)
-        self.user_var = tk.StringVar(value=self.config.get("username", ""))
+        self.user_var = tk.StringVar(value=self.config.get("username", "admin"))
         ttk.Entry(frame, textvariable=self.user_var).grid(row=0, column=1, sticky=tk.EW)
         
         ttk.Label(frame, text="URL Tareas:").grid(row=1, column=0, sticky=tk.W)
-        self.url_task_var = tk.StringVar(value=self.config.get("task_url", "http://localhost:8501/api/tasks"))
+        self.url_task_var = tk.StringVar(value=self.config.get("task_url", default_task_url))
         ttk.Entry(frame, textvariable=self.url_task_var).grid(row=1, column=1, sticky=tk.EW)
         
         ttk.Label(frame, text="URL Resultados:").grid(row=2, column=0, sticky=tk.W)
-        self.url_res_var = tk.StringVar(value=self.config.get("result_url", "http://localhost:8501/api/results"))
+        self.url_res_var = tk.StringVar(value=self.config.get("result_url", default_res_url))
         ttk.Entry(frame, textvariable=self.url_res_var).grid(row=2, column=1, sticky=tk.EW)
         
         self.btn_start = ttk.Button(frame, text="Iniciar Agente", command=self.toggle_agent)
