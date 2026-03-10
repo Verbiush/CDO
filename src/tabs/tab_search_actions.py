@@ -1074,7 +1074,8 @@ def dialogo_copiar_lista():
 
     target_copy_path = render_path_selector(
         label="Carpeta Destino:",
-        key="copy_dest_input"
+        key="copy_dest_input",
+        default_path=st.session_state.get("current_path", os.getcwd())
     )
     
     if st.button("🚀 Copiar"):
@@ -1099,6 +1100,7 @@ def dialogo_mover_lista():
     target_move_path = render_path_selector(
         label="Carpeta Destino",
         key="move_dest_input",
+        default_path=st.session_state.get("current_path", os.getcwd()),
         help_text="Donde se moverán los archivos."
     )
 
@@ -1124,6 +1126,7 @@ def dialogo_zip_lista():
     target_zip_path = render_path_selector(
         label="Carpeta Destino",
         key="zip_dest_path",
+        default_path=st.session_state.get("current_path", os.getcwd()),
         help_text="Donde se guardará el archivo ZIP."
     )
     

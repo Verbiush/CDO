@@ -940,7 +940,7 @@ def render(container=None):
                         st.error(f"Error: {err}")
 
             with st.expander("XLSX a JSON (Individual)", expanded=False):
-                path_xls_to_json = render_path_selector("Seleccionar Excel (RIPS)", key="rips_xlsx_ind_path", omit_checkbox=True)
+                path_xls_to_json = render_path_selector("Seleccionar Excel (RIPS)", key="rips_xlsx_ind_path", default_path=st.session_state.get("current_path"), omit_checkbox=True)
                 if st.button("Convertir a JSON", key="btn_xlsx_json"):
                     if path_xls_to_json:
                         with st.spinner("Generando JSON..."):
@@ -976,7 +976,7 @@ def render(container=None):
 
             with st.expander("JSON Evento a XLSX (Masivo - Consolidar)", expanded=False):
                 st.markdown("Consolida múltiples archivos JSON de una carpeta en un único Excel.")
-                path_consol = render_path_selector("Carpeta con JSONs", key="path_rips_consol", omit_checkbox=True)
+                path_consol = render_path_selector("Carpeta con JSONs", key="path_rips_consol", default_path=st.session_state.get("current_path"), omit_checkbox=True)
                 if st.button("Consolidar", key="btn_consol_rips"):
                     if path_consol:
                         xlsx_data, msg = worker_consolidar_json_xlsx(path_consol)
@@ -1003,8 +1003,8 @@ def render(container=None):
                 st.markdown("Genera múltiples archivos JSON a partir de un Excel consolidado (requiere hoja Transaccion con 'archivo_origen').")
                 
                 if is_native:
-                     path_xls_input = render_path_selector("Archivo Excel Consolidado", key="path_xls_desconsol", omit_checkbox=True)
-                     path_json_dest = render_path_selector("Carpeta Destino para JSONs", key="path_dest_desconsol", omit_checkbox=True)
+                     path_xls_input = render_path_selector("Archivo Excel Consolidado", key="path_xls_desconsol", default_path=st.session_state.get("current_path"), omit_checkbox=True)
+                     path_json_dest = render_path_selector("Carpeta Destino para JSONs", key="path_dest_desconsol", default_path=st.session_state.get("current_path"), omit_checkbox=True)
                      
                      if st.button("Desconsolidar (Agente)", key="btn_desconsol_native"):
                          if path_xls_input and path_json_dest:

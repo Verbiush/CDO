@@ -213,6 +213,23 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         default_check = True if not default_path else False
         use_custom = st.checkbox(f"Modificar ruta: {label}", value=default_check, key=cb_key)
 
+    # Logic to sync with default_path changes (e.g. global path change)
+    # This ensures that if the global path changes, this selector updates to reflect it,
+    # overriding previous local selection.
+    last_default_key = f"last_default_{key}"
+    last_default_val = st.session_state.get(last_default_key, None)
+    
+    if default_path != last_default_val:
+        # Default path changed externally (or first run)
+        # We update the local key to match the new default
+        st.session_state[key] = default_path
+        st.session_state[last_default_key] = default_path
+        
+        # Also update the text input key to reflect change immediately in the widget
+        input_key = f"input_{key}"
+        if input_key in st.session_state:
+             st.session_state[input_key] = default_path
+
     # Determine target path
     if use_custom:
         if key not in st.session_state:
