@@ -403,6 +403,53 @@ def run_renombrar_task(results, full, new_name, sust, find_txt, repl_txt, clean_
 # --- ADDITIONAL WORKERS (Migrated from app_web.py) ---
 
 def worker_editar_texto(file_list, search_text, replace_text, silent_mode=False):
+    # Native Mode Agent Integration
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            if not silent_mode:
+                st.info("Enviando tarea de edición de texto al Agente Local...")
+            
+            task_id = agent_client.send_command(username, "edit_text", {
+                "items": file_list,
+                "find": search_text,
+                "replace": replace_text
+            })
+            
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Procesando con Agente Local..."):
+                        res = agent_client.wait_for_result(task_id, timeout=600)
+                else:
+                    # In silent mode we might block or not? 
+                    # Usually workers are called from UI, so blocking is fine.
+                    res = agent_client.wait_for_result(task_id, timeout=600)
+
+                if res and res.get("status") == "SUCCESS":
+                    r_data = res.get("result", {})
+                    count = r_data.get("count", 0)
+                    errors = r_data.get("errors", [])
+                    msg = f"Agente: Texto modificado en {count} archivos."
+                    if errors:
+                        msg += f" Errores: {len(errors)}"
+                    
+                    if not silent_mode:
+                        st.success(msg)
+                        if errors:
+                            with st.expander("Ver errores"):
+                                for e in errors: st.write(e)
+                    return msg
+                else:
+                    err_msg = res.get("result") if res else "Sin respuesta"
+                    if not silent_mode: st.error(f"Error del Agente: {err_msg}")
+                    return f"Error Agente: {err_msg}"
+            else:
+                if not silent_mode: st.error("No se pudo conectar con el Agente.")
+        except Exception as e:
+            if not silent_mode: st.error(f"Excepción Agente: {e}")
+
+    # Web Mode Logic
     count = 0
     errors = 0
     if not silent_mode:
@@ -497,6 +544,43 @@ def run_editar_texto_task(file_list, search_text, replace_text):
     return {"message": worker_editar_texto(file_list, search_text, replace_text, silent_mode=True)}
 
 def worker_copiar_lista(file_list, target_folder, silent_mode=False):
+    # Native Mode Agent Integration
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            task_id = agent_client.send_command(username, "copy_files", {
+                "items": file_list,
+                "target_folder": target_folder
+            })
+            
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Copiando archivos vía Agente..."):
+                        res = agent_client.wait_for_result(task_id, timeout=600)
+                else:
+                    res = agent_client.wait_for_result(task_id, timeout=600)
+
+                if res and res.get("status") == "SUCCESS":
+                    r_data = res.get("result", {})
+                    count = r_data.get("count", 0)
+                    errors = r_data.get("errors", [])
+                    msg = f"Agente: Copiados {count} archivos."
+                    if errors: msg += f" Errores: {len(errors)}"
+                    
+                    if not silent_mode:
+                        st.success(msg)
+                        if errors:
+                             with st.expander("Errores de copia"):
+                                 for e in errors: st.write(e)
+                    return msg
+                else:
+                    err = res.get("result") if res else "Error desconocido"
+                    if not silent_mode: st.error(f"Fallo Agente: {err}")
+                    return f"Error: {err}"
+        except Exception as e:
+            if not silent_mode: st.error(f"Error conexión Agente: {e}")
+
     if not os.path.exists(target_folder):
         try:
             os.makedirs(target_folder)
@@ -551,6 +635,47 @@ def run_copiar_lista_task(file_list, target_folder):
     return {"message": worker_copiar_lista(file_list, target_folder, silent_mode=True)}
 
 def worker_mover_lista(file_list, target_folder, silent_mode=False):
+    # Native Mode Agent Integration
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            task_id = agent_client.send_command(username, "move_files", {
+                "items": file_list,
+                "target_folder": target_folder
+            })
+            
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Moviendo archivos vía Agente..."):
+                        res = agent_client.wait_for_result(task_id, timeout=600)
+                else:
+                    res = agent_client.wait_for_result(task_id, timeout=600)
+
+                if res and res.get("status") == "SUCCESS":
+                    r_data = res.get("result", {})
+                    count = r_data.get("count", 0)
+                    errors = r_data.get("errors", [])
+                    msg = f"Agente: Movidos {count} archivos."
+                    if errors: msg += f" Errores: {len(errors)}"
+                    
+                    if not silent_mode:
+                        st.success(msg)
+                        # Clear results as files are moved
+                        st.session_state.search_results = []
+                        if errors:
+                             with st.expander("Errores de movimiento"):
+                                 for e in errors: st.write(e)
+                        time.sleep(1.5)
+                        st.rerun()
+                    return msg
+                else:
+                    err = res.get("result") if res else "Error desconocido"
+                    if not silent_mode: st.error(f"Fallo Agente: {err}")
+                    return f"Error: {err}"
+        except Exception as e:
+            if not silent_mode: st.error(f"Error conexión Agente: {e}")
+
     if not os.path.exists(target_folder):
         try:
             os.makedirs(target_folder)
@@ -610,6 +735,44 @@ def run_mover_lista_task(file_list, target_folder):
     return {"message": worker_mover_lista(file_list, target_folder, silent_mode=True)}
 
 def worker_zip_lista(file_list, target_zip_path, silent_mode=False):
+    # Native Mode Agent Integration
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            task_id = agent_client.send_command(username, "zip_files", {
+                "items": file_list,
+                "target_path": target_zip_path
+            })
+            
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Comprimiendo archivos vía Agente..."):
+                        res = agent_client.wait_for_result(task_id, timeout=600)
+                else:
+                    res = agent_client.wait_for_result(task_id, timeout=600)
+
+                if res and res.get("status") == "SUCCESS":
+                    r_data = res.get("result", {})
+                    count = r_data.get("count", 0)
+                    errors = r_data.get("errors", [])
+                    msg = f"Agente: ZIP creado con {count} archivos."
+                    if errors: msg += f" Errores: {len(errors)}"
+                    
+                    if not silent_mode:
+                        st.success(msg)
+                        render_download_button(target_zip_path, "dl_zip_list", "📦 Descargar ZIP Generado")
+                        if errors:
+                             with st.expander("Errores de compresión"):
+                                 for e in errors: st.write(e)
+                    return msg
+                else:
+                    err = res.get("result") if res else "Error desconocido"
+                    if not silent_mode: st.error(f"Fallo Agente: {err}")
+                    return f"Error: {err}"
+        except Exception as e:
+            if not silent_mode: st.error(f"Error conexión Agente: {e}")
+
     count = 0
     errors = 0
     if not silent_mode:
@@ -659,6 +822,45 @@ def run_zip_lista_task(file_list, target_zip_path):
     return {"message": worker_zip_lista(file_list, target_zip_path, silent_mode=True)}
 
 def worker_zip_carpetas_individual(folder_list, target_folder=None, silent_mode=False):
+    # Native Mode Agent Integration
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            task_id = agent_client.send_command(username, "zip_folders_individual", {
+                "items": folder_list,
+                "target_folder": target_folder
+            })
+            
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Comprimiendo carpetas individualmente vía Agente..."):
+                        res = agent_client.wait_for_result(task_id, timeout=600)
+                else:
+                    res = agent_client.wait_for_result(task_id, timeout=600)
+
+                if res and res.get("status") == "SUCCESS":
+                    r_data = res.get("result", {})
+                    count = r_data.get("count", 0)
+                    errors = r_data.get("errors", [])
+                    msg = f"Agente: Creados {count} ZIPs individuales."
+                    if errors: msg += f" Errores: {len(errors)}"
+                    
+                    if not silent_mode:
+                        st.success(msg)
+                        if target_folder:
+                            render_download_button(target_folder, "dl_zip_ind", "📦 Descargar Carpetas (ZIP)")
+                        if errors:
+                             with st.expander("Errores de compresión"):
+                                 for e in errors: st.write(e)
+                    return msg
+                else:
+                    err = res.get("result") if res else "Error desconocido"
+                    if not silent_mode: st.error(f"Fallo Agente: {err}")
+                    return f"Error: {err}"
+        except Exception as e:
+            if not silent_mode: st.error(f"Error conexión Agente: {e}")
+
     count = 0
     errors = 0
     if not silent_mode:
@@ -702,6 +904,45 @@ def run_zip_carpetas_ind_task(folder_list, target_folder):
     return {"message": worker_zip_carpetas_individual(folder_list, target_folder, silent_mode=True)}
 
 def worker_eliminar_lista(file_list, silent_mode=False):
+    # Native Mode Agent Integration
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            task_id = agent_client.send_command(username, "delete_files", {
+                "items": file_list
+            })
+            
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Eliminando archivos vía Agente..."):
+                        res = agent_client.wait_for_result(task_id, timeout=600)
+                else:
+                    res = agent_client.wait_for_result(task_id, timeout=600)
+
+                if res and res.get("status") == "SUCCESS":
+                    r_data = res.get("result", {})
+                    count = r_data.get("count", 0)
+                    errors = r_data.get("errors", [])
+                    msg = f"Agente: Eliminados {count} archivos."
+                    if errors: msg += f" Errores: {len(errors)}"
+                    
+                    if not silent_mode:
+                        st.success(msg)
+                        st.session_state.search_results = []
+                        if errors:
+                             with st.expander("Errores de eliminación"):
+                                 for e in errors: st.write(e)
+                        time.sleep(1.5)
+                        st.rerun()
+                    return msg
+                else:
+                    err = res.get("result") if res else "Error desconocido"
+                    if not silent_mode: st.error(f"Fallo Agente: {err}")
+                    return f"Error: {err}"
+        except Exception as e:
+            if not silent_mode: st.error(f"Error conexión Agente: {e}")
+
     from send2trash import send2trash
     count_del = 0
     errors = 0

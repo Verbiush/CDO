@@ -239,8 +239,21 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         with col2:
             st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
             btn_key = f"btn_{key}"
-            st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom,
-                  on_click=lambda: update_path_key(key, abrir_dialogo_carpeta_nativo(initial_dir=target_path), widget_key=input_key))
+            # Use on_click to trigger dialog and update state
+            def on_click_folder():
+                # Get current path from state or default
+                current = st.session_state.get(key, target_path)
+                selected = abrir_dialogo_carpeta_nativo(title=label, initial_dir=current)
+                if selected:
+                    st.session_state[key] = selected
+                    # Also update the text input key to reflect change immediately
+                    st.session_state[f"input_{key}"] = selected
+            
+            st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom, on_click=on_click_folder)
+
+        # Return the current path stored in session state
+        return st.session_state.get(key, target_path)
+
     else:
         # --- WEB MODE ---
         st.markdown(f"**{label}**")

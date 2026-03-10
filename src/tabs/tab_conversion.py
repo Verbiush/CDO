@@ -141,7 +141,38 @@ def _pdf_escala_grises(input_path, output_path):
     doc_final.close()
 
 def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=','):
-    if not file_path or not os.path.exists(file_path):
+    is_native = st.session_state.get("force_native_mode", True)
+    
+    if is_native:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "default")
+            
+            # Send task to agent
+            task_id = send_command(username, "convert_file", {
+                "file_path": file_path,
+                "type": tipo,
+                "output_folder": output_folder,
+                "sep": sep
+            })
+            
+            if task_id:
+                # Wait for result
+                res = wait_for_result(task_id, timeout=300)
+                
+                if isinstance(res, dict) and "error" in res:
+                     return False, res["error"]
+                
+                if isinstance(res, list) and len(res) >= 2:
+                    return res[0], res[1]
+                
+                return False, f"Respuesta inesperada del agente: {res}"
+            else:
+                return False, "No se pudo conectar con el Agente."
+        except Exception as e:
+            return False, f"Error Agente: {str(e)}"
+
+    if not file_path or (not is_native and not os.path.exists(file_path)):
         return False, "Archivo no encontrado"
         
     folder = output_folder if output_folder else os.path.dirname(file_path)
@@ -197,7 +228,59 @@ def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=','):
         return False, str(e)
 
 def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', return_zip=False):
-    if not folder_path or not os.path.exists(folder_path):
+    is_native = st.session_state.get("force_native_mode", True)
+    
+    if is_native:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "default")
+            
+            task_id = send_command(username, "convert_bulk", {
+                "folder_path": folder_path,
+                "type": tipo,
+                "output_folder": output_folder,
+                "sep": sep
+            })
+            
+            if task_id:
+                res = wait_for_result(task_id, timeout=600)
+                
+                if isinstance(res, dict):
+                    if "error" in res and not isinstance(res["error"], list): 
+                        # Agent error (e.g. timeout) returns {"error": "msg"}
+                        msg = res["error"]
+                        if return_zip:
+                            return {"count": 0, "message": msg, "error": True}
+                        return 0, msg
+                        
+                    count = res.get("count", 0)
+                    msg = res.get("message", "Proceso finalizado")
+                    errors = res.get("errors", [])
+                    
+                    if errors:
+                        msg += f" (con {len(errors)} errores)"
+                    
+                    if return_zip:
+                         # In native mode we don't return files to browser, just status
+                         return {
+                            "count": count,
+                            "message": msg,
+                            "files": [] 
+                         }
+                    return count, msg
+                else:
+                    err_msg = f"Respuesta inválida: {res}"
+                    if return_zip:
+                         return {"count": 0, "message": err_msg, "error": True}
+                    return 0, err_msg
+                    
+        except Exception as e:
+            err_msg = f"Error Agente: {str(e)}"
+            if return_zip:
+                 return {"count": 0, "message": err_msg, "error": True}
+            return 0, err_msg
+
+    if not folder_path or (not is_native and not os.path.exists(folder_path)):
         if return_zip:
              return {"count": 0, "message": "Carpeta no encontrada", "error": True}
         return 0, "Carpeta no encontrada"
@@ -206,9 +289,17 @@ def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', retu
     files_to_process = []
     
     # Búsqueda recursiva
-    for r, d, f in os.walk(folder_path):
-        for file in f:
-            files_to_process.append(os.path.join(r, file))
+    try:
+        # Si es modo nativo y la ruta no existe localmente para python (ej: Cloud), os.walk fallará
+        # Pero intentamos por si acaso (usuario local)
+        if os.path.exists(folder_path):
+            for r, d, f in os.walk(folder_path):
+                for file in f:
+                    files_to_process.append(os.path.join(r, file))
+        elif is_native:
+             return 0, "Modo Nativo: No se puede acceder a los archivos directamente desde la aplicación. (Requiere Agente)"
+    except Exception as e:
+        return 0, f"Error accediendo a carpeta: {str(e)}"
 
     total = len(files_to_process)
     if total == 0:
@@ -543,7 +634,7 @@ def render(container=None):
             if st.button("🚀 Ejecutar Conversión Masiva", key="btn_exec_mass"):
                 if not out_path:
                     st.error("⚠️ Seleccione una carpeta de salida.")
-                elif source_path and os.path.exists(source_path):
+                elif source_path and (is_native or os.path.exists(source_path)):
                     count, msg = worker_convertir_masivo(source_path, conv_type_mass, output_folder=out_path, sep=sep_mass)
                     if count > 0:
                         st.success(msg)

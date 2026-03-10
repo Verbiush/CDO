@@ -598,14 +598,75 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
             
         # Lógica de procesamiento masivo
         path_input = target_cuv_path
-        if not path_input or not os.path.exists(path_input):
+        
+        # Modificación para Modo Nativo: Permitir ruta aunque no exista en el entorno del servidor (Docker/Cloud)
+        is_native = st.session_state.get("force_native_mode", True)
+        
+        if not path_input or (not is_native and not os.path.exists(path_input)):
             st.error("Ruta de archivos inválida.")
             return
 
         files_to_process = []
-        for f in os.listdir(path_input):
-             if f.lower().endswith(".json") and not f.startswith("Resultados") and not f.startswith("Resp_"):
-                 files_to_process.append(os.path.join(path_input, f))
+        try:
+            # Si la ruta existe localmente (o estamos en el mismo entorno), listamos
+            if os.path.exists(path_input):
+                for f in os.listdir(path_input):
+                     if f.lower().endswith(".json") and not f.startswith("Resultados") and not f.startswith("Resp_"):
+                         files_to_process.append(os.path.join(path_input, f))
+            elif is_native:
+                # Si estamos en modo nativo y la ruta no es accesible, usamos el Agente Local
+                try:
+                    from src.agent_client import send_command, wait_for_result
+                    username = st.session_state.get("username", "default")
+                    
+                    st.info("Conectando con Agente Local para validación remota...")
+                    
+                    params = {
+                        "base_path": path_input,
+                        "api_url": api_url,
+                        "token": token,
+                        "verify_ssl": verify_ssl if 'verify_ssl' in locals() else True
+                    }
+                    # Ajuste de verify_ssl si api_url es localhost (aunque el agente lo maneja, lo pasamos explícito)
+                    if api_url.startswith("https://localhost") or api_url.startswith("https://127.0.0.1"):
+                        params["verify_ssl"] = False
+
+                    task_id = send_command(username, "validate_rips", params)
+                    
+                    if task_id:
+                        with st.spinner("El Agente Local está validando los archivos... Esto puede tomar varios minutos."):
+                            res = wait_for_result(task_id, timeout=600)
+                            
+                        if "error" in res:
+                            st.error(f"Error del Agente: {res['error']}")
+                            return
+                        else:
+                            # Procesar resultados del agente
+                            agent_results = res.get("results", [])
+                            agent_gen_files = res.get("generated_files", [])
+                            
+                            st.success(f"✅ Validación completada por Agente. Procesados: {res.get('processed', 0)}")
+                            
+                            if agent_gen_files:
+                                st.info(f"📂 Se han generado {len(agent_gen_files)} archivos de resultados directamente en la carpeta: {path_input}")
+                            
+                            # Mostrar DataFrame
+                            df_res = pd.DataFrame(agent_results)
+                            st.dataframe(df_res)
+                            return
+                    else:
+                         st.error("No se pudo enviar la tarea al Agente Local.")
+                         return
+
+                except ImportError:
+                    st.error("Librería de Agente no encontrada. No se puede procesar en Modo Nativo sin acceso directo a la carpeta.")
+                    return
+                except Exception as e:
+                    st.error(f"Error inesperado con el Agente: {e}")
+                    return
+        except Exception as e:
+            st.error(f"Error al listar archivos: {e}")
+            return
         
         if not files_to_process:
             st.warning("No se encontraron archivos JSON para validar.")

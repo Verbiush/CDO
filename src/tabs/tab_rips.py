@@ -213,10 +213,41 @@ def worker_xlsx_a_json_ind(file_obj):
 
 def worker_consolidar_json_xlsx(folder_path):
     try:
-        if not os.path.isdir(folder_path):
+        is_native = st.session_state.get("force_native_mode", True)
+        
+        # --- AGENTE LOCAL (MODO NATIVO) ---
+        if is_native:
+            try:
+                from src.agent_client import send_command, wait_for_result
+                username = st.session_state.get("username", "default")
+                
+                task_id = send_command(username, "consolidate_json", {"path": folder_path})
+                
+                if task_id:
+                    with st.spinner("Ejecutando consolidación vía Agente Local..."):
+                        res = wait_for_result(task_id, timeout=600)
+                    
+                    if "error" in res:
+                        return None, res["error"]
+                    
+                    # Retornamos un marcador especial para indicar que el agente lo hizo
+                    return b"AGENT_DONE", f"Consolidación completada. Archivo generado en: {res.get('file_path', 'Desconocido')}"
+                else:
+                    return None, "No se pudo conectar con el Agente Local."
+            except ImportError:
+                return None, "Librería de Agente no disponible."
+            except Exception as e:
+                return None, f"Error Agente: {e}"
+
+        # --- MODO CLOUD / SERVER ---
+        if not folder_path or not os.path.isdir(folder_path):
             return None, "La ruta proporcionada no es una carpeta válida."
 
-        json_files = [f for f in os.listdir(folder_path) if f.lower().endswith('.json')]
+        try:
+            json_files = [f for f in os.listdir(folder_path) if f.lower().endswith('.json')]
+        except OSError:
+            return None, "Error accediendo a la ruta."
+
         if not json_files:
             return None, "No hay archivos JSON en la carpeta."
         
@@ -348,16 +379,52 @@ def worker_update_cups_masivo(folder_path, old_val, new_val):
     total_changes = 0
     errors = []
     
-    if not os.path.isdir(folder_path):
+    is_native = st.session_state.get("force_native_mode", True)
+    
+    # Intento de usar Agente Local si está en modo nativo
+    if is_native:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            # Asumimos usuario default o obtenemos de session
+            username = st.session_state.get("username", "default")
+            
+            # Verificar si podemos enviar comando
+            task_id = send_command(username, "update_cups", {
+                "path": folder_path,
+                "old_val": old_val,
+                "new_val": new_val
+            })
+            
+            if task_id:
+                with st.spinner("Ejecutando actualización a través del Agente Local..."):
+                    res = wait_for_result(task_id, timeout=300) # 5 min timeout for massive
+                
+                if "error" in res:
+                     return 0, 0, [res["error"]]
+                
+                # El agente retorna: {"count_files": ..., "total_changes": ..., "errors": ...}
+                return res.get("count_files", 0), res.get("total_changes", 0), res.get("errors", [])
+        except ImportError:
+            pass # Fallback a ejecución local si no se puede importar cliente
+        except Exception as e:
+            errors.append(f"Error conectando con Agente: {e}")
+            # Fallback a local
+
+    if not folder_path or (not is_native and not os.path.isdir(folder_path)):
         return 0, 0, ["Carpeta no válida"]
 
     progress_bar = st.progress(0, text="Iniciando actualización de CUPS...")
     
     files_to_process = []
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            if file.lower().endswith('.json'):
-                files_to_process.append(os.path.join(root, file))
+    try:
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith('.json'):
+                    files_to_process.append(os.path.join(root, file))
+    except OSError:
+         if is_native:
+             return 0, 0, ["No se puede acceder a la ruta local. Asegúrese de que el Agente esté conectado (para esta función se soporta) o ejecute la app localmente."]
+         return 0, 0, ["Error accediendo a la ruta."]
     
     total = len(files_to_process)
     
@@ -395,16 +462,48 @@ def worker_update_key_masivo(folder_path, key_target, new_value):
     total_changes = 0
     errors = []
     
-    if not os.path.isdir(folder_path):
+    is_native = st.session_state.get("force_native_mode", True)
+    
+    # Intento de usar Agente Local si está en modo nativo
+    if is_native:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "default")
+            
+            task_id = send_command(username, "update_key", {
+                "path": folder_path,
+                "key": key_target,
+                "val": new_value
+            })
+            
+            if task_id:
+                with st.spinner("Ejecutando actualización vía Agente Local..."):
+                    res = wait_for_result(task_id, timeout=300)
+                
+                if "error" in res:
+                     return 0, 0, [res["error"]]
+                
+                return res.get("count_files", 0), res.get("total_changes", 0), res.get("errors", [])
+        except ImportError:
+            pass 
+        except Exception as e:
+            errors.append(f"Error conectando con Agente: {e}")
+
+    if not folder_path or (not is_native and not os.path.isdir(folder_path)):
         return 0, 0, ["Carpeta no válida"]
 
     progress_bar = st.progress(0, text=f"Iniciando actualización de {key_target}...")
     
     files_to_process = []
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            if file.lower().endswith('.json'):
-                files_to_process.append(os.path.join(root, file))
+    try:
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith('.json'):
+                    files_to_process.append(os.path.join(root, file))
+    except OSError:
+        if is_native:
+            return 0, 0, ["No se puede acceder a la ruta local. Asegúrese de que el Agente esté conectado o ejecute la app localmente."]
+        return 0, 0, ["Error accediendo a la ruta."]
     
     total = len(files_to_process)
     
@@ -442,16 +541,48 @@ def worker_update_notes_masivo(folder_path, target_text, new_note):
     total_changes = 0
     errors = []
     
-    if not os.path.isdir(folder_path):
+    is_native = st.session_state.get("force_native_mode", True)
+    
+    # Intento de usar Agente Local
+    if is_native:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "default")
+            
+            task_id = send_command(username, "update_notes", {
+                "path": folder_path,
+                "target": target_text,
+                "note": new_note
+            })
+            
+            if task_id:
+                with st.spinner("Ejecutando actualización vía Agente Local..."):
+                    res = wait_for_result(task_id, timeout=300)
+                
+                if "error" in res:
+                     return 0, 0, [res["error"]]
+                
+                return res.get("count_files", 0), res.get("total_changes", 0), res.get("errors", [])
+        except ImportError:
+            pass
+        except Exception as e:
+            errors.append(f"Error Agente: {e}")
+
+    if not folder_path or (not is_native and not os.path.isdir(folder_path)):
         return 0, 0, ["Carpeta no válida"]
 
     progress_bar = st.progress(0, text="Iniciando actualización de Notas...")
     
     files_to_process = []
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            if file.lower().endswith('.json'):
-                files_to_process.append(os.path.join(root, file))
+    try:
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith('.json'):
+                    files_to_process.append(os.path.join(root, file))
+    except OSError:
+        if is_native:
+            return 0, 0, ["No se puede acceder a la ruta local. Asegúrese de que el Agente esté conectado."]
+        return 0, 0, ["Error accediendo a la ruta."]
     
     total = len(files_to_process)
     
@@ -488,16 +619,46 @@ def worker_limpiar_json_rips(folder_path):
     count_files = 0
     errors = []
     
-    if not os.path.isdir(folder_path):
+    is_native = st.session_state.get("force_native_mode", True)
+    
+    # Intento de usar Agente Local
+    if is_native:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "default")
+            
+            task_id = send_command(username, "clean_json", {
+                "path": folder_path
+            })
+            
+            if task_id:
+                with st.spinner("Ejecutando limpieza vía Agente Local..."):
+                    res = wait_for_result(task_id, timeout=300)
+                
+                if "error" in res:
+                     return 0, [res["error"]]
+                
+                return res.get("count_files", 0), res.get("errors", [])
+        except ImportError:
+            pass
+        except Exception as e:
+            errors.append(f"Error Agente: {e}")
+
+    if not folder_path or (not is_native and not os.path.isdir(folder_path)):
         return 0, ["Carpeta no válida"]
 
     progress_bar = st.progress(0, text="Limpiando JSONs...")
     
     files_to_process = []
-    for root, dirs, files in os.walk(folder_path):
-        for file in files:
-            if file.lower().endswith('.json'):
-                files_to_process.append(os.path.join(root, file))
+    try:
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                if file.lower().endswith('.json'):
+                    files_to_process.append(os.path.join(root, file))
+    except OSError:
+        if is_native:
+            return 0, ["No se puede acceder a la ruta local. Asegúrese de que el Agente esté conectado."]
+        return 0, ["Error accediendo a la ruta."]
     
     total = len(files_to_process)
     
@@ -678,7 +839,34 @@ def render(container=None):
             path_flat = render_path_selector("Carpeta con Archivos Planos (o subir ZIP)", key="path_rips_flat", omit_checkbox=True)
             
             if st.button("🔄 Convertir a Excel", key="btn_convert_flat_native"):
-                if path_flat and os.path.isdir(path_flat):
+                # --- MODO NATIVO (Agente) ---
+                if is_native:
+                    if path_flat:
+                        try:
+                            from src.agent_client import send_command, wait_for_result
+                            username = st.session_state.get("username", "default")
+                            
+                            task_id = send_command(username, "flat_to_excel", {"path": path_flat})
+                            
+                            if task_id:
+                                with st.spinner("Convirtiendo planos vía Agente Local..."):
+                                    res = wait_for_result(task_id, timeout=600)
+                                    
+                                if "error" in res:
+                                    st.error(f"Error del Agente: {res['error']}")
+                                else:
+                                    st.success(f"✅ Conversión completada. Archivo generado en: {res.get('file_path', 'Ruta desconocida')}")
+                            else:
+                                st.error("No se pudo conectar con el Agente Local.")
+                        except ImportError:
+                            st.error("Librería de Agente no disponible.")
+                        except Exception as e:
+                            st.error(f"Error inesperado: {e}")
+                    else:
+                        st.warning("Ingrese la ruta de la carpeta.")
+                
+                # --- MODO CLOUD / SERVER ---
+                elif path_flat and os.path.isdir(path_flat):
                     with st.spinner("Procesando archivos en carpeta..."):
                             files_to_close = []
                             try:
@@ -787,7 +975,10 @@ def render(container=None):
                 if st.button("Consolidar", key="btn_consol_rips"):
                     if path_consol:
                         xlsx_data, msg = worker_consolidar_json_xlsx(path_consol)
-                        if xlsx_data:
+                        
+                        if xlsx_data == b"AGENT_DONE":
+                             st.success(msg)
+                        elif xlsx_data:
                             st.success(msg)
                             
                             temp_dir = os.path.join("temp_downloads", f"consol_xlsx_{int(time.time())}")
@@ -805,25 +996,55 @@ def render(container=None):
 
             with st.expander("XLSX Evento a JSONs (Masivo - Desconsolidar)", expanded=False):
                 st.markdown("Genera múltiples archivos JSON a partir de un Excel consolidado (requiere hoja Transaccion con 'archivo_origen').")
-                uploaded_consol = st.file_uploader("Subir Excel Consolidado", type=["xlsx"], key="rips_xlsx_consol")
                 
-                if st.button("Desconsolidar", key="btn_desconsol_rips"):
-                    if uploaded_consol:
-                        # Create a persistent temp directory for output
-                        timestamp = int(time.time())
-                        path_desconsol = os.path.join("temp_downloads", f"desconsol_{timestamp}")
-                        os.makedirs(path_desconsol, exist_ok=True)
-                        
-                        ok, msg = worker_desconsolidar_xlsx_json(uploaded_consol, path_desconsol)
-                        
-                        if ok: 
-                            st.success(msg)
-                            # Generate ZIP from the directory
-                            render_download_button(path_desconsol, "dl_desconsol", "📦 Descargar JSONs Generados (ZIP)", cleanup=not is_native)
-                        else: 
-                            st.error(msg)
-                    else:
-                        st.warning("Faltan datos.")
+                if is_native:
+                     path_xls_input = render_path_selector("Archivo Excel Consolidado", key="path_xls_desconsol", omit_checkbox=True)
+                     path_json_dest = render_path_selector("Carpeta Destino para JSONs", key="path_dest_desconsol", omit_checkbox=True)
+                     
+                     if st.button("Desconsolidar (Agente)", key="btn_desconsol_native"):
+                         if path_xls_input and path_json_dest:
+                             try:
+                                 from src.agent_client import send_command, wait_for_result
+                                 username = st.session_state.get("username", "default")
+                                 task_id = send_command(username, "desconsolidate_json", {
+                                     "excel_path": path_xls_input,
+                                     "dest_folder": path_json_dest
+                                 })
+                                 if task_id:
+                                     with st.spinner("Desconsolidando vía Agente Local..."):
+                                         res = wait_for_result(task_id, timeout=600)
+                                     if "error" in res: 
+                                         st.error(res["error"])
+                                     else: 
+                                         st.success(f"Proceso completado. Archivos generados en: {path_json_dest}")
+                                 else: 
+                                     st.error("Error conectando con Agente Local.")
+                             except ImportError:
+                                 st.error("Librería de Agente no disponible.")
+                             except Exception as e:
+                                 st.error(f"Error: {e}")
+                         else:
+                             st.warning("Seleccione archivo y carpeta destino.")
+                else:
+                    uploaded_consol = st.file_uploader("Subir Excel Consolidado", type=["xlsx"], key="rips_xlsx_consol")
+                    
+                    if st.button("Desconsolidar", key="btn_desconsol_rips"):
+                        if uploaded_consol:
+                            # Create a persistent temp directory for output
+                            timestamp = int(time.time())
+                            path_desconsol = os.path.join("temp_downloads", f"desconsol_{timestamp}")
+                            os.makedirs(path_desconsol, exist_ok=True)
+                            
+                            ok, msg = worker_desconsolidar_xlsx_json(uploaded_consol, path_desconsol)
+                            
+                            if ok: 
+                                st.success(msg)
+                                # Generate ZIP from the directory
+                                render_download_button(path_desconsol, "dl_desconsol", "📦 Descargar JSONs Generados (ZIP)", cleanup=not is_native)
+                            else: 
+                                st.error(msg)
+                        else:
+                            st.warning("Faltan datos.")
 
         with tab_ops[1]:
             st.subheader("Cambio de CUPS Masivo")
@@ -894,7 +1115,49 @@ def render(container=None):
                     st.warning("Seleccione una carpeta.")
 
             st.divider()
-            st.info("Para validación FEVRIPS completa (Estructura, Reglas, CUV), use la pestaña dedicada 'Validación FEVRIPS'.")
+            
+            if is_native:
+                st.subheader("Validación FEVRIPS (Agente Local)")
+                st.markdown("Valida JSONs usando el Agente Local y la API FEVRIPS (sin subir archivos a la nube).")
+                
+                path_val = render_path_selector("Carpeta a Validar", key="path_rips_val_agent", omit_checkbox=True)
+                api_url_val = st.text_input("URL API FEVRIPS", value="https://localhost:9443/api/v1/validar", key="api_url_val_agent")
+                token_val = st.text_input("Token (Opcional)", type="password", key="token_val_agent")
+                
+                if st.button("Validar JSONs (Agente)", key="btn_validate_agent"):
+                    if path_val:
+                        try:
+                            from src.agent_client import send_command, wait_for_result
+                            username = st.session_state.get("username", "default")
+                            
+                            st.info("Enviando tarea de validación al Agente Local...")
+                            task_id = send_command(username, "validate_rips", {
+                                "base_path": path_val,
+                                "api_url": api_url_val,
+                                "token": token_val,
+                                "verify_ssl": False 
+                            })
+                            
+                            if task_id:
+                                with st.spinner("Validando... Esto puede tomar tiempo."):
+                                    res = wait_for_result(task_id, timeout=600)
+                                    
+                                if "error" in res:
+                                    st.error(res["error"])
+                                else:
+                                    st.success(f"Validación completada. Procesados: {res.get('processed', 0)}")
+                                    if res.get("results"):
+                                        st.dataframe(pd.DataFrame(res["results"]))
+                                    if res.get("generated_files"):
+                                        st.info(f"Archivos generados: {len(res['generated_files'])}")
+                            else:
+                                st.error("No se pudo conectar con el Agente.")
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+                    else:
+                        st.warning("Seleccione una carpeta.")
+            else:
+                st.info("Para validación FEVRIPS completa (Estructura, Reglas, CUV), use la pestaña dedicada 'Validación FEVRIPS'.")
 
         with tab_ops[4]:
             st.subheader("Cambio de Tecnología (finalidadTecnologiaSalud)")
