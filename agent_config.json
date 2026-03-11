@@ -1,1 +1,1 @@
-{"username": "admin", "task_url": "http://3.142.164.128:8000/api/tasks", "result_url": "http://3.142.164.128:8000/api/results"}
+{"username": "admin", "task_url": "http://3.142.164.128:8000/tasks/poll", "result_url": "http://3.142.164.128:8000/tasks", "password": "admin"}

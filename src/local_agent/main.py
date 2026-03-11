@@ -718,6 +718,36 @@ class AgentWorker:
                     res = process_validate_rips(base_path, api_url, token, verify_ssl)
                     result["result"] = res
 
+            elif command == "list_files":
+                path = params.get("path")
+                if path:
+                    self.log(f"Listando archivos en: {path}")
+                    try:
+                        if os.path.exists(path) and os.path.isdir(path):
+                            items = []
+                            # Limit to 500 items to avoid payload issues
+                            count = 0
+                            with os.scandir(path) as it:
+                                for entry in it:
+                                    if count > 500: break
+                                    items.append({
+                                        "name": entry.name,
+                                        "is_dir": entry.is_dir(),
+                                        "size": entry.stat().st_size if not entry.is_dir() else 0,
+                                        "mtime": entry.stat().st_mtime
+                                    })
+                                    count += 1
+                            result["result"] = {"files": items, "count": count}
+                        else:
+                            result["status"] = "ERROR"
+                            result["result"] = {"error": "Ruta no encontrada o no es carpeta"}
+                    except Exception as e:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": str(e)}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta path"}
+
             elif command == "browse_folder":
                 title = params.get("title", "Seleccionar Carpeta")
                 self.log(f"Abriendo selector de carpeta: {title}")

@@ -854,6 +854,71 @@ def render():
             default_path=current_global_path,
             omit_checkbox=False
         )
+
+        # --- EXPLORADOR DE ARCHIVOS (AGENT ENABLED) ---
+        with st.expander("📂 Explorador de Archivos (Ver contenido)", expanded=True):
+            if source_path:
+                st.markdown(f"**Ruta actual:** `{source_path}`")
+                
+                # State for file list
+                if "gd_file_list" not in st.session_state:
+                    st.session_state.gd_file_list = []
+                
+                col_btn_list, col_info_list = st.columns([1, 3])
+                with col_btn_list:
+                    if st.button("🔄 Listar Archivos", key="btn_list_files_agent"):
+                        st.session_state.gd_file_list = [] # Clear previous
+                        if st.session_state.get("force_native_mode", True):
+                            try:
+                                from src.agent_client import list_files
+                                username = st.session_state.get("username", "default")
+                                with st.spinner("Solicitando lista de archivos al Agente..."):
+                                    files = list_files(username, source_path)
+                                    if files is not None:
+                                        st.session_state.gd_file_list = files
+                                    else:
+                                        st.error("No se pudieron obtener archivos o la carpeta está vacía.")
+                            except Exception as e:
+                                st.error(f"Error comunicando con agente: {e}")
+                        else:
+                            # Web mode fallback (local server)
+                            try:
+                                if os.path.exists(source_path) and os.path.isdir(source_path):
+                                    items = []
+                                    with os.scandir(source_path) as it:
+                                        for entry in it:
+                                            items.append({
+                                                "name": entry.name,
+                                                "is_dir": entry.is_dir(),
+                                                "size": entry.stat().st_size if not entry.is_dir() else 0,
+                                                "mtime": entry.stat().st_mtime
+                                            })
+                                    st.session_state.gd_file_list = items
+                            except Exception as e:
+                                st.error(f"Error local: {e}")
+
+                with col_info_list:
+                    if st.session_state.gd_file_list:
+                        st.caption(f"Se encontraron {len(st.session_state.gd_file_list)} elementos.")
+                
+                # Display Table
+                if st.session_state.gd_file_list:
+                    # Format for display
+                    disp_data = []
+                    for f in st.session_state.gd_file_list:
+                        t_type = "📁 Carpeta" if f["is_dir"] else "📄 Archivo"
+                        t_size = f"{f['size']/1024:.1f} KB" if not f["is_dir"] else "-"
+                        t_date = datetime.fromtimestamp(f["mtime"]).strftime('%Y-%m-%d %H:%M')
+                        disp_data.append({
+                            "Nombre": f["name"],
+                            "Tipo": t_type,
+                            "Tamaño": t_size,
+                            "Modificación": t_date
+                        })
+                    
+                    st.dataframe(pd.DataFrame(disp_data), use_container_width=True, hide_index=True)
+            else:
+                st.info("Seleccione una carpeta para ver su contenido.")
             
         if not records:
              st.warning("⚠️ No hay registros en la base de datos. Importe un Excel primero.")

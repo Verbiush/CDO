@@ -94,3 +94,18 @@ def list_drives(username):
     if result and "drives" in result:
         return result["drives"]
     return []
+
+def list_files(username, path):
+    """
+    Request the agent to list files in a directory.
+    """
+    task_id = send_command(username, "list_files", {"path": path})
+    if not task_id:
+        return None
+    
+    # Wait up to 15 seconds
+    result = wait_for_result(task_id, timeout=15)
+    
+    if result and "files" in result:
+        return result["files"]
+    return None
