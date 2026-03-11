@@ -265,13 +265,20 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
             def on_click_folder():
                 # Get current path from state or default
                 current = st.session_state.get(key, target_path)
+                
+                st.toast("Solicitando al Agente...", icon="🤖")
+                
                 selected = abrir_dialogo_carpeta_nativo(title=label, initial_dir=current)
+                
                 if selected:
+                    st.toast(f"Carpeta seleccionada: {selected}", icon="✅")
                     st.session_state[key] = selected
                     # Also update the text input keys to reflect change immediately
                     st.session_state[f"input_{key}"] = selected
                     st.session_state[f"input_{key}_disabled"] = selected
                     st.rerun()
+                else:
+                    st.toast("No se seleccionó ninguna carpeta o hubo un error.", icon="⚠️")
             
             st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom, on_click=on_click_folder)
 
