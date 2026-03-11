@@ -504,7 +504,7 @@ def render():
 
     current_main_path = render_path_selector(
         label="Carpeta de Trabajo (Ruta Inicial)",
-        key="gd_working_path", 
+        key="gd_working_path_selector", 
         default_path=global_current_path,
         omit_checkbox=False
     )

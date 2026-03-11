@@ -41,7 +41,9 @@ def setup_agent():
     config = {
         "server_url": SERVER_URL_FINAL,
         "username": USERNAME,
-        "password": PASSWORD
+        "password": PASSWORD,
+        "task_url": f"{SERVER_URL_FINAL}/tasks/poll",
+        "result_url": f"{SERVER_URL_FINAL}/tasks"
     }
     
     with open(config_file, "w") as f:
