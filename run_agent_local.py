@@ -59,11 +59,16 @@ def setup_agent():
     print("Checking dependencies...")
     try:
         import requests
-        import fastapi
-        import uvicorn
+        import pandas
+        from PIL import Image
+        from selenium import webdriver
     except ImportError:
         print("Installing required packages...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "fastapi", "uvicorn", "pandas"])
+        requirements_path = os.path.join("src", "local_agent", "requirements.txt")
+        if os.path.exists(requirements_path):
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_path])
+        else:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "pandas", "python-docx", "openpyxl", "Pillow", "selenium", "webdriver-manager"])
         
     # 4. Run the agent
     agent_script = os.path.join("src", "local_agent", "main.py")
