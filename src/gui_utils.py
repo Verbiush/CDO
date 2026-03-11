@@ -329,11 +329,17 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                         
                         if selected:
                             st.session_state[key] = selected
+                            # Explicitly update display key for next render
+                            st.session_state[f"remote_path_display_{key}"] = selected
+                            # Also update potential input keys used by other logic
+                            st.session_state[f"input_{key}"] = selected
+                            
                             target_path = selected
-                            st.success(f"Ruta: {selected}")
+                            st.toast(f"✅ Ruta recibida del Agente: {selected}", icon="🖥️")
+                            time.sleep(0.5) # Give time to read toast
                             st.rerun()
                         else:
-                            st.warning("Cancelado o sin respuesta.")
+                            st.warning("Cancelado o sin respuesta del Agente.")
                     except Exception as e:
                         st.error(f"Error: {e}")
             

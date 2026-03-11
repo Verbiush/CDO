@@ -793,7 +793,7 @@ def render():
                                 if "error" in res:
                                     st.error(f"Error del Agente: {res['error']}")
                                 else:
-                                    r_data = res.get("result", {})
+                                    r_data = res
                                     count_created = r_data.get("count", 0)
                                     errs = r_data.get("errors", [])
                                     if errs:
@@ -960,14 +960,14 @@ def render():
                                 if task_id:
                                     res = wait_for_result(task_id, timeout=600)
                                     if "error" in res:
-                            st.error(f"Error del Agente: {res['error']}")
-                        else:
-                            # Direct result usage, no nested 'result' key
-                            r_data = res 
-                            count_ren = r_data.get("count", 0)
-                            errs = r_data.get("errors", [])
-                            errors_ren = len(errs)
-                            st.success(f"Carpetas Renombradas: {count_ren}. Errores: {errors_ren}")
+                                        st.error(f"Error del Agente: {res['error']}")
+                                    else:
+                                        # Direct result usage, no nested 'result' key
+                                        r_data = res 
+                                        count_ren = r_data.get("count", 0)
+                                        errs = r_data.get("errors", [])
+                                        errors_ren = len(errs)
+                                        st.success(f"Carpetas Renombradas: {count_ren}. Errores: {errors_ren}")
                                         if errs:
                                             with st.expander("Ver Errores"):
                                                 for e in errs: st.write(e)
@@ -1347,7 +1347,7 @@ def render():
                                     if "error" in res:
                                         st.error(f"Error Agente: {res['error']}")
                                     else:
-                                        r_data = res.get("result", {})
+                                        r_data = res
                                         count_dist = r_data.get("count", 0)
                                         errs = r_data.get("errors", [])
                                         if errs:
@@ -1531,7 +1531,7 @@ def render():
                                     if "error" in res:
                                         st.error(f"Error Agente: {res['error']}")
                                     else:
-                                        r_data = res.get("result", {})
+                                        r_data = res
                                         count_sig = r_data.get("count", 0)
                                 else:
                                     st.error("No se pudo conectar con el Agente")

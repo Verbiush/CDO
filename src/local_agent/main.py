@@ -473,6 +473,20 @@ def process_organize_files_mapped(source_path, dest_base_path, mapping):
         
     return {"count": count_moved, "errors": errors}
 
+def process_create_folders(folders):
+    count_created = 0
+    errors = []
+    
+    for folder in folders:
+        try:
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+                count_created += 1
+        except Exception as e:
+            errors.append(f"Error creando {folder}: {str(e)}")
+            
+    return {"count": count_created, "errors": errors}
+
 def process_search_files(path, patterns, exclusion_list=None, search_by="name", item_type="both", recursive=True, search_empty_folders=False):
     found_items = []
     errors = []
@@ -539,6 +553,54 @@ def process_search_files(path, patterns, exclusion_list=None, search_by="name", 
         errors.append(str(e))
         
     return {"items": found_items, "errors": errors}
+
+def process_distribute_file(paths, content_b64):
+    count_distributed = 0
+    errors = []
+    
+    try:
+        content_bytes = base64.b64decode(content_b64)
+    except Exception as e:
+        return {"count": 0, "errors": [f"Error decodificando contenido base64: {str(e)}"]}
+        
+    for path in paths:
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            
+            with open(path, "wb") as f:
+                f.write(content_bytes)
+            count_distributed += 1
+        except Exception as e:
+            errors.append(f"Error escribiendo en {path}: {str(e)}")
+            
+    return {"count": count_distributed, "errors": errors}
+
+def process_write_files(files):
+    count_written = 0
+    errors = []
+    
+    for item in files:
+        path = item.get("path")
+        content_b64 = item.get("content_b64")
+        
+        if not path or not content_b64:
+            errors.append(f"Item incompleto: {item}")
+            continue
+            
+        try:
+            content_bytes = base64.b64decode(content_b64)
+            
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            
+            with open(path, "wb") as f:
+                f.write(content_bytes)
+            count_written += 1
+        except Exception as e:
+            errors.append(f"Error escribiendo {path}: {str(e)}")
+            
+    return {"count": count_written, "errors": errors}
 
 def process_bulk_rename(source_path, items, separator="_"):
     count_renamed = 0
@@ -869,6 +931,16 @@ class AgentWorker:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros"}
 
+            elif command == "create_folders":
+                folders = params.get("folders", [])
+                
+                if folders:
+                    res = process_create_folders(folders)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros"}
+
             elif command == "search_files":
                 path = params.get("path")
                 patterns = params.get("patterns", [])
@@ -897,6 +969,29 @@ class AgentWorker:
                     self.log(f"Iniciando llenado de DOCX en: {base_path} ({len(tasks)} tareas)")
                     res = process_fill_docx(base_path, tasks, template_b64)
                     result["result"] = res
+
+            elif command == "distribute_file":
+                paths = params.get("paths", [])
+                content_b64 = params.get("content_b64")
+                
+                if paths and content_b64:
+                    self.log(f"Distribuyendo archivo a {len(paths)} destinos")
+                    res = process_distribute_file(paths, content_b64)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros"}
+
+            elif command == "write_files":
+                files = params.get("files", [])
+                
+                if files:
+                    self.log(f"Escribiendo {len(files)} archivos")
+                    res = process_write_files(files)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros"}
 
             elif command == "validate_rips":
                 base_path = params.get("base_path")
