@@ -5,6 +5,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import json
 import os
+import shutil
 import platform
 import sys
 import threading
@@ -386,7 +387,160 @@ def process_fill_docx(base_path, tasks, template_b64=None):
             
     return {"count": count_success, "errors": errors}
 
-def process_bulk_rename(source_path, items, separator):
+def process_rename_folders_mapped(path, mapping):
+    count_renamed = 0
+    errors = []
+    
+    if not os.path.isdir(path):
+        return {"count": 0, "errors": ["Ruta inválida"]}
+        
+    try:
+        dirs = [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))]
+        
+        for dirname in dirs:
+            dir_path = os.path.join(path, dirname)
+            matched_new_name = None
+            
+            if dirname in mapping:
+                matched_new_name = mapping[dirname]
+            else:
+                for curr_val, new_val in mapping.items():
+                    if curr_val in dirname:
+                        matched_new_name = new_val
+                        break
+            
+            if matched_new_name and matched_new_name != dirname:
+                try:
+                    new_path = os.path.join(path, matched_new_name)
+                    if os.path.exists(new_path):
+                        errors.append(f"Omitido {dirname}: Destino ya existe")
+                    else:
+                        os.rename(dir_path, new_path)
+                        count_renamed += 1
+                except Exception as e:
+                    errors.append(f"Error {dirname}: {str(e)}")
+                    
+    except Exception as e:
+        errors.append(f"Error listando directorios: {str(e)}")
+        
+    return {"count": count_renamed, "errors": errors}
+
+def process_organize_files_mapped(source_path, dest_base_path, mapping):
+    count_moved = 0
+    errors = []
+    
+    if not os.path.isdir(source_path):
+        return {"count": 0, "errors": ["Ruta Origen inválida"]}
+    
+    if not os.path.exists(dest_base_path):
+        try:
+            os.makedirs(dest_base_path)
+        except Exception as e:
+            return {"count": 0, "errors": [f"No se pudo crear destino base: {str(e)}"]}
+            
+    try:
+        files = [f for f in os.listdir(source_path) if os.path.isfile(os.path.join(source_path, f))]
+        
+        for filename in files:
+            file_path = os.path.join(source_path, filename)
+            matched_folder = None
+            
+            # Find destination folder based on mapping keys in filename
+            for key, folder_name in mapping.items():
+                if key in filename:
+                    matched_folder = folder_name
+                    break
+            
+            if matched_folder:
+                try:
+                    target_dir = os.path.join(dest_base_path, matched_folder)
+                    if not os.path.exists(target_dir):
+                        os.makedirs(target_dir)
+                        
+                    target_path = os.path.join(target_dir, filename)
+                    
+                    if os.path.exists(target_path):
+                        base, ext = os.path.splitext(filename)
+                        target_path = os.path.join(target_dir, f"{base}_{int(time.time())}{ext}")
+                        
+                    shutil.move(file_path, target_path)
+                    count_moved += 1
+                except Exception as e:
+                    errors.append(f"Error moviendo {filename}: {str(e)}")
+                    
+    except Exception as e:
+        errors.append(f"Error procesando archivos: {str(e)}")
+        
+    return {"count": count_moved, "errors": errors}
+
+def process_search_files(path, patterns, exclusion_list=None, search_by="name", item_type="both", recursive=True, search_empty_folders=False):
+    found_items = []
+    errors = []
+    
+    if not os.path.isdir(path):
+        return {"items": [], "errors": ["Ruta inválida"]}
+        
+    exclusion_list = exclusion_list or []
+    
+    try:
+        # Helper to check exclusion
+        def is_excluded(name):
+            return any(excl.lower() in name.lower() for excl in exclusion_list)
+            
+        # Helper to check match
+        def is_match(name):
+            return any(pat.lower() in name.lower() for pat in patterns)
+            
+        if recursive:
+            iterator = os.walk(path)
+        else:
+            # Fake walk for non-recursive
+            iterator = [(path, [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))], 
+                               [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))])]
+                               
+        for root, dirs, files in iterator:
+            # Filter directories
+            if item_type in ["folder", "both"]:
+                for d in dirs:
+                    if is_excluded(d): continue
+                    if is_match(d):
+                        full_path = os.path.join(root, d)
+                        is_empty = not os.listdir(full_path)
+                        
+                        if search_empty_folders and not is_empty: continue
+                        
+                        found_items.append({
+                            "Ruta completa": full_path,
+                            "Nombre": d,
+                            "Tipo": "Carpeta",
+                            "Tamaño": 0,
+                            "Fecha": datetime.fromtimestamp(os.path.getmtime(full_path)).strftime('%Y-%m-%d %H:%M:%S')
+                        })
+                        
+            # Filter files
+            if item_type in ["file", "both"] and not search_empty_folders:
+                for f in files:
+                    if is_excluded(f): continue
+                    if is_match(f):
+                        full_path = os.path.join(root, f)
+                        try:
+                            size = os.path.getsize(full_path)
+                            mtime = os.path.getmtime(full_path)
+                            found_items.append({
+                                "Ruta completa": full_path,
+                                "Nombre": f,
+                                "Tipo": "Archivo",
+                                "Tamaño": size,
+                                "Fecha": datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                            })
+                        except: pass
+                        
+    except Exception as e:
+        errors.append(str(e))
+        
+    return {"items": found_items, "errors": errors}
+
+def process_bulk_rename(source_path, items, separator="_"):
     count_renamed = 0
     errors = []
     
@@ -691,6 +845,45 @@ class AgentWorker:
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta path"}
+
+            elif command == "rename_folders_mapped":
+                path = params.get("path")
+                mapping = params.get("mapping", {})
+                
+                if path and mapping:
+                    res = process_rename_folders_mapped(path, mapping)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros"}
+
+            elif command == "organize_files_mapped":
+                source_path = params.get("source_path")
+                dest_path = params.get("dest_path")
+                mapping = params.get("mapping", {})
+                
+                if source_path and dest_path and mapping:
+                    res = process_organize_files_mapped(source_path, dest_path, mapping)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros"}
+
+            elif command == "search_files":
+                path = params.get("path")
+                patterns = params.get("patterns", [])
+                exclusion_list = params.get("exclusion_list", [])
+                search_by = params.get("search_by", "name")
+                item_type = params.get("item_type", "both")
+                recursive = params.get("recursive", True)
+                search_empty_folders = params.get("search_empty_folders", False)
+                
+                if path and patterns:
+                    res = process_search_files(path, patterns, exclusion_list, search_by, item_type, recursive, search_empty_folders)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros"}
 
             elif command == "fill_docx":
                 base_path = params.get("base_path")

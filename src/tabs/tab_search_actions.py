@@ -164,14 +164,17 @@ def buscar_archivos():
                  })
                  
                  if task_id:
-                      with st.spinner("Buscando en equipo local (vía Agente)..."):
-                          res = agent_client.wait_for_result(task_id, timeout=60)
-                          if res and res.get("status") == "success":
-                               items = res.get("items", [])
-                               # Ensure consistency in keys if needed, agent returns 'Ruta completa' and 'Fecha'
-                               results.extend(items)
-                          else:
-                               st.error(f"Error en la búsqueda del agente: {res.get('message') if res else 'Sin respuesta'}")
+                          with st.spinner("Buscando en equipo local (vía Agente)..."):
+                              res = agent_client.wait_for_result(task_id, timeout=60)
+                              if res and isinstance(res, dict) and "items" in res:
+                                   items = res.get("items", [])
+                                   # Ensure consistency in keys if needed, agent returns 'Ruta completa' and 'Fecha'
+                                   results.extend(items)
+                                   
+                                   if "errors" in res and res["errors"]:
+                                        st.warning(f"Errores reportados por agente: {res['errors']}")
+                              else:
+                                   st.error(f"Error en la búsqueda del agente: {res.get('error') if res else 'Sin respuesta'}")
                  else:
                      st.error("No se pudo conectar con el agente para iniciar la búsqueda.")
             except Exception as e:
