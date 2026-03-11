@@ -1473,6 +1473,8 @@ def render():
                                         with st.expander(f"⚠️ Errores ({len(errors_list)})"):
                                             for err in errors_list:
                                                 st.write(err)
+                            else:
+                                st.error("No se pudo conectar con el Agente Local.")
                     except ImportError:
                         st.error("Librería de Agente no encontrada.")
                     except Exception as e:

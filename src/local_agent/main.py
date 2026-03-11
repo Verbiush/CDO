@@ -1,6 +1,19 @@
 import time
 from datetime import datetime
 import requests
+try:
+    from selenium import webdriver
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.chrome.service import Service
+    from webdriver_manager.chrome import ChromeDriverManager
+except ImportError:
+    webdriver = None
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image = None
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import json
@@ -35,7 +48,28 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-CONFIG_FILE = "agent_config.json"
+# Find config file location
+def find_config_file():
+    # 1. Check CWD
+    if os.path.exists("agent_config.json"):
+        return "agent_config.json"
+    
+    # 2. Check script directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    path_in_script_dir = os.path.join(script_dir, "agent_config.json")
+    if os.path.exists(path_in_script_dir):
+        return path_in_script_dir
+        
+    # 3. Check LOCALAPPDATA/CDO_Organizer
+    local_appdata = os.getenv('LOCALAPPDATA', os.path.expanduser("~"))
+    path_in_appdata = os.path.join(local_appdata, "CDO_Organizer", "agent_config.json")
+    if os.path.exists(path_in_appdata):
+        return path_in_appdata
+        
+    # Default to CWD if not found
+    return "agent_config.json"
+
+CONFIG_FILE = find_config_file()
 
 # --- FILE PROCESSING LOGIC ---
 
@@ -602,6 +636,18 @@ def process_write_files(files):
             
     return {"count": count_written, "errors": errors}
 
+def process_flat_to_excel(path):
+    # Stub implementation to prevent crashes
+    return {"status": "error", "message": "Función flat_to_excel no implementada en el Agente Local aún."}
+
+def process_consolidate_json(path):
+    # Stub implementation to prevent crashes
+    return {"status": "error", "message": "Función consolidate_json no implementada en el Agente Local aún."}
+
+def process_desconsolidate_json(file_path, dest_folder):
+    # Stub implementation to prevent crashes
+    return {"status": "error", "message": "Función desconsolidate_json no implementada en el Agente Local aún."}
+
 def process_bulk_rename(source_path, items, separator="_"):
     count_renamed = 0
     errors = []
@@ -764,6 +810,147 @@ def process_validate_rips(base_path, api_url, token=None, verify_ssl=True):
         "results": results,
         "generated_files": generated_files
     }
+
+def process_generate_signature(text, font_name="Pacifico", size=70, width=500, height=200):
+    if Image is None:
+        return {"error": "Librería Pillow no instalada en Agente"}
+        
+    try:
+        img = Image.new('RGB', (width, height), color=(255, 255, 255))
+        d = ImageDraw.Draw(img)
+        
+        # Simple font loading logic
+        font_path = f"assets/fonts/{font_name}.ttf"
+        try:
+            if os.path.exists(font_path):
+                font = ImageFont.truetype(font_path, size)
+            else:
+                font = ImageFont.truetype("arial.ttf", size)
+        except:
+            font = ImageFont.load_default()
+        
+        # Center text
+        try:
+            left, top, right, bottom = d.textbbox((0, 0), text, font=font)
+            text_w = right - left
+            text_h = bottom - top
+        except:
+            text_w, text_h = d.textsize(text, font=font)
+            
+        x = (width - text_w) / 2
+        y = (height - text_h) / 2
+        
+        d.text((x, y), text, font=font, fill=(0, 0, 0))
+        
+        buffered = BytesIO()
+        img.save(buffered, format="PNG")
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        
+        return {"image_b64": img_str}
+    except Exception as e:
+        return {"error": str(e)}
+
+def process_download_ovida(base_path, records):
+    if webdriver is None:
+        return {"status": "error", "message": "Selenium no instalado en Agente"}
+        
+    driver = None
+    try:
+        options = webdriver.ChromeOptions()
+        prefs = {
+            "download.default_directory": base_path,
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "plugins.always_open_pdf_externally": True
+        }
+        options.add_experimental_option("prefs", prefs)
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--start-maximized")
+
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+        
+        driver.get("https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
+        
+        # Wait for login
+        timeout = 300 
+        start_time = time.time()
+        logged_in = False
+        
+        while time.time() - start_time < timeout:
+             try:
+                 if "App/Vistas" in driver.current_url:
+                     logged_in = True
+                     break
+             except: pass
+             time.sleep(1)
+            
+        if not logged_in:
+            driver.quit()
+            return {"status": "error", "message": "Tiempo de espera agotado (Login)"}
+
+        descargados = 0
+        errores = 0
+        conflictos = 0
+        
+        for record in records:
+            try:
+                estudio = str(record.get('nro_estudio', '')).strip()
+                if estudio.endswith(".0"): estudio = estudio[:-2]
+                
+                if not estudio or estudio == "nan":
+                    errores += 1
+                    continue
+                    
+                rel_path = record.get('rel_path')
+                if not rel_path:
+                    continue 
+
+                dest_dir = os.path.join(base_path, rel_path)
+                os.makedirs(dest_dir, exist_ok=True)
+                final_path = os.path.join(dest_dir, f"HC_{estudio}.pdf")
+                
+                if os.path.exists(final_path):
+                    conflictos += 1
+                    continue
+                
+                # Format dates
+                f_ing = pd.to_datetime(record.get('fecha_ingreso', '')).strftime('%Y/%m/%d')
+                f_egr = pd.to_datetime(record.get('fecha_salida', '')).strftime('%Y/%m/%d')
+
+                base_url = "https://ovidazs.siesacloud.com/ZeusSalud/Reportes/Cliente//html/reporte_historia_general.php"
+                # Simple param construction
+                params = f"estudio={estudio}&fecha_inicio={f_ing}&fecha_fin={f_egr}&verHC=1&verEvo=1&verPar=1&ImprimirOrdenamiento=1&ImprimirNotasPcte=0&ImprimirSolOrdenesExt=1&ImprimirGraficasHC=1&ImprimirFormatos=1&ImprimirRegistroAdmon=1&ImprimirNovedad=0&ImprimirRecomendaciones=0&ImprimirDescripcionQX=0&ImprimirNotasEnfermeria=1&ImprimirSignosVitales=0&ImprimirLog=0&ImprimirEpicrisisSinHC=0"
+                full_url = f"{base_url}?{params}"
+                
+                driver.get(full_url)
+                time.sleep(2)
+                
+                pdf_b64 = driver.execute_cdp_cmd("Page.printToPDF", {
+                    "landscape": False, "printBackground": True,
+                    "paperWidth": 8.5, "paperHeight": 11,
+                    "marginTop": 0.4, "marginBottom": 0.4, "marginLeft": 0.4, "marginRight": 0.4
+                })
+                
+                pdf_data = base64.b64decode(pdf_b64['data'])
+                with open(final_path, 'wb') as f:
+                    f.write(pdf_data)
+                
+                descargados += 1
+            except Exception as e:
+                errores += 1
+                
+        driver.quit()
+        return {
+            "status": "success", 
+            "message": f"Finalizado. Descargados: {descargados}, Errores: {errores}, Conflictos: {conflictos}",
+            "stats": {"descargados": descargados, "errores": errores, "conflictos": conflictos}
+        }
+
+    except Exception as e:
+        if driver: driver.quit()
+        return {"status": "error", "message": str(e)}
 
 class AgentWorker:
     def __init__(self, username, task_url, result_url, password=None):
@@ -1095,6 +1282,33 @@ class AgentWorker:
                 except Exception as e:
                     result["status"] = "ERROR"
                     result["result"] = {"error": str(e)}
+
+            elif command == "generate_signature":
+                text = params.get("text")
+                font_name = params.get("font_name", "Pacifico")
+                size = params.get("size", 70)
+                width = params.get("width", 500)
+                height = params.get("height", 200)
+                
+                if text:
+                    self.log(f"Generando firma para: {text}")
+                    res = process_generate_signature(text, font_name, size, width, height)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta texto para la firma"}
+
+            elif command == "download_ovida":
+                base_path = params.get("base_path")
+                records = params.get("records", [])
+                
+                if base_path and records:
+                    self.log(f"Descargando historias de OVIDA ({len(records)} registros)")
+                    res = process_download_ovida(base_path, records)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (path o records)"}
 
             else:
                 result["status"] = "ERROR"
