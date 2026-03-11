@@ -1005,7 +1005,7 @@ class AgentWorker:
         
         self.log(f"Procesando tarea {task_id}: {command}")
         
-        result = {"status": "SUCCESS", "result": None}
+        result = {"status": "COMPLETED", "result": None}
         
         try:
             if command == "ping":
