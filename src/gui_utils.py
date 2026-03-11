@@ -229,6 +229,11 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         input_key = f"input_{key}"
         if input_key in st.session_state:
              st.session_state[input_key] = default_path
+             
+        # Also update the disabled key if it exists
+        input_key_disabled = f"input_{key}_disabled"
+        if input_key_disabled in st.session_state:
+             st.session_state[input_key_disabled] = default_path
 
     # Determine target path
     if use_custom:
@@ -263,8 +268,10 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                 selected = abrir_dialogo_carpeta_nativo(title=label, initial_dir=current)
                 if selected:
                     st.session_state[key] = selected
-                    # Also update the text input key to reflect change immediately
+                    # Also update the text input keys to reflect change immediately
                     st.session_state[f"input_{key}"] = selected
+                    st.session_state[f"input_{key}_disabled"] = selected
+                    st.rerun()
             
             st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom, on_click=on_click_folder)
 
