@@ -129,7 +129,9 @@ class AgentInstaller(tk.Tk):
             config = {
                 "server_url": "http://3.142.164.128:8000",
                 "username": getattr(self, "username", "admin"),
-                "password": getattr(self, "password", "password")
+                "password": getattr(self, "password", "password"),
+                "task_url": "http://3.142.164.128:8000/tasks/poll",
+                "result_url": "http://3.142.164.128:8000/tasks"
             }
             try:
                 with open(config_file, "w") as f:

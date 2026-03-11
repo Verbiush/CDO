@@ -857,12 +857,24 @@ class AgentWorker:
 
 # --- GUI ---
 def load_config():
+    # 1. Check current directory (priority for portable/dev)
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r') as f:
                 return json.load(f)
         except:
             pass
+            
+    # 2. Check LOCALAPPDATA (installed location)
+    try:
+        app_data = os.getenv('LOCALAPPDATA', os.path.expanduser("~"))
+        config_path = os.path.join(app_data, 'CDO_Organizer', 'agent_config.json')
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                return json.load(f)
+    except:
+        pass
+        
     return {}
 
 def save_config(config):
