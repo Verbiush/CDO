@@ -558,6 +558,7 @@ class AgentWorker:
         self.running = False
         self.thread = None
         self.log_callback = None
+        self.gui_invoker = None
 
     def log(self, message):
         print(message)
@@ -752,45 +753,17 @@ class AgentWorker:
                 title = params.get("title", "Seleccionar Carpeta")
                 self.log(f"Abriendo selector de carpeta: {title}")
                 
-                # Use tkinter to open directory dialog
-                # Need to run in main thread or handle correctly
-                # Since we are in a worker thread, we might need a way to invoke on main thread
-                # But tkinter can run in this thread if we are careful or if it's the only UI thread
-                # Actually, AgentGUI runs mainloop in main thread.
-                # We can use root.after to schedule, but we need to wait for result.
-                # Simplest for now: Create a new hidden root for the dialog if needed, 
-                # OR use the existing root if possible (but thread safety issues).
-                # Better approach for independent dialog:
-                
                 try:
-                    # We need to run this on the main thread because Tkinter is not thread-safe
-                    # We can use a queue or just try to run it directly if simpledialog works
-                    # But filedialog usually needs main loop.
-                    # Let's try creating a temporary tk instance if we can't access main one safely
-                    # or better: Use a helper function that runs in main thread context if possible.
-                    # Given the constraints and current architecture, let's try calling filedialog directly.
-                    # It might block the worker thread, which is fine.
-                    
-                    # NOTE: running filedialog from a thread often causes issues on Windows.
-                    # Ideally we should signal the main thread.
-                    # For this quick fix, let's try to use the 'root' from the global scope if available? No.
-                    
                     import tkinter.filedialog as fd
                     
-                    # Create a hidden root for this dialog to ensure it has a parent
-                    # This is a bit hacky inside a thread but often works for simple dialogs
-                    # Alternatively, use ctypes for native dialogs to avoid tkinter threading issues
-                    
-                    # Let's try the simplest Tkinter approach first
-                    # We create a new Tk instance for the dialog
-                    # This is risky in a thread. 
-                    # BETTER: Use a queue to communicate with the main GUI thread.
-                    # BUT: I don't want to rewrite the whole main loop logic now.
-                    
-                    # FAST FIX: Use a separate process or just try it. 
-                    # Let's try importing and running it.
-                    
-                    path = fd.askdirectory(title=title)
+                    path = None
+                    if self.gui_invoker:
+                        # Use the GUI thread invoker if available
+                        path = self.gui_invoker(fd.askdirectory, title=title)
+                    else:
+                        # Fallback (unsafe)
+                        path = fd.askdirectory(title=title)
+                        
                     if path:
                         result["result"] = {"path": path}
                     else:
@@ -821,7 +794,12 @@ class AgentWorker:
                     if not ft:
                         ft = [("Todos los archivos", "*.*")]
                         
-                    path = fd.askopenfilename(title=title, filetypes=ft)
+                    path = None
+                    if self.gui_invoker:
+                        path = self.gui_invoker(fd.askopenfilename, title=title, filetypes=ft)
+                    else:
+                        path = fd.askopenfilename(title=title, filetypes=ft)
+
                     if path:
                         result["result"] = {"path": path}
                     else:
@@ -937,6 +915,29 @@ class AgentGUI:
             self.log_area.see(tk.END)
         self.root.after(0, _log)
 
+    def invoke_on_gui(self, func, *args, **kwargs):
+        """
+        Executes a function on the main GUI thread and returns the result.
+        This is thread-safe and blocking for the caller.
+        """
+        result_container = {}
+        event = threading.Event()
+        
+        def wrapper():
+            try:
+                result_container["result"] = func(*args, **kwargs)
+            except Exception as e:
+                result_container["error"] = e
+            finally:
+                event.set()
+        
+        self.root.after(0, wrapper)
+        event.wait()
+        
+        if "error" in result_container:
+            raise result_container["error"]
+        return result_container.get("result")
+
     def toggle_agent(self):
         if self.worker and self.worker.running:
             self.worker.stop()
@@ -960,6 +961,7 @@ class AgentGUI:
             
             self.worker = AgentWorker(user, t_url, r_url, password)
             self.worker.log_callback = self.log
+            self.worker.gui_invoker = self.invoke_on_gui
             self.worker.start()
             self.btn_start.config(text="Detener Agente")
 
