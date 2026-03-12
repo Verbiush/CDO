@@ -3,6 +3,10 @@ import json
 import subprocess
 import sys
 
+import socket
+import time
+import signal
+
 # Configuration
 SERVER_IP = "3.142.164.128"
 SERVER_PORT = "8000"
@@ -10,9 +14,45 @@ SERVER_URL = f"http://{SERVER_IP}:{SERVER_PORT}"
 USERNAME = "admin"
 PASSWORD = "admin" # Default password, user should change this
 
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('127.0.0.1', int(port))) == 0
+
 def setup_agent():
     print(f"Setting up Local Agent to connect to {SERVER_URL}...")
     
+    # 0. Check and Start Local Server if needed
+    # (Disabled for AWS connection)
+    if SERVER_IP == "127.0.0.1":
+        server_process = None
+        if not is_port_in_use(SERVER_PORT):
+            print(f"Local server not detected on port {SERVER_PORT}. Starting server...")
+            try:
+                # Start uvicorn in a separate process
+                server_process = subprocess.Popen(
+                    [sys.executable, "-m", "uvicorn", "src.server_api:app", "--host", "127.0.0.1", "--port", SERVER_PORT],
+                    cwd=os.getcwd(),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                print("Server starting... waiting for port 8000...")
+                
+                # Wait for port to open
+                for _ in range(10):
+                    if is_port_in_use(SERVER_PORT):
+                        print("Server is UP!")
+                        break
+                    time.sleep(1)
+                else:
+                    print("Warning: Server might not have started correctly. Continuing anyway...")
+            except Exception as e:
+                print(f"Failed to start local server: {e}")
+        else:
+            print(f"Local server detected on port {SERVER_PORT}. Connecting...")
+    else:
+        print(f"Connecting to Remote Server: {SERVER_URL}")
+        server_process = None
+
     # 1. Create config directory
     log_dir = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser("~")), 'CDO_Organizer')
     if not os.path.exists(log_dir):
@@ -74,11 +114,23 @@ def setup_agent():
     agent_script = os.path.join("src", "local_agent", "main.py")
     if not os.path.exists(agent_script):
         print(f"Error: Agent script not found at {agent_script}")
+        if server_process:
+            server_process.terminate()
         return
         
     print(f"Starting Agent from {agent_script}...")
     print("Press Ctrl+C to stop.")
-    subprocess.run([sys.executable, agent_script])
+    
+    try:
+        subprocess.run([sys.executable, agent_script])
+    except KeyboardInterrupt:
+        print("\nStopping...")
+    finally:
+        if server_process:
+            print("Stopping local server...")
+            server_process.terminate()
+            server_process.wait()
+            print("Server stopped.")
 
 if __name__ == "__main__":
     setup_agent()

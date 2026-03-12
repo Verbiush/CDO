@@ -31,6 +31,14 @@ import base64
 from io import BytesIO
 import pandas as pd
 import io
+import logging
+
+# Configure logging
+logging.basicConfig(
+    filename='agent_debug.log',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Try to import docx, but don't fail if not present
 try:
@@ -522,11 +530,28 @@ def process_create_folders(folders):
     return {"count": count_created, "errors": errors}
 
 def process_search_files(path, patterns, exclusion_list=None, search_by="name", item_type="both", recursive=True, search_empty_folders=False):
+    print(f"DEBUG: Iniciando búsqueda en: '{path}'")
+    logging.info(f"Iniciando búsqueda en: '{path}'")
+    print(f"DEBUG: Patrones: {patterns}, Exclusiones: {exclusion_list}")
+    logging.info(f"Patrones: {patterns}, Exclusiones: {exclusion_list}")
+    
+    # Normalize item_type to handle UI variations
+    item_type_map = {
+        "archivos": "file",
+        "carpetas": "folder",
+        "ambos": "both",
+        "files": "file",
+        "folders": "folder"
+    }
+    item_type = item_type_map.get(str(item_type).lower(), item_type)
+    
     found_items = []
     errors = []
     
     if not os.path.isdir(path):
-        return {"items": [], "errors": ["Ruta inválida"]}
+        print(f"ERROR: La ruta no existe o no es un directorio: '{path}'")
+        logging.error(f"La ruta no existe o no es un directorio: '{path}'")
+        return {"items": [], "errors": [f"Ruta inválida o no accesible: {path}"]}
         
     exclusion_list = exclusion_list or []
     
@@ -537,15 +562,43 @@ def process_search_files(path, patterns, exclusion_list=None, search_by="name", 
             
         # Helper to check match
         def is_match(name):
-            return any(pat.lower() in name.lower() for pat in patterns)
+            if not patterns:
+                return True
+            
+            name_lower = name.lower()
+            for pat in patterns:
+                pat_lower = pat.lower()
+                
+                # Handle simple glob patterns
+                if pat_lower == "*": return True
+                if pat_lower.startswith("*."): pat_lower = pat_lower[1:] # Remove * from *.ext
+                
+                if search_by == "extensión":
+                    if name_lower.endswith(pat_lower):
+                        return True
+                    # Handle case where user inputs "pdf" without dot
+                    if not pat_lower.startswith('.') and name_lower.endswith('.' + pat_lower):
+                        return True
+                else:
+                    if pat_lower in name_lower:
+                        return True
+            return False
             
         if recursive:
             iterator = os.walk(path)
         else:
             # Fake walk for non-recursive
-            iterator = [(path, [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))], 
-                               [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))])]
+            try:
+                iterator = [(path, [d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))], 
+                                   [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))])]
+            except Exception as e:
+                 print(f"ERROR al listar directorio no recursivo: {e}")
+                 logging.error(f"ERROR al listar directorio no recursivo: {e}")
+                 iterator = []
                                
+        scanned_count = 0
+        matched_count = 0
+        
         for root, dirs, files in iterator:
             # Filter directories
             if item_type in ["folder", "both"]:
@@ -553,21 +606,25 @@ def process_search_files(path, patterns, exclusion_list=None, search_by="name", 
                     if is_excluded(d): continue
                     if is_match(d):
                         full_path = os.path.join(root, d)
-                        is_empty = not os.listdir(full_path)
-                        
-                        if search_empty_folders and not is_empty: continue
-                        
-                        found_items.append({
-                            "Ruta completa": full_path,
-                            "Nombre": d,
-                            "Tipo": "Carpeta",
-                            "Tamaño": 0,
-                            "Fecha": datetime.fromtimestamp(os.path.getmtime(full_path)).strftime('%Y-%m-%d %H:%M:%S')
-                        })
+                        try:
+                            is_empty = not os.listdir(full_path)
+                            if search_empty_folders and not is_empty: continue
+                            
+                            found_items.append({
+                                "Ruta completa": full_path,
+                                "Nombre": d,
+                                "Tipo": "Carpeta",
+                                "Tamaño": 0,
+                                "Fecha": datetime.fromtimestamp(os.path.getmtime(full_path)).strftime('%Y-%m-%d %H:%M:%S')
+                            })
+                            matched_count += 1
+                        except Exception as e:
+                            logging.warning(f"Error procesando carpeta {full_path}: {e}")
                         
             # Filter files
             if item_type in ["file", "both"] and not search_empty_folders:
                 for f in files:
+                    scanned_count += 1
                     if is_excluded(f): continue
                     if is_match(f):
                         full_path = os.path.join(root, f)
@@ -581,9 +638,16 @@ def process_search_files(path, patterns, exclusion_list=None, search_by="name", 
                                 "Tamaño": size,
                                 "Fecha": datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
                             })
-                        except: pass
+                            matched_count += 1
+                        except Exception as e:
+                             logging.warning(f"Error procesando archivo {full_path}: {e}")
+        
+        print(f"DEBUG: Búsqueda finalizada. Escaneados: {scanned_count}, Encontrados: {matched_count}")
+        logging.info(f"Búsqueda finalizada. Escaneados: {scanned_count}, Encontrados: {matched_count}")
                         
     except Exception as e:
+        print(f"ERROR CRITICO en process_search_files: {e}")
+        logging.critical(f"ERROR CRITICO en process_search_files: {e}", exc_info=True)
         errors.append(str(e))
         
     return {"items": found_items, "errors": errors}
@@ -1137,12 +1201,14 @@ class AgentWorker:
                 recursive = params.get("recursive", True)
                 search_empty_folders = params.get("search_empty_folders", False)
                 
-                if path and patterns:
+                self.log(f"Recibida tarea de búsqueda: Path='{path}', Patterns='{patterns}', ItemType='{item_type}'")
+                
+                if path:
                     res = process_search_files(path, patterns, exclusion_list, search_by, item_type, recursive, search_empty_folders)
                     result["result"] = res
                 else:
                     result["status"] = "ERROR"
-                    result["result"] = {"error": "Faltan parámetros"}
+                    result["result"] = {"error": "Falta el parámetro 'path'"}
 
             elif command == "fill_docx":
                 base_path = params.get("base_path")
