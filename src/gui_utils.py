@@ -289,16 +289,15 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         # --- WEB MODE ---
         st.markdown(f"**{label}**")
         
-        # Opcion: Usar Agente Local
-        use_agent_key = f"use_agent_folder_{key}"
+        # Opcion: Usar Agente Local (OCULTADO POR PETICION DE USUARIO)
+        # use_agent_key = f"use_agent_folder_{key}"
+        # col_agent_check, col_agent_status = st.columns([0.6, 0.4])
+        # with col_agent_check:
+        #    use_agent = st.checkbox("🔌 Usar Agente Local", key=use_agent_key, help="Conectar con el agente instalado en tu PC para seleccionar carpetas locales.")
         
-        # Check if agent is likely available (optional heuristic)
-        agent_available = True 
-        
-        col_agent_check, col_agent_status = st.columns([0.6, 0.4])
-        with col_agent_check:
-            use_agent = st.checkbox("🔌 Usar Agente Local", key=use_agent_key, help="Conectar con el agente instalado en tu PC para seleccionar carpetas locales.")
-        
+        # Forzamos use_agent a False para ocultar la funcionalidad en modo Web
+        use_agent = False
+
         if use_agent:
             username = st.session_state.get("username", "admin")
             # Show connection info

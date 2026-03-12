@@ -37,7 +37,8 @@ import logging
 logging.basicConfig(
     filename='agent_debug.log',
     level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    force=True
 )
 
 # Try to import docx, but don't fail if not present
