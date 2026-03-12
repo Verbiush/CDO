@@ -19,118 +19,75 @@ def is_port_in_use(port):
         return s.connect_ex(('127.0.0.1', int(port))) == 0
 
 def setup_agent():
-    print(f"Setting up Local Agent to connect to {SERVER_URL}...")
+    """
+    Configura el agente: pregunta al usuario por la IP del servidor y la guarda.
+    """
+    DEFAULT_SERVER_IP = "3.142.164.128" # AWS
     
-    # 0. Check and Start Local Server if needed
-    # (Disabled for AWS connection)
-    if SERVER_IP == "127.0.0.1":
-        server_process = None
-        if not is_port_in_use(SERVER_PORT):
-            print(f"Local server not detected on port {SERVER_PORT}. Starting server...")
-            try:
-                # Start uvicorn in a separate process
-                server_process = subprocess.Popen(
-                    [sys.executable, "-m", "uvicorn", "src.server_api:app", "--host", "127.0.0.1", "--port", SERVER_PORT],
-                    cwd=os.getcwd(),
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                print("Server starting... waiting for port 8000...")
-                
-                # Wait for port to open
-                for _ in range(10):
-                    if is_port_in_use(SERVER_PORT):
-                        print("Server is UP!")
-                        break
-                    time.sleep(1)
-                else:
-                    print("Warning: Server might not have started correctly. Continuing anyway...")
-            except Exception as e:
-                print(f"Failed to start local server: {e}")
-        else:
-            print(f"Local server detected on port {SERVER_PORT}. Connecting...")
-    else:
-        print(f"Connecting to Remote Server: {SERVER_URL}")
-        server_process = None
+    # Intentar usar la carpeta local del proyecto si AppData falla
+    try:
+        config_dir = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser("~")), 'CDO_Organizer')
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
+        config_file = os.path.join(config_dir, 'agent_config.json')
+        # Probar escritura
+        with open(config_file, "a") as f:
+            pass
+    except Exception:
+        # Si falla (por ejemplo en sandbox), usar directorio actual
+        config_dir = os.getcwd()
+        config_file = os.path.join(config_dir, 'agent_config.json')
+        print(f"Advertencia: No se pudo usar AppData, usando configuración local en: {config_file}")
 
-    # 1. Create config directory
-    log_dir = os.path.join(os.getenv('LOCALAPPDATA', os.path.expanduser("~")), 'CDO_Organizer')
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
-        print(f"Created config directory: {log_dir}")
-        
-    config_file = os.path.join(log_dir, "agent_config.json")
+    config = {}
+    if os.path.exists(config_file):
+        try:
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+        except:
+            pass
+
+    server_ip = config.get('server_ip', DEFAULT_SERVER_IP)
     
-    # 2. Write config file
-    # --- Port Validation & Auto-Correction ---
-    # The user might manually set SERVER_PORT to 8501 thinking it's the correct one.
-    # We must prevent this because the Agent connects to the API (8000), not Streamlit (8501).
+    print("---------------------------------------------------------")
+    print("CONFIGURACIÓN DEL AGENTE LOCAL")
+    print("---------------------------------------------------------")
+    print(f"Dirección del servidor actual: {server_ip}")
     
-    if SERVER_PORT == "8501":
-        print("--------------------------------------------------")
-        print("⚠️  ADVERTENCIA: Puerto 8501 detectado (Web UI).")
-        print("    El agente debe conectarse al puerto de la API (8000).")
-        print("    Corrigiendo automáticamente a puerto 8000...")
-        print("--------------------------------------------------")
-        SERVER_PORT_FINAL = "8000"
+    # En modo desatendido o si ya existe config, podemos saltar la pregunta con un timeout o argumento
+    # Por ahora, simplemente permitimos cambiarlo si el usuario presiona Enter rápido?
+    # Para simplicidad, preguntamos siempre pero con valor por defecto
+    
+    try:
+        new_ip = input(f"Ingrese IP del servidor [Enter para usar {server_ip}]: ").strip()
+    except EOFError:
+        new_ip = "" # Handle non-interactive environments
+
+    if new_ip:
+        server_ip = new_ip
+    
+    # Ensure port 8000
+    if ":" in server_ip:
+        if server_ip.endswith(":8501"):
+             server_ip = server_ip.replace(":8501", ":8000")
+             print(f"Corrigiendo puerto a 8000: {server_ip}")
+        elif not server_ip.endswith(":8000"):
+             # Assume user knows what they are doing if they specify another port, 
+             # but warn if it looks like streamlit port
+             pass
     else:
-        SERVER_PORT_FINAL = SERVER_PORT
-        
-    SERVER_URL_FINAL = f"http://{SERVER_IP}:{SERVER_PORT_FINAL}"
-    
-    config = {
-        "server_url": SERVER_URL_FINAL,
-        "username": USERNAME,
-        "password": PASSWORD,
-        "task_url": f"{SERVER_URL_FINAL}/tasks/poll",
-        "result_url": f"{SERVER_URL_FINAL}/tasks"
-    }
-    
-    with open(config_file, "w") as f:
-        json.dump(config, f, indent=4)
-    
-    print(f"Configuration saved to: {config_file}")
-    print("--------------------------------------------------")
-    print(f"IMPORTANTE: El agente se conectará a: {SERVER_URL}")
-    print("NO use el puerto 8501 (Web UI). Use el puerto 8000 (API).")
-    print("--------------------------------------------------")
-    
-    # 3. Install dependencies if needed
-    print("Checking dependencies...")
-    try:
-        import requests
-        import pandas
-        from PIL import Image
-        from selenium import webdriver
-    except ImportError:
-        print("Installing required packages...")
-        requirements_path = os.path.join("src", "local_agent", "requirements.txt")
-        if os.path.exists(requirements_path):
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", requirements_path])
-        else:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", "requests", "pandas", "python-docx", "openpyxl", "Pillow", "selenium", "webdriver-manager"])
-        
-    # 4. Run the agent
-    agent_script = os.path.join("src", "local_agent", "main.py")
-    if not os.path.exists(agent_script):
-        print(f"Error: Agent script not found at {agent_script}")
-        if server_process:
-            server_process.terminate()
-        return
-        
-    print(f"Starting Agent from {agent_script}...")
-    print("Press Ctrl+C to stop.")
+        server_ip = f"{server_ip}:8000"
+
+    config['server_ip'] = server_ip
     
     try:
-        subprocess.run([sys.executable, agent_script])
-    except KeyboardInterrupt:
-        print("\nStopping...")
-    finally:
-        if server_process:
-            print("Stopping local server...")
-            server_process.terminate()
-            server_process.wait()
-            print("Server stopped.")
+        with open(config_file, 'w') as f:
+            json.dump(config, f)
+        print("Configuración guardada.")
+    except Exception as e:
+         print(f"No se pudo guardar la configuración: {e}")
+
+    return server_ip
 
 if __name__ == "__main__":
     setup_agent()
