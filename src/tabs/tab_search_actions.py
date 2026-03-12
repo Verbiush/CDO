@@ -168,16 +168,9 @@ def buscar_archivos():
                               res = agent_client.wait_for_result(task_id, timeout=60)
                               
                               # DEBUG: Inspect raw result
-                              print(f"DEBUG UI: Received result type: {type(res)}")
-                              if isinstance(res, dict):
-                                  print(f"DEBUG UI: Keys in result: {list(res.keys())}")
-                                  if "items" in res:
-                                      print(f"DEBUG UI: Items count: {len(res['items'])}")
-                                  else:
-                                      print(f"DEBUG UI: 'items' key missing in result: {res}")
-                              else:
-                                  print(f"DEBUG UI: Result is not a dict: {res}")
-                                  
+                              # st.write(f"DEBUG RAW RESULT TYPE: {type(res)}")
+                              # st.write(f"DEBUG RAW RESULT CONTENT: {res}")
+                              
                               if res and isinstance(res, dict) and "items" in res:
                                    items = res.get("items", [])
                                    # Ensure consistency in keys if needed, agent returns 'Ruta completa' and 'Fecha'
@@ -186,7 +179,9 @@ def buscar_archivos():
                                    if "errors" in res and res["errors"]:
                                         st.warning(f"Errores reportados por agente: {res['errors']}")
                               else:
-                                   st.error(f"Error en la búsqueda del agente: {res.get('error') if isinstance(res, dict) else 'Respuesta inválida'}")
+                                   error_msg = res.get('error') if isinstance(res, dict) else 'Respuesta inválida o vacía'
+                                   st.error(f"Error en la búsqueda del agente: {error_msg}")
+                                   st.code(f"Raw Response: {res}") # Show raw response for debugging
                  else:
                      st.error("No se pudo conectar con el agente para iniciar la búsqueda.")
             except Exception as e:

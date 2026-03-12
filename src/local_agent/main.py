@@ -1030,6 +1030,7 @@ class AgentWorker:
 
     def log(self, message):
         print(message)
+        logging.info(message)
         if self.log_callback:
             self.log_callback(message)
 
@@ -1425,8 +1426,11 @@ def load_config():
     return {}
 
 def save_config(config):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f)
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config, f)
+    except Exception as e:
+        print(f"Advertencia: No se pudo guardar la configuración en {CONFIG_FILE}: {e}")
 
 class AgentGUI:
     def __init__(self, root):

@@ -58,10 +58,15 @@ def setup_agent():
     # Por ahora, simplemente permitimos cambiarlo si el usuario presiona Enter rápido?
     # Para simplicidad, preguntamos siempre pero con valor por defecto
     
-    try:
-        new_ip = input(f"Ingrese IP del servidor [Enter para usar {server_ip}]: ").strip()
-    except EOFError:
-        new_ip = "" # Handle non-interactive environments
+    # Si se pasa el argumento --start, saltar configuración
+    if "--start" in sys.argv:
+        print("Argumento --start detectado. Saltando configuración.")
+        new_ip = ""
+    else:
+        try:
+            new_ip = input(f"Ingrese IP del servidor [Enter para usar {server_ip}]: ").strip()
+        except EOFError:
+            new_ip = "" # Handle non-interactive environments
 
     if new_ip:
         server_ip = new_ip
@@ -89,5 +94,23 @@ def setup_agent():
 
     return server_ip
 
+def run_agent():
+    server_ip = setup_agent()
+    print(f"Iniciando agente conectado a {server_ip}...")
+    
+    # Path to main agent script
+    agent_script = os.path.join("src", "local_agent", "main.py")
+    if not os.path.exists(agent_script):
+        print(f"Error: No se encuentra el script del agente en {agent_script}")
+        return
+
+    try:
+        # Run the agent script
+        subprocess.run([sys.executable, agent_script], check=True)
+    except KeyboardInterrupt:
+        print("\nAgente detenido por el usuario.")
+    except Exception as e:
+        print(f"Error ejecutando el agente: {e}")
+
 if __name__ == "__main__":
-    setup_agent()
+    run_agent()
