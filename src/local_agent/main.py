@@ -616,7 +616,12 @@ def process_search_files(path, patterns, exclusion_list=None, search_by="name", 
                                 "Nombre": d,
                                 "Tipo": "Carpeta",
                                 "Tamaño": 0,
-                                "Fecha": datetime.fromtimestamp(os.path.getmtime(full_path)).strftime('%Y-%m-%d %H:%M:%S')
+                                "Fecha": datetime.fromtimestamp(os.path.getmtime(full_path)).strftime('%Y-%m-%d %H:%M:%S'),
+                                # Compatibilidad con versión anterior (English keys)
+                                "path": full_path,
+                                "name": d,
+                                "type": "folder",
+                                "size": 0
                             })
                             matched_count += 1
                         except Exception as e:
@@ -637,14 +642,19 @@ def process_search_files(path, patterns, exclusion_list=None, search_by="name", 
                                 "Nombre": f,
                                 "Tipo": "Archivo",
                                 "Tamaño": size,
-                                "Fecha": datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S')
+                                "Fecha": datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                                # Compatibilidad con versión anterior (English keys)
+                                "path": full_path,
+                                "name": f,
+                                "type": "file",
+                                "size": size
                             })
                             matched_count += 1
                         except Exception as e:
                              logging.warning(f"Error procesando archivo {full_path}: {e}")
         
-        print(f"DEBUG: Búsqueda finalizada. Escaneados: {scanned_count}, Encontrados: {matched_count}")
-        logging.info(f"Búsqueda finalizada. Escaneados: {scanned_count}, Encontrados: {matched_count}")
+        print(f"DEBUG: Búsqueda finalizada. Escaneados: {scanned_count}, Encontrados: {matched_count}, Total items: {len(found_items)}")
+        logging.info(f"Búsqueda finalizada. Escaneados: {scanned_count}, Encontrados: {matched_count}, Total items: {len(found_items)}")
                         
     except Exception as e:
         print(f"ERROR CRITICO en process_search_files: {e}")
