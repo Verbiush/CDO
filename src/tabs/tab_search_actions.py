@@ -171,9 +171,10 @@ def buscar_archivos():
                               # st.write(f"DEBUG RAW RESULT TYPE: {type(res)}")
                               # st.write(f"DEBUG RAW RESULT CONTENT: {res}")
                               
-                              if res and isinstance(res, dict) and "items" in res:
+                              if res and isinstance(res, list):
+                                   results.extend(res)
+                              elif res and isinstance(res, dict) and "items" in res:
                                    items = res.get("items", [])
-                                   # Ensure consistency in keys if needed, agent returns 'Ruta completa' and 'Fecha'
                                    results.extend(items)
                                    
                                    if "errors" in res and res["errors"]:

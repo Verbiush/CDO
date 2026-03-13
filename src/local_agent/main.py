@@ -651,7 +651,9 @@ def process_search_files(path, patterns, exclusion_list=None, search_by="name", 
         logging.critical(f"ERROR CRITICO en process_search_files: {e}", exc_info=True)
         errors.append(str(e))
         
-    return {"items": found_items, "errors": errors}
+    # Compatibilidad con versión anterior del servidor: devolver lista directa
+    # return {"items": found_items, "errors": errors}
+    return found_items
 
 def process_distribute_file(paths, content_b64):
     count_distributed = 0
