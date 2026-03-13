@@ -169,8 +169,13 @@ def buscar_archivos():
                                       
                                       # DEBUG: Inspect raw result
                                       log(f"DEBUG RAW RESULT TYPE: {type(res)}")
-                                      # log(f"DEBUG RAW RESULT CONTENT: {res}")
+                                      log(f"DEBUG RAW RESULT CONTENT: {str(res)[:500]}...") # Log first 500 chars
                                       
+                                      # Debug UI
+                                      with st.expander("🕵️ Debug Agente (Raw Response)", expanded=False):
+                                           st.write(f"Tipo: {type(res)}")
+                                           st.json(res)
+
                                       if res and isinstance(res, list):
                                            # Safety check: if list of strings, convert to dicts
                                            if res and isinstance(res[0], str):

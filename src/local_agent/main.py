@@ -1219,8 +1219,8 @@ class AgentWorker:
                 
                 if path:
                     res = process_search_files(path, patterns, exclusion_list, search_by, item_type, recursive, search_empty_folders)
-                    # Wrap list in dict for API compatibility (TaskResult model expects Dict)
-                    result["result"] = {"items": res, "count": len(res)}
+                    # res is already a dict {"items": [...], "errors": [...]}
+                    result["result"] = res
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta el parámetro 'path'"}
