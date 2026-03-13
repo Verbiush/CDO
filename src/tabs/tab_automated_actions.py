@@ -5870,21 +5870,9 @@ def dialog_distribuir_base():
     st.divider()
     st.write("Archivo a Distribuir:")
     
-    file_to_distribute = None
-    is_upload_bytes = False
-    
-    # Check mode
-    is_web = not st.session_state.get("force_native_mode", True)
-    
-    if is_web:
-        # Web Mode: Upload
-        file_to_distribute = st.file_uploader("Cargar Archivo", key="dist_base_file_up")
-        if file_to_distribute:
-            is_upload_bytes = True
-    else:
-        # Native Mode: Selector
-        file_to_distribute = render_file_selector("Seleccionar Archivo Local", key="dist_base_file_local")
-        is_upload_bytes = False
+    # Siempre usar file_uploader para permitir cargar cualquier archivo desde el PC
+    file_to_distribute = st.file_uploader("Cargar Archivo a Distribuir", key="dist_base_file_up")
+    is_upload_bytes = True if file_to_distribute else False
 
     # 3. Carpeta Destino Base
     st.divider()
