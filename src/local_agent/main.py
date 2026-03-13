@@ -662,8 +662,8 @@ def process_search_files(path, patterns, exclusion_list=None, search_by="name", 
         errors.append(str(e))
         
     # Compatibilidad con versión anterior del servidor: devolver lista directa
-    # return {"items": found_items, "errors": errors}
-    return found_items
+    return {"items": found_items, "errors": errors}
+    # return found_items
 
 def process_distribute_file(paths, content_b64):
     count_distributed = 0

@@ -417,9 +417,12 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
         # --- WEB MODE ---
         st.markdown(f"**{label}**")
         
-        # Opcion: Usar Agente Local
-        use_agent_key = f"use_agent_file_{key}"
-        use_agent = st.checkbox("🔌 Usar Agente Local (PC)", key=use_agent_key, help="Seleccionar archivo en tu PC usando el Agente instalado.")
+        # Opcion: Usar Agente Local (OCULTADO POR PETICION DE USUARIO)
+        # use_agent_key = f"use_agent_file_{key}"
+        # use_agent = st.checkbox("🔌 Usar Agente Local (PC)", key=use_agent_key, help="Seleccionar archivo en tu PC usando el Agente instalado.")
+        
+        # Forzamos use_agent a False para ocultar la funcionalidad en modo Web
+        use_agent = False
         
         if use_agent:
             username = st.session_state.get("username", "admin")
