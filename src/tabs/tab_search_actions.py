@@ -338,6 +338,7 @@ def buscar_archivos():
 
 def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean_feov, pre, prefix_txt, suf, suffix_txt, activar_num=False, inicio_num=1, silent_mode=False):
     count = 0
+    is_native = st.session_state.get("force_native_mode", True)
     
     if not results:
         msg = "No hay archivos en la lista de resultados para procesar."
@@ -345,8 +346,8 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
             st.warning(msg)
         return msg
 
-    # Validación de colisiones para Renombrado Completo
-    if full and new_name and not activar_num:
+    # Validación de colisiones para Renombrado Completo (Solo Local)
+    if not is_native and full and new_name and not activar_num:
         # Verificar si hay múltiples archivos con la misma extensión en la misma carpeta
         conflict_map = {}
         for item in results:
@@ -383,6 +384,7 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
         progress_bar = st.progress(0, text="Renombrando en lote...")
     
     changes_made = [] # Lista para guardar cambios (Undo)
+    batch_renames = [] # Para modo nativo (Agente)
     
     current_num = inicio_num
 
@@ -391,7 +393,8 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
              progress_bar.progress(min(idx / total_files, 1.0), text=f"Renombrando {idx+1}/{total_files}")
              
         old_path = item["Ruta completa"]
-        if not os.path.exists(old_path): continue
+        if not is_native and not os.path.exists(old_path): continue
+        if is_native and not old_path: continue
         
         folder = os.path.dirname(old_path)
         filename = os.path.basename(old_path)
@@ -433,36 +436,83 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
         new_path = os.path.join(folder, new_filename)
         
         if new_path != old_path:
-            try:
-                # Manejo simple de colisiones
-                if os.path.exists(new_path):
-                    timestamp = int(time.time())
-                    new_filename = f"{final_name}_{timestamp}{ext}"
-                    new_path = os.path.join(folder, new_filename)
+            if is_native:
+                batch_renames.append({
+                    "old_path": old_path,
+                    "new_path": new_path,
+                    "item": item
+                })
+            else:
+                try:
+                    # Manejo simple de colisiones
+                    if os.path.exists(new_path):
+                        timestamp = int(time.time())
+                        new_filename = f"{final_name}_{timestamp}{ext}"
+                        new_path = os.path.join(folder, new_filename)
+                    
+                    os.rename(old_path, new_path)
+                    count += 1
+                    changes_made.append((new_path, old_path)) # Guardar para deshacer
+                    # Actualizar ruta en resultados para reflejar cambio
+                    item["Ruta completa"] = new_path
+                except Exception as e:
+                    pass
+                    # log(f"Error renombrando {filename}: {e}")
+
+    # Procesar Lote Nativo (Agente)
+    if is_native and batch_renames and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            task_id = agent_client.send_command(username, "rename_files", {
+                "files": [{"old_path": r["old_path"], "new_path": r["new_path"]} for r in batch_renames]
+            })
+            
+            if task_id:
+                if not silent_mode:
+                     progress_bar.progress(0.9, text="Enviando tarea al agente...")
                 
-                os.rename(old_path, new_path)
-                count += 1
-                changes_made.append((new_path, old_path)) # Guardar para deshacer
-                # Actualizar ruta en resultados para reflejar cambio
-                item["Ruta completa"] = new_path
-            except Exception as e:
-                log(f"Error renombrando {filename}: {e}")
+                # Esperar resultado
+                res = agent_client.wait_for_result(task_id, timeout=600)
+                
+                if res and isinstance(res, dict):
+                    count = res.get("count", 0)
+                    errors = res.get("errors", [])
+                    
+                    # Actualizar items si éxito total (optimista)
+                    # Si hay errores, no sabemos cuáles fallaron, así que no actualizamos items para no confundir
+                    if count == len(batch_renames) and not errors:
+                        for r in batch_renames:
+                            r["item"]["Ruta completa"] = r["new_path"]
+                    
+                    if errors and not silent_mode:
+                        st.error(f"Errores reportados por el agente: {len(errors)}")
+                        with st.expander("Ver errores"):
+                            for e in errors: st.write(e)
+                else:
+                    if not silent_mode: st.error("Respuesta inválida del agente")
+            else:
+                 if not silent_mode: st.error("No se pudo conectar con el agente")
+        except Exception as e:
+             if not silent_mode: st.error(f"Error enviando tarea al agente: {e}")
 
     if not silent_mode:
         progress_bar.progress(1.0, text="Proceso finalizado.")
     
     if count > 0:
-        record_action("Renombrado Masivo", changes_made)
+        if not is_native:
+            record_action("Renombrado Masivo", changes_made)
+            
         msg = f"✅ Renombrados {count} archivos exitosamente."
         if not silent_mode:
             st.success(msg)
             
-            # Offer download of the root folder
-            root_path = st.session_state.get("current_path")
-            if root_path and os.path.exists(root_path):
-                 render_download_button(root_path, "dl_rename_mass", "📦 Descargar Carpeta Completa (ZIP)")
+            # Offer download of the root folder (only relevant for local/web mode, not native)
+            if not is_native:
+                root_path = st.session_state.get("current_path")
+                if root_path and os.path.exists(root_path):
+                     render_download_button(root_path, "dl_rename_mass", "📦 Descargar Carpeta Completa (ZIP)")
                  
-            log(f"Renombrado masivo completado. Total: {count}")
+            # log(f"Renombrado masivo completado. Total: {count}")
             # time.sleep(1) # Pausa breve para ver el mensaje - Removed to allow interaction with download button
             # st.rerun() # Rerun prevents clicking the download button
         return msg

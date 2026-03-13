@@ -713,6 +713,33 @@ def process_write_files(files):
             
     return {"count": count_written, "errors": errors}
 
+def process_rename_files(files):
+    count_renamed = 0
+    errors = []
+    
+    for item in files:
+        old_path = item.get("old_path")
+        new_path = item.get("new_path")
+        
+        if not old_path or not new_path:
+            continue
+            
+        try:
+            if os.path.exists(old_path):
+                # Ensure destination folder exists
+                dest_dir = os.path.dirname(new_path)
+                if not os.path.exists(dest_dir):
+                    os.makedirs(dest_dir, exist_ok=True)
+                    
+                os.rename(old_path, new_path)
+                count_renamed += 1
+            else:
+                errors.append(f"Archivo no encontrado: {old_path}")
+        except Exception as e:
+            errors.append(f"Error renombrando {os.path.basename(old_path)}: {str(e)}")
+            
+    return {"count": count_renamed, "errors": errors}
+
 def process_flat_to_excel(path):
     # Stub implementation to prevent crashes
     return {"status": "error", "message": "Función flat_to_excel no implementada en el Agente Local aún."}
@@ -1256,6 +1283,17 @@ class AgentWorker:
                 if files:
                     self.log(f"Escribiendo {len(files)} archivos")
                     res = process_write_files(files)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros"}
+
+            elif command == "rename_files":
+                files = params.get("files", [])
+                
+                if files:
+                    self.log(f"Renombrando {len(files)} archivos")
+                    res = process_rename_files(files)
                     result["result"] = res
                 else:
                     result["status"] = "ERROR"
