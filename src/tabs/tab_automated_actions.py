@@ -60,10 +60,10 @@ except ImportError:
     pass
 
 try:
-    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button
+    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button, render_file_selector
 except ImportError:
     try:
-        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button, render_file_selector
     except ImportError:
         def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
             st.warning("Selector de carpeta nativo no disponible.")
@@ -77,6 +77,10 @@ except ImportError:
         
         def render_path_selector(label, key, default_path=None, help_text=None, omit_checkbox=False):
             st.warning("render_path_selector no disponible")
+            return default_path
+
+        def render_file_selector(label, key, default_path=None, help_text=None, file_types=None, omit_checkbox=False):
+            st.warning("render_file_selector no disponible")
             return default_path
 
         def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
@@ -111,6 +115,29 @@ import google.generativeai as genai
 # update_path_key imported from gui_utils
 
 # --- HELPERS ---
+
+def find_folder_path(base_path, folder_name):
+    """
+    Intenta encontrar una carpeta usando los resultados de búsqueda en sesión.
+    Si no la encuentra, asume que es una subcarpeta directa de base_path.
+    """
+    target_name = str(folder_name).strip().lower()
+    
+    # 1. Buscar en resultados de búsqueda (si existen)
+    if "search_results" in st.session_state and st.session_state.search_results:
+        for item in st.session_state.search_results:
+            # Normalizar claves (puede venir como 'name' o 'Nombre')
+            i_name = str(item.get("name", item.get("Nombre", ""))).strip().lower()
+            i_type = str(item.get("type", item.get("Tipo", ""))).strip().lower()
+            i_path = item.get("path", item.get("Ruta completa", ""))
+            
+            if i_type in ["folder", "carpeta", "directory"] and i_name == target_name:
+                if os.path.exists(i_path):
+                    return i_path
+
+    # 2. Fallback: Subcarpeta directa
+    return os.path.join(base_path, str(folder_name).strip())
+
 
 def natural_sort_key(s):
     return [int(text) if text.isdigit() else text.lower() for text in re.split('([0-9]+)', s)]
@@ -4568,7 +4595,8 @@ def worker_descargar_firmas(uploaded_file, sheet_name, col_id, col_folder, root_
             if not silent_mode: status_text.text(f"Procesando: {id_firma}")
             
             url_completa = f"{base_url}{id_firma}.png"
-            target_dir = os.path.join(root_path, nombre_carpeta)
+            # Use helper to find folder path (supports search results)
+            target_dir = find_folder_path(root_path, nombre_carpeta)
             os.makedirs(target_dir, exist_ok=True)
             
             try:
@@ -5442,7 +5470,7 @@ def worker_crear_firma_excel(root_path, ttf_path, size, excel_file, sheet_name, 
         if not folder_name or str(folder_name).lower() == 'nan': continue
         
         # Construir ruta objetivo
-        target_dir = os.path.join(root_path, folder_name)
+        target_dir = find_folder_path(root_path, folder_name)
         if not os.path.exists(target_dir):
             continue
             
@@ -5506,6 +5534,9 @@ def worker_crear_firma_excel(root_path, ttf_path, size, excel_file, sheet_name, 
                 os.makedirs(tipografia_dir)
                 
             bg.save(os.path.join(tipografia_dir, "firma.jpg"))
+            
+            # Guardar también en la carpeta raíz (Requerimiento Usuario)
+            bg.save(os.path.join(target_dir, "firma.jpg"))
             count += 1
         except Exception as e:
             if not silent_mode: st.warning(f"Error generando firma para {folder_name}: {e}")
@@ -5772,7 +5803,8 @@ def worker_distribuir_base_archivo(file_source, is_upload_bytes, excel_bytes, sh
             
             if not folder_name: continue
 
-            dest_dir = os.path.join(base_path, folder_name)
+            # Use helper to find folder path (supports search results)
+            dest_dir = find_folder_path(base_path, folder_name)
             os.makedirs(dest_dir, exist_ok=True)
             
             dest_file = os.path.join(dest_dir, src_filename)
