@@ -164,14 +164,25 @@ def buscar_archivos():
                  })
                  
                  if task_id:
-                      with st.spinner("Buscando en equipo local (vía Agente)..."):
-                          res = agent_client.wait_for_result(task_id, timeout=60)
-                          if res and res.get("status") == "success":
-                               items = res.get("items", [])
-                               # Ensure consistency in keys if needed, agent returns 'Ruta completa' and 'Fecha'
-                               results.extend(items)
-                          else:
-                               st.error(f"Error en la búsqueda del agente: {res.get('message') if res else 'Sin respuesta'}")
+                          with st.spinner("Buscando en equipo local (vía Agente)..."):
+                              res = agent_client.wait_for_result(task_id, timeout=60)
+                              
+                              # DEBUG: Inspect raw result
+                              # st.write(f"DEBUG RAW RESULT TYPE: {type(res)}")
+                              # st.write(f"DEBUG RAW RESULT CONTENT: {res}")
+                              
+                              if res and isinstance(res, list):
+                                   results.extend(res)
+                              elif res and isinstance(res, dict) and "items" in res:
+                                   items = res.get("items", [])
+                                   results.extend(items)
+                                   
+                                   if "errors" in res and res["errors"]:
+                                        st.warning(f"Errores reportados por agente: {res['errors']}")
+                              else:
+                                   error_msg = res.get('error') if isinstance(res, dict) else 'Respuesta inválida o vacía'
+                                   st.error(f"Error en la búsqueda del agente: {error_msg}")
+                                   st.code(f"Raw Response: {res}") # Show raw response for debugging
                  else:
                      st.error("No se pudo conectar con el agente para iniciar la búsqueda.")
             except Exception as e:
@@ -426,8 +437,9 @@ def worker_editar_texto(file_list, search_text, replace_text, silent_mode=False)
                     # Usually workers are called from UI, so blocking is fine.
                     res = agent_client.wait_for_result(task_id, timeout=600)
 
-                if res and res.get("status") == "SUCCESS":
-                    r_data = res.get("result", {})
+                # Fix: wait_for_result returns the result payload directly
+                if res and isinstance(res, dict) and "count" in res:
+                    r_data = res
                     count = r_data.get("count", 0)
                     errors = r_data.get("errors", [])
                     msg = f"Agente: Texto modificado en {count} archivos."
@@ -440,8 +452,12 @@ def worker_editar_texto(file_list, search_text, replace_text, silent_mode=False)
                             with st.expander("Ver errores"):
                                 for e in errors: st.write(e)
                     return msg
+                elif res and isinstance(res, dict) and "error" in res:
+                     err_msg = res.get("error")
+                     if not silent_mode: st.error(f"Error del Agente: {err_msg}")
+                     return f"Error Agente: {err_msg}"
                 else:
-                    err_msg = res.get("result") if res else "Sin respuesta"
+                    err_msg = "Respuesta inesperada del Agente"
                     if not silent_mode: st.error(f"Error del Agente: {err_msg}")
                     return f"Error Agente: {err_msg}"
             else:

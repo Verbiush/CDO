@@ -34,10 +34,13 @@ def wait_for_result(task_id, timeout=AGENT_TIMEOUT):
         task_data = database.get_task_result(task_id)
         if task_data:
             status = task_data.get("status")
-            if status == "COMPLETED":
+            if status == "COMPLETED" or status == "SUCCESS":
                 return task_data.get("result")
             elif status == "ERROR":
-                return {"error": "Agent reported an error"}
+                err_res = task_data.get("result")
+                if isinstance(err_res, dict):
+                    return err_res
+                return {"error": str(err_res) if err_res else "Agent reported an unspecified error"}
         
         time.sleep(1)
         

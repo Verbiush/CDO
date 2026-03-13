@@ -793,7 +793,7 @@ def render():
                                 if "error" in res:
                                     st.error(f"Error del Agente: {res['error']}")
                                 else:
-                                    r_data = res.get("result", {})
+                                    r_data = res
                                     count_created = r_data.get("count", 0)
                                     errs = r_data.get("errors", [])
                                     if errs:
@@ -962,7 +962,8 @@ def render():
                                     if "error" in res:
                                         st.error(f"Error del Agente: {res['error']}")
                                     else:
-                                        r_data = res.get("result", {})
+                                        # Direct result usage, no nested 'result' key
+                                        r_data = res 
                                         count_ren = r_data.get("count", 0)
                                         errs = r_data.get("errors", [])
                                         errors_ren = len(errs)
@@ -1074,7 +1075,8 @@ def render():
                                     if "error" in res:
                                         st.error(f"Error del Agente: {res['error']}")
                                     else:
-                                        r_data = res.get("result", {})
+                                        # Direct result usage
+                                        r_data = res 
                                         count_mov = r_data.get("count", 0)
                                         errs = r_data.get("errors", [])
                                         errors_mov = len(errs)
@@ -1140,7 +1142,8 @@ def render():
                                     if "error" in res:
                                         st.error(f"Error del Agente: {res['error']}")
                                     else:
-                                        r_data = res.get("result", {})
+                                        # Direct result usage
+                                        r_data = res 
                                         count_suf = r_data.get("count", 0)
                                         errs = r_data.get("errors", [])
                                         errors_suf = len(errs)
@@ -1344,7 +1347,7 @@ def render():
                                     if "error" in res:
                                         st.error(f"Error Agente: {res['error']}")
                                     else:
-                                        r_data = res.get("result", {})
+                                        r_data = res
                                         count_dist = r_data.get("count", 0)
                                         errs = r_data.get("errors", [])
                                         if errs:
@@ -1470,6 +1473,8 @@ def render():
                                         with st.expander(f"⚠️ Errores ({len(errors_list)})"):
                                             for err in errors_list:
                                                 st.write(err)
+                            else:
+                                st.error("No se pudo conectar con el Agente Local.")
                     except ImportError:
                         st.error("Librería de Agente no encontrada.")
                     except Exception as e:
@@ -1528,7 +1533,7 @@ def render():
                                     if "error" in res:
                                         st.error(f"Error Agente: {res['error']}")
                                     else:
-                                        r_data = res.get("result", {})
+                                        r_data = res
                                         count_sig = r_data.get("count", 0)
                                 else:
                                     st.error("No se pudo conectar con el Agente")

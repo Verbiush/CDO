@@ -1,0 +1,39 @@
+
+INSTRUCCIONES PARA ACTUALIZAR EL SERVIDOR AWS
+=============================================
+
+Para que la búsqueda funcione correctamente en el modo nativo y para ver los cambios realizados (como ocultar la opción del Agente en modo Web), DEBE actualizar el servidor AWS con el código más reciente.
+
+Siga estos pasos cuidadosamente:
+
+PASO 1: SUBIR CAMBIOS A GITHUB (Desde su PC Local)
+--------------------------------------------------
+Abra una terminal (PowerShell o CMD) en la carpeta del proyecto y ejecute:
+
+1. git add .
+2. git commit -m "Fix search agent and hide web agent option"
+3. git push origin main
+
+(Si le pide usuario y contraseña, ingréselos).
+
+PASO 2: ACTUALIZAR EL SERVIDOR AWS
+----------------------------------
+Conéctese a su servidor AWS y ejecute los siguientes comandos:
+
+1. Navegue a la carpeta del proyecto:
+   cd /home/ubuntu/OrganizadorArchivos   (o la ruta donde esté instalado)
+
+2. Descargue los últimos cambios:
+   git pull origin main
+
+3. Reconstruya y reinicie los contenedores (IMPORTANTE):
+   docker-compose -f docker-compose-aws.yml up --build -d
+
+PASO 3: REINICIAR EL AGENTE LOCAL
+---------------------------------
+En su PC local:
+1. Detenga el agente si está corriendo (Ctrl+C).
+2. Vuelva a iniciarlo:
+   python run_agent_local.py
+
+Una vez hecho esto, intente la búsqueda nuevamente en el Navegador Web (Modo Nativo).

@@ -265,13 +265,20 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
             def on_click_folder():
                 # Get current path from state or default
                 current = st.session_state.get(key, target_path)
+                
+                st.toast("Solicitando al Agente...", icon="🤖")
+                
                 selected = abrir_dialogo_carpeta_nativo(title=label, initial_dir=current)
+                
                 if selected:
+                    st.toast(f"Carpeta seleccionada: {selected}", icon="✅")
                     st.session_state[key] = selected
                     # Also update the text input keys to reflect change immediately
                     st.session_state[f"input_{key}"] = selected
                     st.session_state[f"input_{key}_disabled"] = selected
                     st.rerun()
+                else:
+                    st.toast("No se seleccionó ninguna carpeta o hubo un error.", icon="⚠️")
             
             st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom, on_click=on_click_folder)
 
@@ -282,16 +289,15 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         # --- WEB MODE ---
         st.markdown(f"**{label}**")
         
-        # Opcion: Usar Agente Local
-        use_agent_key = f"use_agent_folder_{key}"
+        # Opcion: Usar Agente Local (OCULTADO POR PETICION DE USUARIO)
+        # use_agent_key = f"use_agent_folder_{key}"
+        # col_agent_check, col_agent_status = st.columns([0.6, 0.4])
+        # with col_agent_check:
+        #    use_agent = st.checkbox("🔌 Usar Agente Local", key=use_agent_key, help="Conectar con el agente instalado en tu PC para seleccionar carpetas locales.")
         
-        # Check if agent is likely available (optional heuristic)
-        agent_available = True 
-        
-        col_agent_check, col_agent_status = st.columns([0.6, 0.4])
-        with col_agent_check:
-            use_agent = st.checkbox("🔌 Usar Agente Local", key=use_agent_key, help="Conectar con el agente instalado en tu PC para seleccionar carpetas locales.")
-        
+        # Forzamos use_agent a False para ocultar la funcionalidad en modo Web
+        use_agent = False
+
         if use_agent:
             username = st.session_state.get("username", "admin")
             # Show connection info
@@ -322,11 +328,17 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                         
                         if selected:
                             st.session_state[key] = selected
+                            # Explicitly update display key for next render
+                            st.session_state[f"remote_path_display_{key}"] = selected
+                            # Also update potential input keys used by other logic
+                            st.session_state[f"input_{key}"] = selected
+                            
                             target_path = selected
-                            st.success(f"Ruta: {selected}")
+                            st.toast(f"✅ Ruta recibida del Agente: {selected}", icon="🖥️")
+                            time.sleep(0.5) # Give time to read toast
                             st.rerun()
                         else:
-                            st.warning("Cancelado o sin respuesta.")
+                            st.warning("Cancelado o sin respuesta del Agente.")
                     except Exception as e:
                         st.error(f"Error: {e}")
             

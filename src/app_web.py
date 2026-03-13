@@ -421,20 +421,23 @@ else:
                     st.success("✅ Modo Nativo Activo")
                 else:
                     st.info("☁️ Modo Web Activo")
-                    st.markdown("##### 🔌 Agente Local")
-                    st.caption("Para habilitar funciones nativas en Modo Web, instale el Agente Local.")
+                    # st.markdown("##### 🔌 Agente Local")
+                    # st.caption("Para habilitar funciones nativas en Modo Web, instale el Agente Local.")
                     try:
-                        zip_bytes, filename = create_cdo_agent_zip()
-                        st.download_button(
-                            label="⬇️ Descargar Instalador",
-                            data=zip_bytes,
-                            file_name=filename,
-                            mime="application/zip",
-                            help="Descargue el instalador para conectar su PC.",
-                            key="btn_download_agent_sidebar"
-                        )
+                        # Ocultar descarga del agente en modo web por peticion del usuario
+                        pass
+                        # zip_bytes, filename = create_cdo_agent_zip()
+                        # st.download_button(
+                        #    label="⬇️ Descargar Instalador",
+                        #    data=zip_bytes,
+                        #    file_name=filename,
+                        #    mime="application/zip",
+                        #    help="Descargue el instalador para conectar su PC.",
+                        #    key="btn_download_agent_sidebar"
+                        # )
                     except Exception as e:
-                        st.error(f"Error generando instalador: {e}")
+                        pass
+                        # st.error(f"Error generando instalador: {e}")
                 
                 st.markdown("---")
                 st.markdown("### Configuración de IA (Gemini)")
