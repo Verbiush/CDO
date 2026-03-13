@@ -1219,7 +1219,8 @@ class AgentWorker:
                 
                 if path:
                     res = process_search_files(path, patterns, exclusion_list, search_by, item_type, recursive, search_empty_folders)
-                    result["result"] = res
+                    # Wrap list in dict for API compatibility (TaskResult model expects Dict)
+                    result["result"] = {"items": res, "count": len(res)}
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta el parámetro 'path'"}
@@ -1407,11 +1408,15 @@ class AgentWorker:
             post_url = f"{base_url}/{task_id}/result"
             auth = (self.username, self.password) if self.password else None
             
-            requests.post(post_url, json={
+            resp = requests.post(post_url, json={
                 "status": result["status"],
                 "result": result["result"]
             }, auth=auth)
-            self.log(f"Resultado enviado para {task_id}")
+            
+            if resp.status_code == 200:
+                self.log(f"Resultado enviado para {task_id}")
+            else:
+                self.log(f"Error enviando resultado {task_id}: {resp.status_code} - {resp.text}")
         except Exception as e:
             self.log(f"Error enviando resultado: {e}")
 
