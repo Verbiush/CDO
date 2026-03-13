@@ -164,25 +164,89 @@ def buscar_archivos():
                  })
                  
                  if task_id:
-                          with st.spinner("Buscando en equipo local (vía Agente)..."):
-                              res = agent_client.wait_for_result(task_id, timeout=60)
-                              
-                              # DEBUG: Inspect raw result
-                              # st.write(f"DEBUG RAW RESULT TYPE: {type(res)}")
-                              # st.write(f"DEBUG RAW RESULT CONTENT: {res}")
-                              
-                              if res and isinstance(res, list):
-                                   results.extend(res)
-                              elif res and isinstance(res, dict) and "items" in res:
-                                   items = res.get("items", [])
-                                   results.extend(items)
-                                   
-                                   if "errors" in res and res["errors"]:
-                                        st.warning(f"Errores reportados por agente: {res['errors']}")
-                              else:
-                                   error_msg = res.get('error') if isinstance(res, dict) else 'Respuesta inválida o vacía'
-                                   st.error(f"Error en la búsqueda del agente: {error_msg}")
-                                   st.code(f"Raw Response: {res}") # Show raw response for debugging
+                                  with st.spinner("Buscando en equipo local (vía Agente)..."):
+                                      res = agent_client.wait_for_result(task_id, timeout=60)
+                                      
+                                      # DEBUG: Inspect raw result
+                                      log(f"DEBUG RAW RESULT TYPE: {type(res)}")
+                                      log(f"DEBUG RAW RESULT CONTENT: {str(res)[:500]}...") # Log first 500 chars
+                                      
+                                      # Debug UI
+                                      with st.expander("🕵️ Debug Agente (Raw Response)", expanded=False):
+                                           st.write(f"Tipo: {type(res)}")
+                                           st.json(res)
+
+                                      if res and isinstance(res, list):
+                                           # Safety check: if list of strings, convert to dicts
+                                           if res and isinstance(res[0], str):
+                                                safe_results = []
+                                                for r in res:
+                                                     try:
+                                                         is_file = os.path.isfile(r)
+                                                     except:
+                                                         is_file = True # Assume file if check fails
+                                                     safe_results.append({
+                                                         "Ruta completa": r, 
+                                                         "Nombre": os.path.basename(r), 
+                                                         "Tipo": "Archivo" if is_file else "Carpeta",
+                                                         "Fecha": "N/A"
+                                                     })
+                                                results.extend(safe_results)
+                                           else:
+                                                # Assume list of dicts, normalize them
+                                                norm_results = []
+                                                for item in res:
+                                                     if isinstance(item, dict):
+                                                          path = item.get("path", item.get("Ruta completa", ""))
+                                                          name = item.get("name", item.get("Nombre", os.path.basename(path)))
+                                                          itype = item.get("type", item.get("Tipo", "Archivo"))
+                                                          date = item.get("mtime", item.get("Fecha", "N/A"))
+                                                          norm_results.append({
+                                                               "Ruta completa": path,
+                                                               "Nombre": name,
+                                                               "Tipo": itype,
+                                                               "Fecha": date
+                                                          })
+                                                results.extend(norm_results)
+                                      elif res and isinstance(res, dict):
+                                           items = res.get("items", [])
+                                           if not items and "result" in res:
+                                                # Fallback if wrapped differently
+                                                if isinstance(res["result"], list):
+                                                     items = res["result"]
+                                           
+                                           if items:
+                                                norm_results = []
+                                                for item in items:
+                                                     if isinstance(item, dict):
+                                                          path = item.get("path", item.get("Ruta completa", ""))
+                                                          name = item.get("name", item.get("Nombre", os.path.basename(path)))
+                                                          itype = item.get("type", item.get("Tipo", "Archivo"))
+                                                          date = item.get("mtime", item.get("Fecha", "N/A"))
+                                                          norm_results.append({
+                                                               "Ruta completa": path,
+                                                               "Nombre": name,
+                                                               "Tipo": itype,
+                                                               "Fecha": date
+                                                          })
+                                                     elif isinstance(item, str):
+                                                          norm_results.append({
+                                                               "Ruta completa": item,
+                                                               "Nombre": os.path.basename(item),
+                                                               "Tipo": "Archivo",
+                                                               "Fecha": "N/A"
+                                                          })
+                                                results.extend(norm_results)
+                                           
+                                           if "errors" in res and res["errors"]:
+                                                st.warning(f"Errores reportados por agente: {res['errors']}")
+                                      else:
+                                           error_msg = res.get('error') if isinstance(res, dict) else 'Respuesta inválida o vacía'
+                                           if not res:
+                                                st.warning("El agente devolvió una respuesta vacía.")
+                                           else:
+                                                st.error(f"Error en la búsqueda del agente: {error_msg}")
+                                           # st.code(f"Raw Response: {res}") # Show raw response for debugging
                  else:
                      st.error("No se pudo conectar con el agente para iniciar la búsqueda.")
             except Exception as e:

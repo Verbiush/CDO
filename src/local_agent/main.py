@@ -662,8 +662,8 @@ def process_search_files(path, patterns, exclusion_list=None, search_by="name", 
         errors.append(str(e))
         
     # Compatibilidad con versión anterior del servidor: devolver lista directa
-    # return {"items": found_items, "errors": errors}
-    return found_items
+    return {"items": found_items, "errors": errors}
+    # return found_items
 
 def process_distribute_file(paths, content_b64):
     count_distributed = 0
@@ -1219,6 +1219,7 @@ class AgentWorker:
                 
                 if path:
                     res = process_search_files(path, patterns, exclusion_list, search_by, item_type, recursive, search_empty_folders)
+                    # res is already a dict {"items": [...], "errors": [...]}
                     result["result"] = res
                 else:
                     result["status"] = "ERROR"
@@ -1407,11 +1408,15 @@ class AgentWorker:
             post_url = f"{base_url}/{task_id}/result"
             auth = (self.username, self.password) if self.password else None
             
-            requests.post(post_url, json={
+            resp = requests.post(post_url, json={
                 "status": result["status"],
                 "result": result["result"]
             }, auth=auth)
-            self.log(f"Resultado enviado para {task_id}")
+            
+            if resp.status_code == 200:
+                self.log(f"Resultado enviado para {task_id}")
+            else:
+                self.log(f"Error enviando resultado {task_id}: {resp.status_code} - {resp.text}")
         except Exception as e:
             self.log(f"Error enviando resultado: {e}")
 
