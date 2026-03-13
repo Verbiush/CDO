@@ -46,11 +46,9 @@ df -h
 docker-compose down --remove-orphans
 docker-compose up -d
 
-cd ~/CDO
-git pull origin main
-docker-compose down
-docker-compose build --no-cache
-docker-compose up -d
+git add .
+git commit -m "descripción de los cambios"
+git push origin main
 
 
 
