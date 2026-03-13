@@ -123,20 +123,41 @@ def find_folder_path(base_path, folder_name):
     """
     target_name = str(folder_name).strip().lower()
     
+    # DEBUG: Log attempt
+    print(f"DEBUG find_folder_path: Buscando '{target_name}'...")
+
     # 1. Buscar en resultados de búsqueda (si existen)
     if "search_results" in st.session_state and st.session_state.search_results:
+        print(f"DEBUG: Revisando {len(st.session_state.search_results)} resultados en cache.")
+        if len(st.session_state.search_results) > 0:
+             print(f"DEBUG: Keys del primer item: {st.session_state.search_results[0].keys()}")
         for item in st.session_state.search_results:
             # Normalizar claves (puede venir como 'name' o 'Nombre')
             i_name = str(item.get("name", item.get("Nombre", ""))).strip().lower()
             i_type = str(item.get("type", item.get("Tipo", ""))).strip().lower()
             i_path = item.get("path", item.get("Ruta completa", ""))
             
-            if i_type in ["folder", "carpeta", "directory"] and i_name == target_name:
-                if os.path.exists(i_path):
+            # Check type variants
+            is_folder = i_type in ["folder", "carpeta", "directory"]
+            
+            if is_folder and i_name == target_name:
+                print(f"DEBUG: Encontrado en cache: {i_path}")
+                # En modo nativo (AWS), la ruta debe existir localmente.
+                # Si estamos en Web, no podemos verificar os.path.exists en servidor para ruta local cliente.
+                is_native = st.session_state.get("force_native_mode", True)
+                if is_native:
+                    if os.path.exists(i_path):
+                        return i_path
+                    else:
+                        print(f"DEBUG: Ruta encontrada pero no existe en disco: {i_path}")
+                else:
                     return i_path
 
     # 2. Fallback: Subcarpeta directa
-    return os.path.join(base_path, str(folder_name).strip())
+    fallback = os.path.join(base_path, str(folder_name).strip()) if base_path else None
+    print(f"DEBUG: No encontrado en cache. Usando fallback: {fallback}")
+    return fallback
+
 
 
 def natural_sort_key(s):
