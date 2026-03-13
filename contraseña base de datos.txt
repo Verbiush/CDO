@@ -51,7 +51,13 @@ git commit -m "descripción de los cambios"
 git push origin main
 
 
+git checkout -- src/users.db src/user_preferences.json
+git pull origin main
 
+:wq
 
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
 
 
