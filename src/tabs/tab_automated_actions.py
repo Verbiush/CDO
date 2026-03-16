@@ -24,15 +24,21 @@ import requests
 import base64
 import urllib.parse
 import xml.etree.ElementTree as ET
+import sys
+
+# Fix import path for agent_client
+agent_client_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if agent_client_path not in sys.path:
+    sys.path.append(agent_client_path)
 
 try:
-    from agent_client import submit_task, get_task_result
+    from agent_client import send_command, wait_for_result
 except ImportError:
     try:
-        from src.agent_client import submit_task, get_task_result
+        from src.agent_client import send_command, wait_for_result
     except ImportError:
-        submit_task = None
-        get_task_result = None
+        send_command = None
+        wait_for_result = None
 
 # --- CONDITIONAL IMPORTS FOR ANALYSIS WORKERS ---
 try:
@@ -794,50 +800,43 @@ def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_fo
         
         # --- NATIVE AGENT EXECUTION ---
         if is_native_mode and not is_temp:
-             if not submit_task:
-                 return {"error": "Error: Modo nativo activado pero el cliente del agente no está disponible."}
+             if not send_command:
+                 return {"error": "Error: Modo nativo activado pero el cliente del agente no está disponible (send_command)."}
                  
-             task_payload = {
-                 "command": "create_folders_from_list",
-                 "base_path": target_folder,
-                 "names": nombres_carpetas_raw,
-                 "unique": True
-             }
+             username = st.session_state.get("username", "admin")
              
              if not silent_mode:
                  st.info(f"Enviando tarea al agente local para crear {len(nombres_carpetas_raw)} carpetas...")
-                 
-             response = submit_task(task_payload)
-             if response.get("status") == "submitted":
-                 task_id = response.get("task_id")
-                 
+             
+             task_id = send_command(username, "create_folders_from_list", {
+                 "base_path": target_folder,
+                 "names": nombres_carpetas_raw,
+                 "unique": True
+             })
+             if task_id:
                  # Poll
                  status_placeholder = st.empty()
-                 max_retries = 30
-                 for i in range(max_retries):
-                     if not silent_mode:
-                         status_placeholder.text(f"Esperando agente... ({i+1}/{max_retries})")
+                 if not silent_mode:
+                     status_placeholder.text("Esperando agente...")
+                 
+                 res = wait_for_result(task_id, timeout=30)
+                 
+                 if not silent_mode: status_placeholder.empty()
+
+                 if res and "error" not in res:
+                     # Successful result is the result dict itself
+                     count = res.get("count", 0)
+                     errors = res.get("errors", [])
                      
-                     res = get_task_result(task_id)
-                     if res.get("status") == "COMPLETED":
-                         result_data = res.get("result", {})
-                         count = result_data.get("count", 0)
-                         errors = result_data.get("errors", [])
-                         if not silent_mode: status_placeholder.empty()
-                         
-                         msg = f"Creadas: {count}"
-                         if errors:
-                             msg += f", Errores: {len(errors)}"
-                         return {"message": f"{msg} en {target_folder} (Agente)"}
-                         
-                     elif res.get("status") == "ERROR":
-                         if not silent_mode: status_placeholder.empty()
-                         return {"error": f"Error del agente: {res.get('error')}"}
-                         
-                     time.sleep(1)
-                 return {"error": "Tiempo de espera agotado esperando al agente."}
+                     msg = f"Creadas: {count}"
+                     if errors:
+                         msg += f", Errores: {len(errors)}"
+                     return {"message": f"{msg} en {target_folder} (Agente)"}
+                 else:
+                     err = res.get("error") if res else "Error desconocido o tiempo de espera agotado"
+                     return {"error": f"Error del agente: {err}"}
              else:
-                 return {"error": f"Error enviando tarea: {response.get('message')}"}
+                 return {"error": "Error enviando tarea: No se pudo crear la tarea."}
 
         # --- SERVER SIDE EXECUTION ---
         creadas, errores = 0, 0
@@ -2236,52 +2235,44 @@ def worker_crear_carpetas_excel_avanzado(uploaded_file, sheet_name, col_name, ba
 
         # --- EXECUTION ---
         if is_native_mode:
-            if not submit_task:
-                return "Error: Modo nativo activado pero el cliente del agente no está disponible."
-                
-            task_payload = {
-                "command": "create_folders_from_list",
-                "base_path": base_path,
-                "names": nombres_carpetas,
-                "unique": True
-            }
+            if not send_command:
+                return "Error: Modo nativo activado pero el cliente del agente no está disponible (send_command)."
+            
+            username = st.session_state.get("username", "admin")
             
             if not silent_mode:
                 st.info(f"Enviando tarea al agente local para crear {len(nombres_carpetas)} carpetas...")
-                
-            response = submit_task(task_payload)
-            if response.get("status") == "submitted":
-                task_id = response.get("task_id")
-                # Poll for result
+            
+            task_id = send_command(username, "create_folders_from_list", {
+                "base_path": base_path,
+                "names": nombres_carpetas,
+                "unique": True
+            })
+            
+            if task_id:
                 status_placeholder = st.empty()
-                max_retries = 30
-                for i in range(max_retries):
-                    if not silent_mode:
-                        status_placeholder.text(f"Esperando agente... ({i+1}/{max_retries})")
-                    
-                    res = get_task_result(task_id)
-                    if res.get("status") == "COMPLETED":
-                        result_data = res.get("result", {})
-                        count = result_data.get("count", 0)
-                        errors = result_data.get("errors", [])
-                        if not silent_mode: status_placeholder.empty()
-                        
-                        msg = f"Proceso finalizado (Agente). Carpetas creadas: {count}"
-                        if errors:
-                            msg += f", Errores: {len(errors)}"
-                            if not silent_mode:
-                                st.error(f"Errores del agente: {'; '.join(errors[:5])}...")
-                        return msg
-                        
-                    elif res.get("status") == "ERROR":
-                        if not silent_mode: status_placeholder.empty()
-                        return f"Error del agente: {res.get('error')}"
-                        
-                    time.sleep(1)
+                if not silent_mode:
+                    status_placeholder.text("Esperando agente...")
                 
-                return "Tiempo de espera agotado esperando al agente."
+                res = wait_for_result(task_id, timeout=30)
+                
+                if not silent_mode: status_placeholder.empty()
+
+                if res and "error" not in res:
+                    count = res.get("count", 0)
+                    errors = res.get("errors", [])
+                    
+                    msg = f"Proceso finalizado (Agente). Carpetas creadas: {count}"
+                    if errors:
+                        msg += f", Errores: {len(errors)}"
+                        if not silent_mode:
+                            st.error(f"Errores del agente: {'; '.join(errors[:5])}...")
+                    return msg
+                else:
+                    err = res.get("error") if res else "Error desconocido o tiempo de espera agotado"
+                    return f"Error del agente: {err}"
             else:
-                return f"Error enviando tarea: {response.get('message')}"
+                return "Error enviando tarea: No se pudo crear la tarea."
 
         else:
             # Server-side execution
