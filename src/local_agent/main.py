@@ -717,6 +717,8 @@ def process_rename_files(files):
     count_renamed = 0
     errors = []
     
+    print(f"DEBUG: Iniciando renombrado de {len(files)} archivos")
+    
     for item in files:
         old_path = item.get("old_path")
         new_path = item.get("new_path")
@@ -730,15 +732,58 @@ def process_rename_files(files):
                 dest_dir = os.path.dirname(new_path)
                 if not os.path.exists(dest_dir):
                     os.makedirs(dest_dir, exist_ok=True)
-                    
+                
+                # Check if destination exists (Windows file in use or exists error)
+                if os.path.exists(new_path) and new_path != old_path:
+                     try:
+                         # Try to remove if it exists (overwrite)
+                         if os.path.isfile(new_path):
+                             os.remove(new_path)
+                     except Exception as e:
+                         print(f"WARN: Could not remove existing destination {new_path}: {e}")
+
+                print(f"DEBUG: Renaming '{old_path}' -> '{new_path}'")
                 os.rename(old_path, new_path)
                 count_renamed += 1
             else:
-                errors.append(f"Archivo no encontrado: {old_path}")
+                msg = f"Archivo no encontrado: {old_path}"
+                print(f"ERROR: {msg}")
+                errors.append(msg)
         except Exception as e:
-            errors.append(f"Error renombrando {os.path.basename(old_path)}: {str(e)}")
+            msg = f"Error renombrando {os.path.basename(old_path)}: {str(e)}"
+            print(f"ERROR: {msg}")
+            errors.append(msg)
             
+    print(f"DEBUG: Renombrado finalizado. Éxitos: {count_renamed}, Errores: {len(errors)}")
     return {"count": count_renamed, "errors": errors}
+
+def process_distribute_files(content_b64, paths):
+    count_distributed = 0
+    errors = []
+    
+    try:
+        content_bytes = base64.b64decode(content_b64)
+    except Exception as e:
+        return {"count": 0, "errors": [f"Error decodificando base64: {str(e)}"]}
+        
+    print(f"DEBUG: Distribuyendo archivo a {len(paths)} destinos")
+        
+    for path in paths:
+        try:
+            dest_dir = os.path.dirname(path)
+            if not os.path.exists(dest_dir):
+                os.makedirs(dest_dir, exist_ok=True)
+                
+            with open(path, "wb") as f:
+                f.write(content_bytes)
+            count_distributed += 1
+        except Exception as e:
+            msg = f"Error escribiendo en {path}: {str(e)}"
+            print(f"ERROR: {msg}")
+            errors.append(msg)
+            
+    print(f"DEBUG: Distribución finalizada. Éxitos: {count_distributed}, Errores: {len(errors)}")
+    return {"count": count_distributed, "errors": errors}
 
 def process_flat_to_excel(path):
     # Stub implementation to prevent crashes
@@ -1298,6 +1343,18 @@ class AgentWorker:
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros"}
+
+            elif command == "distribute_files":
+                content_b64 = params.get("content_b64")
+                paths = params.get("paths", [])
+                
+                if content_b64 and paths:
+                    self.log(f"Distribuyendo archivo a {len(paths)} destinos")
+                    res = process_distribute_files(content_b64, paths)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (content_b64, paths)"}
 
             elif command == "validate_rips":
                 base_path = params.get("base_path")

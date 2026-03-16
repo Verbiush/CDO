@@ -5787,33 +5787,38 @@ def dialog_regimen_docx():
 
 def worker_distribuir_base_archivo(file_source, is_upload_bytes, excel_bytes, sheet_name, col_folder, base_path):
     try:
+        # Check Native Mode
+        is_native = st.session_state.get("force_native_mode", True)
+        
         # 1. Read Excel
         if isinstance(excel_bytes, bytes):
             df = pd.read_excel(io.BytesIO(excel_bytes), sheet_name=sheet_name)
         else:
             df = pd.read_excel(excel_bytes, sheet_name=sheet_name)
         
-        count = 0
-        errors = 0
-        
         # Determine source file name and content
-        src_filename = "Archivo_Distribuido"
+        src_filename = "Archivo_Distribuido.dat"
         src_content = None
         
         if is_upload_bytes:
             # file_source is UploadedFile object or bytes
             if hasattr(file_source, "name"): src_filename = file_source.name
-            else: src_filename = "Archivo_Distribuido.dat"
-
+            
             if hasattr(file_source, "getvalue"): src_content = file_source.getvalue()
             else: src_content = file_source # assume bytes
         else:
-            # file_source is path string
+            # file_source is path string (server side)
             if os.path.exists(file_source):
                  src_filename = os.path.basename(file_source)
+                 with open(file_source, "rb") as f:
+                     src_content = f.read()
             else:
-                 return f"Error: Archivo origen no existe: {file_source}"
+                 return f"Error: Archivo origen no existe en servidor: {file_source}"
 
+        # Collect destinations
+        dest_paths = []
+        preview_dest = ""
+        
         for index, row in df.iterrows():
             folder_val = row[col_folder]
             if pd.isna(folder_val): continue
@@ -5825,23 +5830,67 @@ def worker_distribuir_base_archivo(file_source, is_upload_bytes, excel_bytes, sh
             if not folder_name: continue
 
             # Use helper to find folder path (supports search results)
+            # In Native Mode on AWS, this returns the constructed path string (G:/...) even if not exists locally
             dest_dir = find_folder_path(base_path, folder_name)
-            os.makedirs(dest_dir, exist_ok=True)
             
+            # Clean up potential double separators if base_path ends with /
+            # os.path.join handles it usually, but let's be safe
             dest_file = os.path.join(dest_dir, src_filename)
+            dest_paths.append(dest_file)
+            
+            if not preview_dest: preview_dest = dest_file
+
+        if not dest_paths:
+            return "No se encontraron carpetas destino válidas en el Excel."
+
+        # Execute Distribution
+        if is_native:
+            # Agent Mode
+            import agent_client
+            if not agent_client:
+                 return "Error: Módulo agent_client no disponible."
             
             try:
-                if is_upload_bytes:
+                username = st.session_state.get("username", "default")
+                
+                # Encode content
+                content_b64 = base64.b64encode(src_content).decode('utf-8')
+                
+                print(f"DEBUG: Enviando {len(dest_paths)} archivos al agente. Primer destino: {preview_dest}")
+                
+                task_id = agent_client.send_command(username, "distribute_files", {
+                    "content_b64": content_b64,
+                    "paths": dest_paths
+                })
+                
+                if task_id:
+                    return f"Tarea enviada al agente (ID: {task_id}). Archivos a copiar: {len(dest_paths)}. (Ejemplo destino: {preview_dest})"
+                else:
+                    return "Error: No se pudo enviar la tarea al agente."
+            except Exception as e:
+                return f"Error enviando al agente: {e}"
+        else:
+            # Server Local Mode
+            count = 0
+            errors = 0
+            
+            for dest_file in dest_paths:
+                try:
+                    dest_dir = os.path.dirname(dest_file)
+                    os.makedirs(dest_dir, exist_ok=True)
+                    
                     with open(dest_file, "wb") as f:
                         f.write(src_content)
-                else:
-                    shutil.copy2(file_source, dest_file)
-                count += 1
-            except Exception as e:
-                errors += 1
-                # print(f"Error copying to {dest_dir}: {e}")
-                
-        return f"Proceso completado. Archivos copiados: {count}. Errores: {errors}."
+                    count += 1
+                except Exception as e:
+                    errors += 1
+                    print(f"Error copying to {dest_file}: {e}")
+                    
+            msg = f"Proceso completado (Servidor). Archivos copiados: {count}. Errores: {errors}."
+            if count > 0:
+                 msg += f" (Ejemplo: {preview_dest})"
+            return msg
+
     except Exception as e:
         return f"Error crítico: {e}"
 
