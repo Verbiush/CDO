@@ -785,6 +785,51 @@ def process_distribute_files(content_b64, paths):
     print(f"DEBUG: Distribución finalizada. Éxitos: {count_distributed}, Errores: {len(errors)}")
     return {"count": count_distributed, "errors": errors}
 
+def process_download_files(tasks):
+    count_downloaded = 0
+    errors = []
+    
+    print(f"DEBUG: Descargando {len(tasks)} archivos")
+    
+    for task in tasks:
+        url = task.get("url")
+        dest_path = task.get("dest_path")
+        
+        if not url or not dest_path:
+            continue
+            
+        try:
+            # Create dest directory
+            dest_dir = os.path.dirname(dest_path)
+            if not os.path.exists(dest_dir):
+                os.makedirs(dest_dir, exist_ok=True)
+            
+            # Download
+            response = requests.get(url, stream=True, timeout=15)
+            if response.status_code == 200:
+                with open(dest_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192): 
+                        if chunk: 
+                            f.write(chunk)
+                count_downloaded += 1
+            else:
+                msg = f"Error descargando {url}: Status {response.status_code}"
+                print(f"ERROR: {msg}")
+                # Create a placeholder file?
+                try:
+                    with open(dest_path + ".error.txt", "w") as f:
+                        f.write(msg)
+                except: pass
+                errors.append(msg)
+                
+        except Exception as e:
+            msg = f"Error procesando {url}: {str(e)}"
+            print(f"ERROR: {msg}")
+            errors.append(msg)
+            
+    print(f"DEBUG: Descarga finalizada. Éxitos: {count_downloaded}, Errores: {len(errors)}")
+    return {"count": count_downloaded, "errors": errors}
+
 def process_flat_to_excel(path):
     # Stub implementation to prevent crashes
     return {"status": "error", "message": "Función flat_to_excel no implementada en el Agente Local aún."}
@@ -1355,6 +1400,17 @@ class AgentWorker:
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros (content_b64, paths)"}
+
+            elif command == "download_files":
+                tasks = params.get("tasks", [])
+                
+                if tasks:
+                    self.log(f"Descargando {len(tasks)} archivos")
+                    res = process_download_files(tasks)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (tasks)"}
 
             elif command == "validate_rips":
                 base_path = params.get("base_path")
