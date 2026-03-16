@@ -101,3 +101,8 @@ celerybeat.pid
 
 # Secrets
 contraseña base de datos.txt
+
+# Binaries and temp
+*.exe
+src/temp_sessions/
+temp_downloads/

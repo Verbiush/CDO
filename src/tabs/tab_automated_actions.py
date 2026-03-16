@@ -3223,16 +3223,100 @@ def worker_descargar_historias_hospitalizacion_ovida(uploaded_file, sheet_name, 
     except Exception as e: return {"error": f"Error Excel: {e}"}
     
     driver = None
+    
+    # --- NATIVE MODE CHECK ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    
     try:
         # Determine output directory
         is_temp = False
         if not save_path:
             is_temp = True
             save_path = os.path.join(os.getcwd(), "temp_downloads", f"ovida_{int(time.time())}")
-            os.makedirs(save_path, exist_ok=True)
-        elif not os.path.exists(save_path):
+            # En server mode creamos la carpeta. En native mode, el agente lo hará (o usaremos ruta temporal allá si se implementara)
+            if not is_native_mode:
+                os.makedirs(save_path, exist_ok=True)
+        elif not os.path.exists(save_path) and not is_native_mode:
              os.makedirs(save_path, exist_ok=True)
 
+        # --- AGENT EXECUTION ---
+        if is_native_mode:
+            try:
+                # Prepare records for agent
+                records = []
+                for _, row in df.iterrows():
+                    try:
+                        # Map columns
+                        estudio = str(int(row[col_map['estudio']])).strip() if col_map['estudio'] in row else ""
+                        
+                        ingreso = row[col_map['ingreso']] if col_map['ingreso'] in row else ""
+                        if isinstance(ingreso, pd.Timestamp):
+                            ingreso = ingreso.strftime('%Y/%m/%d')
+                        else:
+                             ingreso = str(ingreso)
+                             
+                        egreso = row[col_map['egreso']] if col_map['egreso'] in row else ""
+                        if isinstance(egreso, pd.Timestamp):
+                            egreso = egreso.strftime('%Y/%m/%d')
+                        else:
+                             egreso = str(egreso)
+                        
+                        carpeta = str(row[col_map['carpeta']]).strip() if col_map['carpeta'] in row else ""
+
+                        records.append({
+                            "nro_estudio": estudio,
+                            "fecha_ingreso": ingreso,
+                            "fecha_salida": egreso,
+                            "rel_path": carpeta
+                        })
+                    except Exception as row_err:
+                        print(f"Error procesando fila hospitalización para agente: {row_err}")
+                        continue
+
+                if not records:
+                    return {"error": "No se encontraron registros válidos."}
+
+                if not send_command:
+                     return {"error": "Error: Modo nativo activado pero cliente agente no disponible."}
+                
+                username = st.session_state.get("username", "admin")
+                
+                if not silent_mode:
+                    st.info(f"Enviando tarea al agente local (Hospitalización) para {len(records)} historias...")
+                    
+                # Reutilizamos el comando 'download_ovida' del agente que ya soporta esta estructura
+                # Nota: El agente usa una URL generica que puede servir para hospitalización si los parámetros coinciden.
+                # Revisando el agente, usa 'reporte_historia_general.php' con verHC=1, verEvo=1, etc.
+                # Esto parece ser lo estándar para 'Historia Completa'.
+                
+                task_id = send_command(username, "download_ovida", {
+                    "base_path": save_path,
+                    "records": records
+                })
+                
+                if task_id:
+                    status_placeholder = st.empty()
+                    if not silent_mode: status_placeholder.text("Esperando agente...")
+                    
+                    res = wait_for_result(task_id, timeout=600)
+                    
+                    if not silent_mode: status_placeholder.empty()
+
+                    if res and "status" in res:
+                        if res["status"] == "success":
+                             msg = res.get("message", "Finalizado correctamente")
+                             return {"message": f"{msg} (Agente)"}
+                        else:
+                             return {"error": f"Error del agente: {res.get('message', 'Desconocido')}"}
+                    else:
+                         return {"error": f"Error del agente: {res.get('error', 'Desconocido')}"}
+                else:
+                    return {"error": "No se pudo crear la tarea."}
+
+            except Exception as e:
+                return {"error": f"Excepción agente: {str(e)}"}
+
+        # --- SERVER EXECUTION ---
         options = webdriver.ChromeOptions()
         # Headless mode for server environment if possible, but OVIDA might require GUI for login
         # If running on server without display, we need headless.
@@ -4823,7 +4907,20 @@ def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col
         is_temp = True
         download_path = os.path.join(os.getcwd(), "temp_downloads", f"ovida_{int(time.time())}")
     
-    os.makedirs(download_path, exist_ok=True)
+    # --- NATIVE MODE CHECK ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    
+    if is_native_mode:
+        # En modo nativo, download_path debe ser una ruta válida en la máquina del cliente
+        # Si no se proveyó una ruta (is_temp=True), no podemos continuar en modo nativo 
+        # a menos que el agente maneje descargas temporales (que no es el caso usual).
+        # Asumiremos que si está en modo nativo, el usuario seleccionó una carpeta o se usará una por defecto.
+        if is_temp:
+             # Si no hay ruta seleccionada, intentar usar una por defecto en el cliente? 
+             # Mejor pedir que seleccionen carpeta.
+             pass 
+    else:
+        os.makedirs(download_path, exist_ok=True)
 
     try:
         if isinstance(uploaded_file, bytes):
@@ -4832,6 +4929,85 @@ def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col
     except Exception as e:
         return {"error": f"Error leyendo Excel: {e}"}
 
+    # --- AGENT EXECUTION ---
+    if is_native_mode:
+        try:
+            # Prepare records for agent
+            records = []
+            for _, row in df.iterrows():
+                try:
+                    # Extract values based on column mappings
+                    estudio = str(row[col_estudio]).strip() if col_estudio in row else ""
+                    ingreso = row[col_ingreso] if col_ingreso in row else ""
+                    egreso = row[col_egreso] if col_egreso in row else ""
+                    carpeta = str(row[col_carpeta]).strip() if col_carpeta in row else ""
+                    
+                    # Convert dates to string format expected by agent (YYYY/MM/DD) if they are datetime objects
+                    if isinstance(ingreso, pd.Timestamp):
+                        ingreso = ingreso.strftime('%Y/%m/%d')
+                    else:
+                         ingreso = str(ingreso)
+                         
+                    if isinstance(egreso, pd.Timestamp):
+                        egreso = egreso.strftime('%Y/%m/%d')
+                    else:
+                        egreso = str(egreso)
+
+                    records.append({
+                        "nro_estudio": estudio,
+                        "fecha_ingreso": ingreso,
+                        "fecha_salida": egreso,
+                        "rel_path": carpeta
+                    })
+                except Exception as row_err:
+                    print(f"Error procesando fila para agente: {row_err}")
+                    continue
+
+            if not records:
+                return {"error": "No se encontraron registros válidos para procesar."}
+
+            if not send_command:
+                 return {"error": "Error: Modo nativo activado pero el cliente del agente no está disponible."}
+            
+            username = st.session_state.get("username", "admin")
+            
+            if not silent_mode:
+                st.info(f"Enviando tarea al agente local para descargar {len(records)} historias...")
+                
+            task_id = send_command(username, "download_ovida", {
+                "base_path": download_path,
+                "records": records
+            })
+            
+            if task_id:
+                # Poll
+                status_placeholder = st.empty()
+                if not silent_mode:
+                    status_placeholder.text("Esperando agente (esto puede tomar varios minutos)...")
+                
+                # Timeout largo para descargas masivas
+                res = wait_for_result(task_id, timeout=600) 
+                
+                if not silent_mode: status_placeholder.empty()
+
+                if res and "status" in res:
+                    if res["status"] == "success":
+                         msg = res.get("message", "Finalizado correctamente")
+                         stats = res.get("stats", {})
+                         return {"message": f"{msg} (Agente)", "stats": stats}
+                    else:
+                         return {"error": f"Error del agente: {res.get('message', 'Desconocido')}"}
+                elif res and "error" in res: # Fallback for other error formats
+                     return {"error": f"Error del agente: {res.get('error')}"}
+                else:
+                    return {"error": "Tiempo de espera agotado o respuesta inválida del agente."}
+            else:
+                return {"error": "No se pudo crear la tarea en el servidor."}
+
+        except Exception as e:
+            return {"error": f"Excepción preparando tarea agente: {str(e)}"}
+
+    # --- SERVER SIDE EXECUTION (Legacy) ---
     driver = None
     try:
         options = webdriver.ChromeOptions()
