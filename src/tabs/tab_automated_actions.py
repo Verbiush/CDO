@@ -25,6 +25,15 @@ import base64
 import urllib.parse
 import xml.etree.ElementTree as ET
 
+try:
+    from agent_client import submit_task, get_task_result
+except ImportError:
+    try:
+        from src.agent_client import submit_task, get_task_result
+    except ImportError:
+        submit_task = None
+        get_task_result = None
+
 # --- CONDITIONAL IMPORTS FOR ANALYSIS WORKERS ---
 try:
     import pdfplumber
@@ -757,11 +766,15 @@ def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_fo
         
     try:
         is_temp = False
+        is_native_mode = st.session_state.get('force_native_mode', False)
+
         if not target_folder:
             is_temp = True
             target_folder = os.path.join(os.getcwd(), "temp_downloads", f"carpetas_{int(time.time())}")
             
-        os.makedirs(target_folder, exist_ok=True)
+        # Only create folder on server if NOT native mode or if it IS temp
+        if not is_native_mode or is_temp:
+            os.makedirs(target_folder, exist_ok=True)
 
         nombres_carpetas_raw = []
         if visible_only:
@@ -779,6 +792,54 @@ def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_fo
             
         if not nombres_carpetas_raw: return {"error": "No se encontraron nombres."}
         
+        # --- NATIVE AGENT EXECUTION ---
+        if is_native_mode and not is_temp:
+             if not submit_task:
+                 return {"error": "Error: Modo nativo activado pero el cliente del agente no está disponible."}
+                 
+             task_payload = {
+                 "command": "create_folders_from_list",
+                 "base_path": target_folder,
+                 "names": nombres_carpetas_raw,
+                 "unique": True
+             }
+             
+             if not silent_mode:
+                 st.info(f"Enviando tarea al agente local para crear {len(nombres_carpetas_raw)} carpetas...")
+                 
+             response = submit_task(task_payload)
+             if response.get("status") == "submitted":
+                 task_id = response.get("task_id")
+                 
+                 # Poll
+                 status_placeholder = st.empty()
+                 max_retries = 30
+                 for i in range(max_retries):
+                     if not silent_mode:
+                         status_placeholder.text(f"Esperando agente... ({i+1}/{max_retries})")
+                     
+                     res = get_task_result(task_id)
+                     if res.get("status") == "COMPLETED":
+                         result_data = res.get("result", {})
+                         count = result_data.get("count", 0)
+                         errors = result_data.get("errors", [])
+                         if not silent_mode: status_placeholder.empty()
+                         
+                         msg = f"Creadas: {count}"
+                         if errors:
+                             msg += f", Errores: {len(errors)}"
+                         return {"message": f"{msg} en {target_folder} (Agente)"}
+                         
+                     elif res.get("status") == "ERROR":
+                         if not silent_mode: status_placeholder.empty()
+                         return {"error": f"Error del agente: {res.get('error')}"}
+                         
+                     time.sleep(1)
+                 return {"error": "Tiempo de espera agotado esperando al agente."}
+             else:
+                 return {"error": f"Error enviando tarea: {response.get('message')}"}
+
+        # --- SERVER SIDE EXECUTION ---
         creadas, errores = 0, 0
         progress_bar = None
         if not silent_mode: progress_bar = st.progress(0, text="Creando carpetas...")
@@ -2128,7 +2189,10 @@ def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_fil
 
 def worker_crear_carpetas_excel_avanzado(uploaded_file, sheet_name, col_name, base_path, use_filter=False, silent_mode=False):
     try:
-        if not os.path.isdir(base_path):
+        # --- NATIVE MODE CHECK ---
+        is_native_mode = st.session_state.get('force_native_mode', False)
+
+        if not is_native_mode and not os.path.isdir(base_path):
             return "La ruta base seleccionada no es válida."
 
         if isinstance(uploaded_file, bytes):
@@ -2136,6 +2200,7 @@ def worker_crear_carpetas_excel_avanzado(uploaded_file, sheet_name, col_name, ba
         if hasattr(uploaded_file, 'seek'):
             uploaded_file.seek(0)
             
+        nombres_carpetas = []
         if use_filter:
             wb = openpyxl.load_workbook(uploaded_file, data_only=True)
             if sheet_name not in wb.sheetnames:
@@ -2145,58 +2210,114 @@ def worker_crear_carpetas_excel_avanzado(uploaded_file, sheet_name, col_name, ba
             # Find column index (1-based)
             header_row = next(ws.iter_rows(min_row=1, max_row=1, values_only=True))
             col_idx = -1
-            for idx, val in enumerate(header_row):
-                if str(val).strip() == col_name:
-                    col_idx = idx + 1
-                    break
+            if header_row:
+                for idx, val in enumerate(header_row):
+                    if str(val).strip() == col_name:
+                        col_idx = idx + 1
+                        break
             
             if col_idx == -1:
                 return f"No se encontró la columna '{col_name}' en la primera fila."
                 
-            nombres_carpetas = []
             for row in ws.iter_rows(min_row=2):
                 if not ws.row_dimensions[row[0].row].hidden:
-                    val = row[col_idx-1].value
-                    if val: nombres_carpetas.append(str(val))
+                    # Ensure row has enough columns
+                    if col_idx - 1 < len(row):
+                        val = row[col_idx-1].value
+                        if val: nombres_carpetas.append(str(val))
         else:
             df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
             if col_name not in df.columns:
                 return f"No se encontró la columna '{col_name}' en el Excel."
             nombres_carpetas = df[col_name].dropna().astype(str).tolist()
 
-        creadas = 0
-        errores = 0
-        
-        progress_bar = None
-        if not silent_mode:
-            progress_bar = st.progress(0, text="Creando carpetas...")
-            
-        for i, nombre in enumerate(nombres_carpetas):
-            if not silent_mode:
-                progress_bar.progress((i + 1) / len(nombres_carpetas), text=f"Procesando: {nombre}")
+        if not nombres_carpetas:
+            return "No se encontraron nombres de carpetas para crear."
+
+        # --- EXECUTION ---
+        if is_native_mode:
+            if not submit_task:
+                return "Error: Modo nativo activado pero el cliente del agente no está disponible."
                 
-            nombre_base = "".join(c for c in nombre if c.isalnum() or c in " _-").rstrip()
-            if not nombre_base: continue
+            task_payload = {
+                "command": "create_folders_from_list",
+                "base_path": base_path,
+                "names": nombres_carpetas,
+                "unique": True
+            }
             
-            ruta_final = os.path.join(base_path, nombre_base)
+            if not silent_mode:
+                st.info(f"Enviando tarea al agente local para crear {len(nombres_carpetas)} carpetas...")
+                
+            response = submit_task(task_payload)
+            if response.get("status") == "submitted":
+                task_id = response.get("task_id")
+                # Poll for result
+                status_placeholder = st.empty()
+                max_retries = 30
+                for i in range(max_retries):
+                    if not silent_mode:
+                        status_placeholder.text(f"Esperando agente... ({i+1}/{max_retries})")
+                    
+                    res = get_task_result(task_id)
+                    if res.get("status") == "COMPLETED":
+                        result_data = res.get("result", {})
+                        count = result_data.get("count", 0)
+                        errors = result_data.get("errors", [])
+                        if not silent_mode: status_placeholder.empty()
+                        
+                        msg = f"Proceso finalizado (Agente). Carpetas creadas: {count}"
+                        if errors:
+                            msg += f", Errores: {len(errors)}"
+                            if not silent_mode:
+                                st.error(f"Errores del agente: {'; '.join(errors[:5])}...")
+                        return msg
+                        
+                    elif res.get("status") == "ERROR":
+                        if not silent_mode: status_placeholder.empty()
+                        return f"Error del agente: {res.get('error')}"
+                        
+                    time.sleep(1)
+                
+                return "Tiempo de espera agotado esperando al agente."
+            else:
+                return f"Error enviando tarea: {response.get('message')}"
+
+        else:
+            # Server-side execution
+            creadas = 0
+            errores = 0
             
-            if os.path.exists(ruta_final):
-                contador = 2
-                nombre_consecutivo = f"{nombre_base} ({contador})"
-                ruta_final = os.path.join(base_path, nombre_consecutivo)
-                while os.path.exists(ruta_final):
-                    contador += 1
+            progress_bar = None
+            if not silent_mode:
+                progress_bar = st.progress(0, text="Creando carpetas...")
+                
+            for i, nombre in enumerate(nombres_carpetas):
+                if not silent_mode:
+                    progress_bar.progress((i + 1) / len(nombres_carpetas), text=f"Procesando: {nombre}")
+                    
+                nombre_base = "".join(c for c in nombre if c.isalnum() or c in " _-").rstrip()
+                if not nombre_base: continue
+                
+                ruta_final = os.path.join(base_path, nombre_base)
+                
+                if os.path.exists(ruta_final):
+                    contador = 2
                     nombre_consecutivo = f"{nombre_base} ({contador})"
                     ruta_final = os.path.join(base_path, nombre_consecutivo)
-            
-            try:
-                os.makedirs(ruta_final, exist_ok=True)
-                creadas += 1
-            except Exception:
-                errores += 1
+                    while os.path.exists(ruta_final):
+                        contador += 1
+                        nombre_consecutivo = f"{nombre_base} ({contador})"
+                        ruta_final = os.path.join(base_path, nombre_consecutivo)
                 
-        if not silent_mode: progress_bar.empty()
-        return f"Proceso finalizado. Carpetas creadas: {creadas}, Errores: {errores}"
+                try:
+                    os.makedirs(ruta_final, exist_ok=True)
+                    creadas += 1
+                except Exception:
+                    errores += 1
+                    
+            if not silent_mode: progress_bar.empty()
+            return f"Proceso finalizado. Carpetas creadas: {creadas}, Errores: {errores}"
         
     except Exception as e:
         return f"Error crítico: {e}"

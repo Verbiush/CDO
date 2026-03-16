@@ -530,6 +530,40 @@ def process_create_folders(folders):
             
     return {"count": count_created, "errors": errors}
 
+def process_create_folders_from_list(base_path, names, unique=False):
+    count_created = 0
+    errors = []
+    
+    # En Windows, os.path.exists puede fallar para unidades de red si no están mapeadas igual, 
+    # pero asumimos que el Agente corre en el contexto del usuario.
+    if not os.path.exists(base_path):
+        # Intentar crear la base si no existe? No, mejor reportar error.
+        return {"count": 0, "errors": [f"Ruta base no existe: {base_path}"]}
+        
+    for name in names:
+        try:
+            # Sanitizar nombre (misma lógica que en el servidor)
+            nombre_base = "".join(c for c in name if c.isalnum() or c in " _-").rstrip()
+            if not nombre_base: continue
+            
+            ruta_final = os.path.join(base_path, nombre_base)
+            
+            if unique and os.path.exists(ruta_final):
+                contador = 2
+                nombre_consecutivo = f"{nombre_base} ({contador})"
+                ruta_final = os.path.join(base_path, nombre_consecutivo)
+                while os.path.exists(ruta_final):
+                    contador += 1
+                    nombre_consecutivo = f"{nombre_base} ({contador})"
+                    ruta_final = os.path.join(base_path, nombre_consecutivo)
+            
+            os.makedirs(ruta_final, exist_ok=True)
+            count_created += 1
+        except Exception as e:
+            errors.append(f"Error creando {name}: {str(e)}")
+            
+    return {"count": count_created, "errors": errors}
+
 def process_search_files(path, patterns, exclusion_list=None, search_by="name", item_type="both", recursive=True, search_empty_folders=False):
     print(f"DEBUG: Iniciando búsqueda en: '{path}'")
     logging.info(f"Iniciando búsqueda en: '{path}'")
@@ -1541,6 +1575,19 @@ class AgentWorker:
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros (path o records)"}
+
+            elif command == "create_folders_from_list":
+                base_path = params.get("base_path")
+                names = params.get("names", [])
+                unique = params.get("unique", False)
+                
+                if base_path and names:
+                    self.log(f"Creando {len(names)} carpetas en: {base_path}")
+                    res = process_create_folders_from_list(base_path, names, unique)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (base_path o names)"}
 
             else:
                 result["status"] = "ERROR"
