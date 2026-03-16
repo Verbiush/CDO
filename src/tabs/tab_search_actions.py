@@ -460,9 +460,24 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
                     # log(f"Error renombrando {filename}: {e}")
 
     # Procesar Lote Nativo (Agente)
-    if is_native and batch_renames and agent_client:
+    if is_native:
+        if not agent_client:
+            if not silent_mode: st.error("Error: Módulo agent_client no cargado.")
+            return "Error: Agente no disponible"
+            
+        if not batch_renames:
+            if not silent_mode: st.warning("No se generaron cambios para procesar (nombres idénticos o rutas vacías).")
+            # DEBUG
+            if not silent_mode and results:
+                 st.write(f"DEBUG: Primer item old: {results[0].get('Ruta completa')}")
+            return "No hay cambios pendientes."
+
         try:
             username = st.session_state.get("username", "default")
+            
+            if not silent_mode:
+                st.info(f"Enviando {len(batch_renames)} archivos al agente para renombrar...")
+            
             task_id = agent_client.send_command(username, "rename_files", {
                 "files": [{"old_path": r["old_path"], "new_path": r["new_path"]} for r in batch_renames]
             })
