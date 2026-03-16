@@ -5481,6 +5481,8 @@ def worker_crear_firma_nombre(root_path, ttf_path, size, humanize=False, silent_
     return msg
 
 def worker_crear_firma_excel(root_path, ttf_path, size, excel_file, sheet_name, col_folder, col_full_name, humanize=False, silent_mode=False):
+    is_native = st.session_state.get("force_native_mode", True)
+    
     try:
         from PIL import ImageDraw, ImageFont
         font = ImageFont.truetype(ttf_path, int(size))
@@ -5505,6 +5507,9 @@ def worker_crear_firma_excel(root_path, ttf_path, size, excel_file, sheet_name, 
         progress_bar = st.progress(0, text="Generando firmas desde Excel...")
     total = len(df)
     
+    # Store files for agent (Native Mode)
+    agent_files = []
+    
     for idx, row in df.iterrows():
         if not silent_mode and idx % 5 == 0: progress_bar.progress(min(idx/total, 1.0))
         
@@ -5513,7 +5518,9 @@ def worker_crear_firma_excel(root_path, ttf_path, size, excel_file, sheet_name, 
         
         # Construir ruta objetivo
         target_dir = find_folder_path(root_path, folder_name)
-        if not os.path.exists(target_dir):
+        
+        # Validar existencia solo si NO estamos en modo nativo (servidor local)
+        if not is_native and not os.path.exists(target_dir):
             continue
             
         # Extraer nombre completo
@@ -5571,19 +5578,54 @@ def worker_crear_firma_excel(root_path, ttf_path, size, excel_file, sheet_name, 
             bg.paste(final_img, (offset_x, offset_y))
             
             # Guardar
-            tipografia_dir = os.path.join(target_dir, "tipografia")
-            if not os.path.exists(tipografia_dir):
-                os.makedirs(tipografia_dir)
+            if is_native:
+                # Convertir a base64 y agregar a lista para agente
+                buf = io.BytesIO()
+                bg.save(buf, format="JPEG")
+                img_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
                 
-            bg.save(os.path.join(tipografia_dir, "firma.jpg"))
-            
-            # Guardar también en la carpeta raíz (Requerimiento Usuario)
-            bg.save(os.path.join(target_dir, "firma.jpg"))
-            count += 1
+                # Rutas destino (tipografía y raíz)
+                path_tipografia = os.path.join(target_dir, "tipografia", "firma.jpg")
+                path_raiz = os.path.join(target_dir, "firma.jpg")
+                
+                agent_files.append({"path": path_tipografia, "content_b64": img_b64})
+                agent_files.append({"path": path_raiz, "content_b64": img_b64})
+                count += 1
+            else:
+                # Guardar localmente (Servidor)
+                tipografia_dir = os.path.join(target_dir, "tipografia")
+                if not os.path.exists(tipografia_dir):
+                    os.makedirs(tipografia_dir)
+                    
+                bg.save(os.path.join(tipografia_dir, "firma.jpg"))
+                
+                # Guardar también en la carpeta raíz (Requerimiento Usuario)
+                bg.save(os.path.join(target_dir, "firma.jpg"))
+                count += 1
+
         except Exception as e:
             if not silent_mode: st.warning(f"Error generando firma para {folder_name}: {e}")
 
-    msg = f"Generadas {count} firmas desde Excel."
+    # Enviar al agente si es necesario
+    if is_native and agent_files:
+        import agent_client
+        if not agent_client:
+             return "Error: Módulo agent_client no disponible."
+        
+        username = st.session_state.get("username", "default")
+        print(f"DEBUG: Enviando {len(agent_files)} archivos de firma al agente.")
+        
+        task_id = agent_client.send_command(username, "write_files", {
+            "files": agent_files
+        })
+        
+        if task_id:
+            msg = f"Tarea de creación de firmas enviada al agente (ID: {task_id}). Archivos a crear: {len(agent_files)}."
+        else:
+            msg = "Error enviando tarea al agente."
+    else:
+        msg = f"Generadas {count} firmas desde Excel."
+
     if not silent_mode:
         progress_bar.progress(1.0, text="Finalizado.")
         st.success(msg)
@@ -5644,7 +5686,7 @@ def dialog_crear_firma():
                     with st.spinner("Generando firmas..."):
                         result = worker_crear_firma_nombre(current_path, font_path, size, humanize)
                         st.success(result)
-                        render_download_button(current_path, "dl_firma_folder", "📦 Descargar Firmas (ZIP)")
+                        # render_download_button(current_path, "dl_firma_folder", "📦 Descargar Firmas (ZIP)")
                 except Exception as e:
                     st.error(f"Error: {e}")
             else:
@@ -5676,7 +5718,7 @@ def dialog_crear_firma():
                             with st.spinner("Generando firmas..."):
                                 result = worker_crear_firma_excel(current_path, font_path, size, file_bytes, sheet, col_folder, col_full_name, humanize)
                                 st.success(result)
-                                render_download_button(current_path, "dl_firma_excel", "📦 Descargar Resultados (ZIP)")
+                                # render_download_button(current_path, "dl_firma_excel", "📦 Descargar Resultados (ZIP)")
                             time.sleep(2)
                             # st.rerun()
                         except Exception as e:
