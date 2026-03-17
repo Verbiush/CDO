@@ -543,12 +543,13 @@ def render(container=None):
                                 
                                 if os.path.exists(target_file_path):
                                     # Use standardized download button with cleanup
-                                    render_download_button(
-                                        target_file_path, 
-                                        f"dl_ind_file_{int(time.time())}", 
-                                        f"📥 Descargar {out_file_name}", 
-                                        cleanup=not is_native
-                                    )
+#                                     render_download_button(
+#                                         target_file_path, 
+#                                         f"dl_ind_file_{int(time.time())}", 
+#                                         f"📥 Descargar {out_file_name}", 
+#                                         cleanup=not is_native
+#                                     )
+                                    pass
                             
                             elif conv_type_code == "PDF2JPG":
                                 # Find generated JPGs
@@ -568,12 +569,13 @@ def render(container=None):
                                             for jpg in jpgs:
                                                 zf.write(jpg, os.path.basename(jpg))
                                         
-                                        render_download_button(
-                                            zip_path, 
-                                            "dl_ind_jpgs", 
-                                            "📦 Descargar Imágenes (ZIP)", 
-                                            cleanup=not is_native
-                                        )
+#                                         render_download_button(
+#                                             zip_path, 
+#                                             "dl_ind_jpgs", 
+#                                             "📦 Descargar Imágenes (ZIP)", 
+#                                             cleanup=not is_native
+#                                         )
+                                        pass
                                         
                                         # Cleanup temp output folder containing raw JPGs
                                         if not is_native and "temp_downloads" in actual_output_folder:
@@ -642,7 +644,7 @@ def render(container=None):
                     count, msg = worker_convertir_masivo(source_path, conv_type_mass, output_folder=out_path, sep=sep_mass)
                     if count > 0:
                         st.success(msg)
-                        render_download_button(out_path, "dl_mass_conv", "📦 Descargar Archivos Convertidos (ZIP)", cleanup=not is_native)
+#                         render_download_button(out_path, "dl_mass_conv", "📦 Descargar Archivos Convertidos (ZIP)", cleanup=not is_native)
                     else:
                         st.warning(msg)
                 else:

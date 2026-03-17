@@ -822,7 +822,7 @@ def render():
         if "last_created_folders_path" in st.session_state and st.session_state.last_created_folders_path:
              if os.path.exists(st.session_state.last_created_folders_path):
                  st.info(f"📂 Última creación: {st.session_state.get('last_created_folders_count', 0)} carpetas listas para descargar.")
-                 render_download_button(st.session_state.last_created_folders_path, "dl_struct", "📦 Descargar Estructura (ZIP)", cleanup=not is_native)
+#                  render_download_button(st.session_state.last_created_folders_path, "dl_struct", "📦 Descargar Estructura (ZIP)", cleanup=not is_native)
              else:
                  if "last_created_folders_path" in st.session_state:
                      del st.session_state.last_created_folders_path
@@ -1008,7 +1008,7 @@ def render():
                                 progress_bar.progress((i + 1) / len(dirs))
                                 
                             st.success(f"Carpetas Renombradas: {count_ren}. Errores/Omis: {errors_ren}")
-                            render_download_button(source_path, "dl_ren", "📦 Descargar Carpetas Renombradas (ZIP)", cleanup=not is_native)
+#                             render_download_button(source_path, "dl_ren", "📦 Descargar Carpetas Renombradas (ZIP)", cleanup=not is_native)
                         except Exception as e:
                             st.error(f"Error accediendo a la carpeta: {e}")
 
@@ -1235,7 +1235,7 @@ def render():
                             progress_bar.progress((i + 1) / total_records)
                         
                         st.success(f"Items Renombrados: {count_suf}. Errores: {errors_suf}")
-                        render_download_button(source_path, "dl_suf", "📦 Descargar Archivos con Sufijo (ZIP)", cleanup=not is_native)
+#                         render_download_button(source_path, "dl_suf", "📦 Descargar Archivos con Sufijo (ZIP)", cleanup=not is_native)
                     except Exception as e:
                          st.error(f"Error general: {e}")
 
@@ -1564,4 +1564,5 @@ def render():
         with col_act4:
             st.write(" ") # Spacer
             if os.path.exists(base_path_content):
-                 render_download_button(base_path_content, "dl_content_final", "📦 Descargar Todo (ZIP)", cleanup=False)
+#                  render_download_button(base_path_content, "dl_content_final", "📦 Descargar Todo (ZIP)", cleanup=False)
+                pass

@@ -3136,6 +3136,36 @@ class OrganizadorArchivosApp:
                 # Otras letras: líneas fluidas
                 self._dibujar_trazo_generico(draw, x_base, y_centro, ascii_val, colores)
         
+        # Añadir algunos detalles decorativos adicionales
+        # Pequeñas líneas adicionales
+        for _ in range(random.randint(1, 3)):
+            x_rand = random.randint(20, width - 20)
+            y_rand = random.randint(height // 3, 2 * height // 3)
+            longitud = random.randint(10, 25)
+            angulo = random.uniform(-0.5, 0.5)
+            
+            x_fin = x_rand + int(longitud * math.cos(angulo))
+            y_fin = y_rand + int(longitud * math.sin(angulo))
+            
+            draw.line([(x_rand, y_rand), (x_fin, y_fin)], fill=random.choice(colores), width=random.randint(1, 2))
+        
+        # Añadir un toque final con una línea más prominente
+        y_linea_principal = height // 2 + random.randint(-10, 10)
+        x_inicio_principal = random.randint(25, 45)
+        x_fin_principal = width - random.randint(25, 45)
+        
+        # Crear la línea principal más larga
+        puntos_principales = []
+        for x in range(x_inicio_principal, x_fin_principal, 3):
+            onda = math.sin((x - x_inicio_principal) * 0.08) * 8
+            y = y_linea_principal + onda + random.randint(-2, 2)
+            puntos_principales.append((x, y))
+        
+        # Dibujar línea principal
+        if len(puntos_principales) > 1:
+            for i in range(len(puntos_principales) - 1):
+                draw.line([puntos_principales[i], puntos_principales[i + 1]], fill='black', width=3)
+        
         return image
     
     def _dibujar_trazo_vocal(self, draw, x_base, y_centro, ascii_val, colores):
@@ -3196,38 +3226,6 @@ class OrganizadorArchivosApp:
             punto_x = random.randint(x_base, x_base + 40)
             punto_y = y_centro + random.randint(-5, 5)
             draw.ellipse([punto_x - 1, punto_y - 1, punto_x + 1, punto_y + 1], fill=color)
-        
-        # Añadir algunos detalles decorativos adicionales
-        # Pequeñas líneas adicionales
-        for _ in range(random.randint(1, 3)):
-            x_rand = random.randint(20, width - 20)
-            y_rand = random.randint(height // 3, 2 * height // 3)
-            longitud = random.randint(10, 25)
-            angulo = random.uniform(-0.5, 0.5)
-            
-            x_fin = x_rand + int(longitud * math.cos(angulo))
-            y_fin = y_rand + int(longitud * math.sin(angulo))
-            
-            draw.line([(x_rand, y_rand), (x_fin, y_fin)], fill=random.choice(colores), width=random.randint(1, 2))
-        
-        # Añadir un toque final con una línea más prominente
-        y_linea_principal = height // 2 + random.randint(-10, 10)
-        x_inicio_principal = random.randint(25, 45)
-        x_fin_principal = width - random.randint(25, 45)
-        
-        # Crear la línea principal más larga
-        puntos_principales = []
-        for x in range(x_inicio_principal, x_fin_principal, 3):
-            onda = math.sin((x - x_inicio_principal) * 0.08) * 8
-            y = y_linea_principal + onda + random.randint(-2, 2)
-            puntos_principales.append((x, y))
-        
-        # Dibujar línea principal
-        if len(puntos_principales) > 1:
-            for i in range(len(puntos_principales) - 1):
-                draw.line([puntos_principales[i], puntos_principales[i + 1]], fill='black', width=3)
-        
-        return image
     
     def accion_crear_firma_digital(self):
         base_path = filedialog.askdirectory(

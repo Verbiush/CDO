@@ -1,4 +1,7 @@
 
+import json
+import os
+
 SESSION_FILE = "bot_session.json"
 
 def guardar_sesion():

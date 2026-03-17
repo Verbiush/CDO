@@ -44,10 +44,14 @@ logging.basicConfig(
 # Try to import docx, but don't fail if not present
 try:
     from docx import Document
+    from docx.shared import Inches
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.text.paragraph import Paragraph
     from docx.oxml.ns import qn
 except ImportError:
     Document = None
+    Inches = None
+    WD_ALIGN_PARAGRAPH = None
     Paragraph = None
     qn = None
 
@@ -346,6 +350,63 @@ def iter_all_paragraphs(doc_obj):
                     for p_element in txbx.iter(qn('w:p')):
                         yield Paragraph(p_element, footer)
 
+def process_fill_docx_ovida_full(base_path, tasks):
+    count_success = 0
+    errors = []
+    
+    if Document is None:
+        return {"count": 0, "errors": ["Librería python-docx no instalada en Agente"]}
+
+    for i, task in enumerate(tasks):
+        rel_path = task.get("rel_path")
+        datos = task.get("datos", {})
+        
+        if not rel_path:
+            errors.append(f"Task {i}: Falta ruta relativa")
+            continue
+            
+        full_path = os.path.join(base_path, rel_path)
+        
+        try:
+            target_docx = next((os.path.join(full_path, f) for f in os.listdir(full_path) if f.lower().endswith('.docx') and 'plantilla' in f.lower()), None)
+            if not target_docx:
+                errors.append(f"No se encontró plantilla en: {full_path}")
+                continue
+            
+            doc = Document(target_docx)
+            for p in doc.paragraphs:
+                if "Santiago de Cali, " in p.text: 
+                    p.text = f"Santiago de Cali,  {datos.get('date', '')}"
+                
+                if "Yo " in p.text and "identificado con" in p.text:
+                    p.text = f"Yo {datos.get('full_name', '')} identificado con {datos.get('doc_type', '')}, Numero {datos.get('doc_num', '')} en calidad de paciente, doy fé y acepto el servicio de {datos.get('service', '')} brindado por la IPS OPORTUNIDAD DE VIDA S.A.S"
+                
+                replacements = {
+                    "EPS:": datos.get('eps', ''), "TIPO SERVICIO:": datos.get('tipo_servicio', ''),
+                    "REGIMEN:": datos.get('regimen', ''), "CATEGORIA:": datos.get('categoria', ''),
+                    "VALOR CUOTA MODERADORA:": datos.get('cuota', ''), "AUTORIZACION:": datos.get('auth', ''),
+                    "Fecha de Atención:": datos.get('fecha_atencion', ''), "Fecha de Finalización:": datos.get('fecha_fin', '')
+                }
+                for key, val in replacements.items():
+                    if key in p.text:
+                        p.text = re.sub(rf'({key})\s*.*', r'\1 ' + val, p.text, count=1)
+            
+            sig_idx = -1
+            for idx, p in enumerate(doc.paragraphs):
+                if "FIRMA DE ACEPTACION" in p.text.upper():
+                    sig_idx = idx
+                    break
+            if sig_idx != -1 and sig_idx + 2 < len(doc.paragraphs):
+                doc.paragraphs[sig_idx + 2].text = datos.get('full_name', '').upper()
+            
+            doc.save(target_docx)
+            count_success += 1
+                
+        except Exception as e:
+            errors.append(f"Error procesando {rel_path}: {str(e)}")
+            
+    return {"count": count_success, "errors": errors}
+
 def process_fill_docx(base_path, tasks, template_b64=None):
     count_success = 0
     errors = []
@@ -387,6 +448,12 @@ def process_fill_docx(base_path, tasks, template_b64=None):
             # 3. Fallback to local files
             else:
                 local_candidates = [f for f in os.listdir(full_path) if f.lower().endswith(".docx") and not f.startswith("~")]
+                file_pattern = task.get("file_pattern")
+                if file_pattern:
+                    import re
+                    pattern = re.compile(file_pattern, re.IGNORECASE)
+                    local_candidates = [f for f in local_candidates if pattern.match(f)]
+                
                 if local_candidates:
                     if "plantilla.docx" in local_candidates:
                         doc_path = os.path.join(full_path, "plantilla.docx")
@@ -429,6 +496,63 @@ def process_fill_docx(base_path, tasks, template_b64=None):
             errors.append(f"Error procesando {rel_path}: {str(e)}")
             
     return {"count": count_success, "errors": errors}
+
+def process_sign_docx_massive(base_path, docx_filename, signature_filename):
+    if Document is None:
+        return {"count": 0, "errors": ["Librería python-docx no instalada en el agente local."]}
+
+    folders_to_process = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
+    if not folders_to_process: 
+        return {"count": 0, "errors": ["No se encontraron carpetas para procesar."]}
+    
+    procesados = 0
+    errores = []
+    
+    for folder_name in folders_to_process:
+        folder_path = os.path.join(base_path, folder_name)
+        docx_path = os.path.join(folder_path, docx_filename)
+        
+        signature_path = None
+        possible_sig_paths = [
+            os.path.join(folder_path, signature_filename),
+            os.path.join(folder_path, "tipografia", signature_filename)
+        ]
+        for path in possible_sig_paths:
+            if os.path.exists(path):
+                signature_path = path
+                break
+        
+        if not os.path.exists(docx_path) or not signature_path:
+            errores.append(f"Archivos no encontrados en {folder_name}")
+            continue
+            
+        try:
+            doc = Document(docx_path)
+            anchor_text = "Firma de Aceptacion"
+            signature_p_index = -1
+
+            for idx, p in enumerate(doc.paragraphs):
+                if anchor_text.lower() in p.text.lower():
+                    target_index = idx + 1
+                    if target_index < len(doc.paragraphs):
+                        signature_p_index = target_index
+                    break
+            
+            if signature_p_index != -1:
+                signature_p = doc.paragraphs[signature_p_index]
+                p_element = signature_p._p
+                p_element.clear_content()
+                run = signature_p.add_run()
+                run.add_picture(signature_path, width=Inches(1.5))
+                signature_p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                doc.save(docx_path)
+                procesados += 1
+            else:
+                errores.append(f"No se encontró 'Firma de Aceptacion' en {folder_name}")
+        except Exception as e:
+            errores.append(f"Error procesando {folder_name}: {str(e)}")
+            
+    return {"count": procesados, "errors": errores}
 
 def process_rename_folders_mapped(path, mapping):
     count_renamed = 0
@@ -1387,6 +1511,31 @@ class AgentWorker:
                 else:
                     self.log(f"Iniciando llenado de DOCX en: {base_path} ({len(tasks)} tareas)")
                     res = process_fill_docx(base_path, tasks, template_b64)
+                    result["result"] = res
+
+            elif command == "fill_docx_ovida_full":
+                base_path = params.get("base_path")
+                tasks = params.get("tasks", [])
+                
+                if not base_path or not os.path.exists(base_path):
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Ruta base inválida o no encontrada"}
+                else:
+                    self.log(f"Iniciando llenado de DOCX OVIDA en: {base_path} ({len(tasks)} tareas)")
+                    res = process_fill_docx_ovida_full(base_path, tasks)
+                    result["result"] = res
+
+            elif command == "sign_docx_massive":
+                base_path = params.get("base_path")
+                docx_filename = params.get("docx_filename")
+                signature_filename = params.get("signature_filename")
+                
+                if not base_path or not os.path.exists(base_path):
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Ruta base inválida o no encontrada"}
+                else:
+                    self.log(f"Iniciando firma de DOCX masiva en: {base_path}")
+                    res = process_sign_docx_massive(base_path, docx_filename, signature_filename)
                     result["result"] = res
 
             elif command == "distribute_file":

@@ -900,12 +900,13 @@ def render(container=None):
                                         with open(out_file, "wb") as f:
                                             f.write(excel_data.getvalue())
                                             
-                                        render_download_button(
-                                            folder_path=out_file,
-                                            key="dl_rips_flat_consolidado",
-                                            label="📥 Descargar Excel Consolidado",
-                                            cleanup=not is_native
-                                        )
+#                                         render_download_button(
+#                                             folder_path=out_file,
+#                                             key="dl_rips_flat_consolidado",
+#                                             label="📥 Descargar Excel Consolidado",
+#                                             cleanup=not is_native
+#                                         )
+                                        pass
                                     else:
                                         st.error(error_msg)
                             except Exception as e:
@@ -935,7 +936,7 @@ def render(container=None):
                         with open(out_file, "wb") as f:
                             f.write(xlsx_data)
                             
-                        render_download_button(out_file, f"dl_json_xlsx_{int(time.time())}", "📥 Descargar Excel", cleanup=not is_native)
+#                         render_download_button(out_file, f"dl_json_xlsx_{int(time.time())}", "📥 Descargar Excel", cleanup=not is_native)
                     else:
                         st.error(f"Error: {err}")
 
@@ -968,7 +969,7 @@ def render(container=None):
                                     with open(out_file, "w", encoding="utf-8") as f:
                                         f.write(json_data)
                                         
-                                    render_download_button(out_file, f"dl_xlsx_json_{int(time.time())}", "📥 Descargar JSON", cleanup=not is_native)
+#                                     render_download_button(out_file, f"dl_xlsx_json_{int(time.time())}", "📥 Descargar JSON", cleanup=not is_native)
                                 else:
                                     st.error(f"Error: {err}")
                     else:
@@ -993,7 +994,7 @@ def render(container=None):
                             with open(out_file, "wb") as f:
                                 f.write(xlsx_data)
                                 
-                            render_download_button(out_file, f"dl_consol_xlsx_{int(time.time())}", "📥 Descargar Consolidado", cleanup=not is_native)
+#                             render_download_button(out_file, f"dl_consol_xlsx_{int(time.time())}", "📥 Descargar Consolidado", cleanup=not is_native)
                         else:
                             st.error(msg)
                     else:
@@ -1045,7 +1046,7 @@ def render(container=None):
                             if ok: 
                                 st.success(msg)
                                 # Generate ZIP from the directory
-                                render_download_button(path_desconsol, "dl_desconsol", "📦 Descargar JSONs Generados (ZIP)", cleanup=not is_native)
+#                                 render_download_button(path_desconsol, "dl_desconsol", "📦 Descargar JSONs Generados (ZIP)", cleanup=not is_native)
                             else: 
                                 st.error(msg)
                         else:
@@ -1066,7 +1067,8 @@ def render(container=None):
                     st.success(f"Proceso finalizado. Archivos modificados: {count}. Total cambios: {changes}.")
                     
                     if count > 0:
-                        render_download_button(path_cups, "dl_cups_mass", "📦 Descargar JSONs Actualizados (ZIP)", cleanup=not is_native)
+#                         render_download_button(path_cups, "dl_cups_mass", "📦 Descargar JSONs Actualizados (ZIP)", cleanup=not is_native)
+                        pass
                         
                     if errors:
                         st.error(f"Errores en {len(errors)} archivos.")
@@ -1092,7 +1094,8 @@ def render(container=None):
                     st.success(f"Proceso finalizado. Archivos modificados: {count}. Total cambios: {changes}.")
                     
                     if count > 0:
-                        render_download_button(path_notes, "dl_notes_mass", "📦 Descargar JSONs Actualizados (ZIP)", cleanup=not is_native)
+#                         render_download_button(path_notes, "dl_notes_mass", "📦 Descargar JSONs Actualizados (ZIP)", cleanup=not is_native)
+                        pass
                         
                     if errors:
                         st.error(f"Errores en {len(errors)} archivos.")
@@ -1111,7 +1114,8 @@ def render(container=None):
                     st.success(f"Proceso finalizado. {count} archivos limpiados.")
                     
                     if count > 0:
-                        render_download_button(path_clean, "dl_clean_json", "📦 Descargar JSONs Limpios (ZIP)", cleanup=not is_native)
+#                         render_download_button(path_clean, "dl_clean_json", "📦 Descargar JSONs Limpios (ZIP)", cleanup=not is_native)
+                        pass
                         
                     if errs:
                         st.error(f"Errores en {len(errs)} archivos.")
@@ -1191,11 +1195,12 @@ def render(container=None):
                             st.success(f"Se realizaron {count_changes} cambios en el archivo.")
                             
                             # Usar render_download_button
-                            render_download_button(
-                                folder_path=temp_dir,
-                                key=f"dl_json_update_{f_json.name}",
-                                label="📥 Descargar JSON Actualizado"
-                            )
+#                             render_download_button(
+#                                 folder_path=temp_dir,
+#                                 key=f"dl_json_update_{f_json.name}",
+#                                 label="📥 Descargar JSON Actualizado"
+#                             )
+                            pass
                         else:
                             st.warning("⚠️ No se encontró el campo 'finalidadTecnologiaSalud' en el archivo.")
                     except Exception as e:
@@ -1212,7 +1217,8 @@ def render(container=None):
                         st.success(f"Proceso finalizado. Archivos modificados: {count}. Total cambios: {changes}.")
                         
                         if count > 0:
-                            render_download_button(path_tech, "dl_tech_mass", "📦 Descargar JSONs Actualizados (ZIP)")
+#                             render_download_button(path_tech, "dl_tech_mass", "📦 Descargar JSONs Actualizados (ZIP)")
+                            pass
                             
                         if errors:
                             st.error(f"Errores en {len(errors)} archivos.")

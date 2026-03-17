@@ -31,10 +31,10 @@ except ImportError:
 
 
 try:
-    from gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key, render_download_button
+    from gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key
 except ImportError:
     try:
-        from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key, render_download_button
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, update_path_key
     except ImportError:
         abrir_dialogo_carpeta_nativo = None
         
@@ -525,7 +525,8 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
             if not is_native:
                 root_path = st.session_state.get("current_path")
                 if root_path and os.path.exists(root_path):
-                     render_download_button(root_path, "dl_rename_mass", "📦 Descargar Carpeta Completa (ZIP)")
+#                      render_download_button(root_path, "dl_rename_mass", "📦 Descargar Carpeta Completa (ZIP)")
+                    pass
                  
             # log(f"Renombrado masivo completado. Total: {count}")
             # time.sleep(1) # Pausa breve para ver el mensaje - Removed to allow interaction with download button
@@ -679,7 +680,8 @@ def worker_editar_texto(file_list, search_text, replace_text, silent_mode=False)
         # Offer download of the root folder
         root_path = st.session_state.get("current_path")
         if root_path and os.path.exists(root_path):
-             render_download_button(root_path, "dl_text_edit", "📦 Descargar Carpeta Completa (ZIP)")
+#              render_download_button(root_path, "dl_text_edit", "📦 Descargar Carpeta Completa (ZIP)")
+             pass
              
         # time.sleep(2)
         # st.rerun()
@@ -770,7 +772,7 @@ def worker_copiar_lista(file_list, target_folder, silent_mode=False):
         progress_bar.progress(1.0, text="Finalizado.")
         st.success(msg)
         
-        render_download_button(target_folder, "dl_copy_list", "📦 Descargar Archivos Copiados (ZIP)")
+#         render_download_button(target_folder, "dl_copy_list", "📦 Descargar Archivos Copiados (ZIP)")
         
         # time.sleep(1.5)
         # st.rerun()
@@ -870,7 +872,7 @@ def worker_mover_lista(file_list, target_folder, silent_mode=False):
             record_action("Mover Lista", changes_made)
         st.success(msg)
         
-        render_download_button(target_folder, "dl_move_list", "📦 Descargar Archivos Movidos (ZIP)")
+#         render_download_button(target_folder, "dl_move_list", "📦 Descargar Archivos Movidos (ZIP)")
         
         # time.sleep(1.5)
         # st.rerun()
@@ -879,174 +881,6 @@ def worker_mover_lista(file_list, target_folder, silent_mode=False):
 def run_mover_lista_task(file_list, target_folder):
     return {"message": worker_mover_lista(file_list, target_folder, silent_mode=True)}
 
-def worker_zip_lista(file_list, target_zip_path, silent_mode=False):
-    # Native Mode Agent Integration
-    is_native = st.session_state.get("force_native_mode", True)
-    if is_native and agent_client:
-        try:
-            username = st.session_state.get("username", "default")
-            task_id = agent_client.send_command(username, "zip_files", {
-                "items": file_list,
-                "target_path": target_zip_path
-            })
-            
-            if task_id:
-                if not silent_mode:
-                    with st.spinner("Comprimiendo archivos vía Agente..."):
-                        res = agent_client.wait_for_result(task_id, timeout=600)
-                else:
-                    res = agent_client.wait_for_result(task_id, timeout=600)
-
-                if res and res.get("status") == "SUCCESS":
-                    r_data = res.get("result", {})
-                    count = r_data.get("count", 0)
-                    errors = r_data.get("errors", [])
-                    msg = f"Agente: ZIP creado con {count} archivos."
-                    if errors: msg += f" Errores: {len(errors)}"
-                    
-                    if not silent_mode:
-                        st.success(msg)
-                        render_download_button(target_zip_path, "dl_zip_list", "📦 Descargar ZIP Generado")
-                        if errors:
-                             with st.expander("Errores de compresión"):
-                                 for e in errors: st.write(e)
-                    return msg
-                else:
-                    err = res.get("result") if res else "Error desconocido"
-                    if not silent_mode: st.error(f"Fallo Agente: {err}")
-                    return f"Error: {err}"
-        except Exception as e:
-            if not silent_mode: st.error(f"Error conexión Agente: {e}")
-
-    count = 0
-    errors = 0
-    if not silent_mode:
-        progress_bar = st.progress(0, text="Comprimiendo...")
-    total = len(file_list)
-    
-    try:
-        with zipfile.ZipFile(target_zip_path, 'w', compression=zipfile.ZIP_DEFLATED) as zipf:
-            for i, item in enumerate(file_list):
-                src_path = item["Ruta completa"]
-                if not silent_mode:
-                    progress_bar.progress(min(i/total, 1.0), text=f"Añadiendo: {os.path.basename(src_path)}")
-                
-                try:
-                    if not os.path.exists(src_path): continue
-                    
-                    if os.path.isdir(src_path):
-                        for root, dirs, files in os.walk(src_path):
-                            for file in files:
-                                f_path = os.path.join(root, file)
-                                arcname = os.path.relpath(f_path, os.path.dirname(src_path))
-                                zipf.write(f_path, arcname)
-                    else:
-                        zipf.write(src_path, os.path.basename(src_path))
-                    count += 1
-                except Exception as e:
-                    log(f"Error añadiendo al ZIP {src_path}: {e}")
-                    errors += 1
-        
-        msg = f"Archivo ZIP creado exitosamente con {count} elementos."
-        if not silent_mode:
-            progress_bar.progress(1.0, text="Finalizado.")
-            st.success(msg)
-            
-            # Offer download
-            render_download_button(target_zip_path, "dl_zip_list", "📦 Descargar ZIP Generado")
-            
-            # time.sleep(1.5)
-            # st.rerun()
-        return msg
-    except Exception as e:
-        msg = f"Error creando ZIP: {e}"
-        if not silent_mode: st.error(msg)
-        return msg
-
-def run_zip_lista_task(file_list, target_zip_path):
-    return {"message": worker_zip_lista(file_list, target_zip_path, silent_mode=True)}
-
-def worker_zip_carpetas_individual(folder_list, target_folder=None, silent_mode=False):
-    # Native Mode Agent Integration
-    is_native = st.session_state.get("force_native_mode", True)
-    if is_native and agent_client:
-        try:
-            username = st.session_state.get("username", "default")
-            task_id = agent_client.send_command(username, "zip_folders_individual", {
-                "items": folder_list,
-                "target_folder": target_folder
-            })
-            
-            if task_id:
-                if not silent_mode:
-                    with st.spinner("Comprimiendo carpetas individualmente vía Agente..."):
-                        res = agent_client.wait_for_result(task_id, timeout=600)
-                else:
-                    res = agent_client.wait_for_result(task_id, timeout=600)
-
-                if res and res.get("status") == "SUCCESS":
-                    r_data = res.get("result", {})
-                    count = r_data.get("count", 0)
-                    errors = r_data.get("errors", [])
-                    msg = f"Agente: Creados {count} ZIPs individuales."
-                    if errors: msg += f" Errores: {len(errors)}"
-                    
-                    if not silent_mode:
-                        st.success(msg)
-                        if target_folder:
-                            render_download_button(target_folder, "dl_zip_ind", "📦 Descargar Carpetas (ZIP)")
-                        if errors:
-                             with st.expander("Errores de compresión"):
-                                 for e in errors: st.write(e)
-                    return msg
-                else:
-                    err = res.get("result") if res else "Error desconocido"
-                    if not silent_mode: st.error(f"Fallo Agente: {err}")
-                    return f"Error: {err}"
-        except Exception as e:
-            if not silent_mode: st.error(f"Error conexión Agente: {e}")
-
-    count = 0
-    errors = 0
-    if not silent_mode:
-        progress_bar = st.progress(0, text="Comprimiendo carpetas...")
-    total = len(folder_list)
-    
-    for i, item in enumerate(folder_list):
-        src_path = item["Ruta completa"]
-        if not silent_mode:
-            progress_bar.progress(min(i/total, 1.0), text=f"Procesando: {os.path.basename(src_path)}")
-        
-        try:
-            if not os.path.exists(src_path) or not os.path.isdir(src_path): continue
-            
-            if target_folder:
-                if not os.path.exists(target_folder):
-                    os.makedirs(target_folder, exist_ok=True)
-                zip_base = os.path.join(target_folder, os.path.basename(src_path))
-            else:
-                zip_base = src_path
-
-            shutil.make_archive(zip_base, 'zip', src_path)
-            count += 1
-        except Exception as e:
-            log(f"Error comprimiendo carpeta {src_path}: {e}")
-            errors += 1
-            
-    msg = f"Se crearon {count} archivos ZIP individuales. Errores: {errors}"
-    if not silent_mode:
-        progress_bar.progress(1.0, text="Finalizado.")
-        st.success(msg)
-        
-        if target_folder and os.path.exists(target_folder):
-             render_download_button(target_folder, "dl_zip_ind", "📦 Descargar Carpetas (ZIP)")
-             
-        # time.sleep(1.5)
-        # st.rerun()
-    return msg
-
-def run_zip_carpetas_ind_task(folder_list, target_folder):
-    return {"message": worker_zip_carpetas_individual(folder_list, target_folder, silent_mode=True)}
 
 def worker_eliminar_lista(file_list, silent_mode=False):
     # Native Mode Agent Integration
@@ -1255,53 +1089,6 @@ def dialogo_mover_lista():
             return
         worker_mover_lista(st.session_state.get("search_results", []), target_move_path, silent_mode=False)
 
-@st.dialog("Comprimir Lista en ZIP")
-def dialogo_zip_lista():
-    st.write("Creará un archivo ZIP con todos los elementos de la lista.")
-    
-    if not st.session_state.get("search_results", []):
-        st.error("No hay elementos en la lista.")
-        return
-
-    st.info(f"Elementos a comprimir: {len(st.session_state.get('search_results', []))}")
-    
-    zip_name = st.text_input("Nombre del archivo ZIP:", value="Archivos_Comprimidos.zip")
-    
-    # Selector de Ruta Estandarizado
-    target_zip_path = render_path_selector(
-        label="Carpeta Destino",
-        key="zip_dest_path",
-        default_path=st.session_state.get("current_path", os.getcwd()),
-        help_text="Donde se guardará el archivo ZIP."
-    )
-    
-    if st.button("🚀 Comprimir"):
-        if not zip_name.endswith(".zip"): zip_name += ".zip"
-        
-        target_path = os.path.join(target_zip_path, zip_name)
-        worker_zip_lista(st.session_state.get("search_results", []), target_path, silent_mode=False)
-
-@st.dialog("Comprimir Carpetas Individualmente")
-def dialogo_zip_carpetas_individual():
-    st.write("Buscará carpetas en la lista de resultados y creará un ZIP individual para cada una.")
-    
-    if not st.session_state.get("search_results", []):
-        st.error("No hay elementos en la lista.")
-        return
-
-    # Filtrar solo carpetas
-    folders = [x for x in st.session_state.get("search_results", []) if os.path.isdir(x["Ruta completa"])]
-    st.info(f"Carpetas encontradas en la lista: {len(folders)}")
-    
-    if len(folders) == 0:
-        st.warning("No hay carpetas en la lista actual.")
-        return
-
-    target_zip_ind_path = render_path_selector("Carpeta Destino:", "zip_ind_dest", default_path=st.session_state.get("current_path", os.getcwd()), help_text="Donde se guardarán los ZIPs generados.")
-        
-    if st.button("🚀 Comprimir Carpetas"):
-        dest = st.session_state.get("zip_ind_dest", st.session_state.get("current_path", os.path.expanduser("~")))
-        worker_zip_carpetas_individual(st.session_state.get("search_results", []), dest, silent_mode=False)
 
 @st.dialog("Confirmar Eliminación")
 def dialogo_confirmar_eliminar():
@@ -1517,9 +1304,7 @@ def render(container):
                 "Copiar a carpeta", 
                 "Mover a carpeta", 
                 "Modificar nombre", 
-                "Editar texto", 
-                "Comprimir archivos en ZIP", 
-                "Comprimir carpetas individualmente"
+                "Editar texto"
             ], label_visibility="collapsed", key="action_radio")
             st.markdown('</div>', unsafe_allow_html=True)
         
@@ -1550,10 +1335,6 @@ def render(container):
                     dialogo_copiar_lista()
                 elif action == "Mover a carpeta":
                     dialogo_mover_lista()
-                elif action == "Comprimir archivos en ZIP":
-                    dialogo_zip_lista()
-                elif action == "Comprimir carpetas individualmente":
-                    dialogo_zip_carpetas_individual()
                 else:
                     funcion_no_implementada(f"Acción: {action}")
                 

@@ -753,7 +753,8 @@ docker-compose -f docker-compose-fevrips.yml up -d""", language="powershell")
                         count_copied += 1
                 
                 if count_copied > 0:
-                    render_download_button(temp_dir, "btn_download_fevrips", "📦 Descargar Resultados (ZIP)", cleanup=not is_native)
+#                     render_download_button(temp_dir, "btn_download_fevrips", "📦 Descargar Resultados (ZIP)", cleanup=not is_native)
+                    pass
                 else:
                     st.warning("No se pudieron copiar los archivos generados para descarga.")
                     

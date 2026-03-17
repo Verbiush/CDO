@@ -75,10 +75,10 @@ except ImportError:
     pass
 
 try:
-    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button, render_file_selector
+    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_file_selector
 except ImportError:
     try:
-        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button, render_file_selector
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_file_selector
     except ImportError:
         def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
             st.warning("Selector de carpeta nativo no disponible.")
@@ -532,7 +532,40 @@ def worker_consolidar_subcarpetas(root_path, silent_mode=False, return_zip=False
     return {"message": msg}
 
 def worker_firmar_docx_con_imagen_masivo(base_path, docx_filename, signature_filename, silent_mode=False, return_zip=False):
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    
     try:
+        if is_native_mode:
+            if not send_command:
+                return {"error": "Error: Modo nativo activado pero cliente agente no disponible."}
+            
+            username = st.session_state.get("username", "admin")
+            if not silent_mode:
+                st.info(f"Enviando tarea al agente local para firmar docx...")
+                
+            task_id = send_command(username, "sign_docx_massive", {
+                "base_path": base_path,
+                "docx_filename": docx_filename,
+                "signature_filename": signature_filename
+            })
+            
+            if task_id:
+                status_placeholder = st.empty()
+                if not silent_mode: status_placeholder.text("Esperando agente...")
+                
+                res = wait_for_result(task_id, timeout=300)
+                if not silent_mode: status_placeholder.empty()
+                
+                if res and "error" not in res:
+                    c = res.get("count", 0)
+                    errs = res.get("errors", [])
+                    return {"message": f"Proceso finalizado. Modificados: {c}, Errores: {len(errs)}"}
+                else:
+                    return {"error": f"Error del agente: {res.get('error', 'Desconocido') if res else 'Desconocido'}"}
+            else:
+                return {"error": "No se pudo crear la tarea."}
+        
+        # Server Execution
         folders_to_process = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
         if not folders_to_process: return {"error": "No se encontraron carpetas para procesar."}
         
@@ -1712,14 +1745,73 @@ def worker_desconsolidar_xlsx_json(file_obj, dest_folder, silent_mode=False):
 # --- WORKERS: EXCEL / RENAMING ---
 
 def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False, return_zip=False):
+    is_native_mode = st.session_state.get('force_native_mode', False)
+
     try:
         df = pd.read_excel(excel_path)
         if "Nombre Actual" not in df.columns or "Nombre Nuevo" not in df.columns:
-            return {"error": "Excel debe tener columnas 'Nombre Actual' y 'Nombre Nuevo'"}
-        count = 0
+            return "Error: Excel debe tener columnas 'Nombre Actual' y 'Nombre Nuevo'"
+        
+        records = []
         for _, row in df.iterrows():
-            curr = str(row["Nombre Actual"]).strip()
-            new = str(row["Nombre Nuevo"]).strip()
+            if pd.notna(row["Nombre Actual"]) and pd.notna(row["Nombre Nuevo"]):
+                records.append({
+                    "current_name": str(row["Nombre Actual"]).strip(),
+                    "new_name": str(row["Nombre Nuevo"]).strip()
+                })
+
+        if not records:
+            return "No se encontraron registros válidos para renombrar."
+
+        if is_native_mode:
+            if not send_command:
+                return "Error: Modo nativo activado pero cliente agente no disponible."
+            
+            username = st.session_state.get("username", "admin")
+            if not silent_mode:
+                st.info(f"Enviando tarea al agente local para renombrar {len(records)} archivos...")
+
+            files_to_rename = []
+            for item in records:
+                curr = item["current_name"]
+                new = item["new_name"]
+                if "." not in new:
+                    _, ext = os.path.splitext(curr)
+                    new += ext
+                files_to_rename.append({
+                    "old_path": os.path.join(folder_path, curr),
+                    "new_path": os.path.join(folder_path, new)
+                })
+
+            task_id = send_command(username, "rename_files", {
+                "files": files_to_rename
+            })
+
+            if task_id:
+                status_placeholder = st.empty()
+                if not silent_mode: status_placeholder.text("Esperando agente...")
+                
+                res = wait_for_result(task_id, timeout=300)
+                
+                if not silent_mode: status_placeholder.empty()
+
+                if res and "error" not in res:
+                     count = res.get("count", 0)
+                     errors = res.get("errors", [])
+                     msg = f"Finalizado correctamente (Renombrados: {count})"
+                     if errors:
+                         msg += f". Hubo {len(errors)} errores."
+                     return msg
+                else:
+                     return f"Error del agente: {res.get('error', 'Desconocido') if res else 'Desconocido'}"
+            else:
+                return "No se pudo crear la tarea en el servidor."
+
+        # Server Execution
+        count = 0
+        for item in records:
+            curr = item["current_name"]
+            new = item["new_name"]
             curr_path = os.path.join(folder_path, curr)
             if os.path.exists(curr_path):
                 if "." not in new:
@@ -1731,34 +1823,9 @@ def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False, 
                 except: pass
         
         msg = f"Renombrados {count} archivos."
-        
-        if return_zip:
-            try:
-                mem_zip = io.BytesIO()
-                with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-                    for root, dirs, files in os.walk(folder_path):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            arcname = os.path.relpath(file_path, folder_path)
-                            zf.write(file_path, arcname)
-                
-                try: shutil.rmtree(folder_path, ignore_errors=True)
-                except: pass
-                
-                return {
-                    "files": [{
-                        "name": f"Renombrados_{int(time.time())}.zip",
-                        "data": mem_zip.getvalue(),
-                        "label": "Descargar Renombrados (ZIP)"
-                    }],
-                    "message": msg
-                }
-            except Exception as e:
-                return {"error": f"Error creando ZIP: {e}", "message": msg}
-                
-        return {"message": msg}
+        return msg
     except Exception as e:
-        return {"error": f"Error: {e}"}
+        return f"Error: {e}"
 
 def worker_anadir_sufijo_excel(excel_path, sheet_name, col_folder, col_suffix, root_path, use_filter=False, silent_mode=False, return_zip=False):
     """
@@ -1840,6 +1907,47 @@ def worker_anadir_sufijo_excel(excel_path, sheet_name, col_folder, col_suffix, r
 
         if not data_rows:
             return "No se encontraron datos válidos."
+
+        is_native_mode = st.session_state.get('force_native_mode', False)
+        
+        if is_native_mode:
+             if not send_command:
+                 return "Error: Modo nativo activado pero el cliente del agente no está disponible."
+                 
+             username = st.session_state.get("username", "admin")
+             
+             items = [{"key": row[0], "suffix": row[2]} for row in data_rows]
+             
+             if not silent_mode:
+                 st.info(f"Enviando tarea al agente local para añadir sufijos a {len(items)} carpetas...")
+             
+             task_id = send_command(username, "bulk_rename", {
+                 "path": root_path,
+                 "items": items,
+                 "separator": "" # No separator, suffix string should contain it if needed or we just append
+             })
+             
+             if task_id:
+                 status_placeholder = st.empty()
+                 if not silent_mode:
+                     status_placeholder.text("Esperando agente...")
+                 
+                 res = wait_for_result(task_id, timeout=60)
+                 
+                 if not silent_mode: status_placeholder.empty()
+
+                 if res and "error" not in res:
+                     count = res.get("count", 0)
+                     errors = res.get("errors", [])
+                     msg = f"Proceso completado por el Agente. {count} elementos renombrados."
+                     if errors:
+                         msg += f" Hubo {len(errors)} errores."
+                     return msg
+                 else:
+                     err = res.get("error") if res else "Error desconocido o tiempo de espera agotado"
+                     return f"Error del agente: {err}"
+             else:
+                 return "Error enviando tarea al agente."
 
         count_files = 0
         count_folders = 0
@@ -2093,6 +2201,7 @@ def _create_column_map_from_headers(df):
     return required_map, []
 
 def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_filter=False, silent_mode=False):
+    is_native_mode = st.session_state.get('force_native_mode', False)
     try:
         if isinstance(uploaded_file, bytes): uploaded_file = io.BytesIO(uploaded_file)
         uploaded_file.seek(0)
@@ -2127,6 +2236,51 @@ def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_fil
         modificados = 0
         errores = 0
         
+        if is_native_mode:
+            if not send_command:
+                return "Error: Modo nativo activado pero cliente agente no disponible."
+            
+            username = st.session_state.get("username", "admin")
+            
+            tasks = []
+            for index, row in df.iterrows():
+                datos = {key: str(row[col_name]).strip() if pd.notna(row[col_name]) else "" for key, col_name in column_map.items()}
+                folder_name = datos.get('folder')
+                if not folder_name: continue
+                
+                tasks.append({
+                    "rel_path": folder_name,
+                    "datos": datos
+                })
+            
+            if not tasks:
+                return "No se encontraron tareas para procesar."
+                
+            if not silent_mode:
+                st.info(f"Enviando {len(tasks)} tareas al agente local...")
+                
+            task_id = send_command(username, "fill_docx_ovida_full", {
+                "base_path": root_path,
+                "tasks": tasks
+            })
+            
+            if task_id:
+                status_placeholder = st.empty()
+                if not silent_mode: status_placeholder.text("Esperando agente...")
+                
+                res = wait_for_result(task_id, timeout=300)
+                if not silent_mode: status_placeholder.empty()
+                
+                if res and "error" not in res:
+                    c = res.get("count", 0)
+                    errs = res.get("errors", [])
+                    return f"Proceso finalizado. Modificados: {c}, Errores: {len(errs)}"
+                else:
+                    return f"Error del agente: {res.get('error', 'Desconocido') if res else 'Desconocido'}"
+            else:
+                return "No se pudo crear la tarea."
+        
+        # Server execution
         progress_bar = None
         if not silent_mode:
             progress_bar = st.progress(0, text="Modificando DOCX...")
@@ -2359,7 +2513,14 @@ def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_
         if hasattr(uploaded_file, 'seek'):
             uploaded_file.seek(0)
 
+        # --- NATIVE MODE CHECK ---
+        is_native_mode = st.session_state.get('force_native_mode', False)
+
         if use_filter:
+            # Re-read file if seekable, otherwise assuming it's fresh or handled
+            if hasattr(uploaded_file, 'seek'):
+                uploaded_file.seek(0)
+                
             wb = openpyxl.load_workbook(uploaded_file, data_only=True)
             if sheet_name not in wb.sheetnames: return "Hoja no encontrada"
             ws = wb[sheet_name]
@@ -2375,15 +2536,60 @@ def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_
                     val_folder = row[idx_folder].value
                     val_suffix = row[idx_suffix].value
                     if val_folder and val_suffix:
-                        data_rows.append((str(val_folder).strip(), str(val_suffix).strip()))
+                        data_rows.append({"folder": str(val_folder).strip(), "suffix": str(val_suffix).strip()})
         else:
+            # Re-read file if seekable
+            if hasattr(uploaded_file, 'seek'):
+                uploaded_file.seek(0)
+                
             df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
             if col_folder not in df.columns or col_suffix not in df.columns:
                 return f"Columnas '{col_folder}' o '{col_suffix}' no encontradas."
             for _, row in df.iterrows():
                 if pd.notna(row[col_folder]) and pd.notna(row[col_suffix]):
-                    data_rows.append((str(row[col_folder]).strip(), str(row[col_suffix]).strip()))
+                    data_rows.append({"folder": str(row[col_folder]).strip(), "suffix": str(row[col_suffix]).strip()})
 
+        if not data_rows:
+            return "No se encontraron filas válidas para procesar."
+
+        # --- AGENT EXECUTION ---
+        if is_native_mode:
+            if not send_command:
+                return "Error: Modo nativo activado pero cliente agente no disponible."
+            
+            username = st.session_state.get("username", "admin")
+            if not silent_mode:
+                st.info(f"Enviando tarea al agente local para procesar {len(data_rows)} carpetas...")
+
+            task_id = send_command(username, "add_suffix_excel", {
+                "base_path": base_path,
+                "items": data_rows
+            })
+
+            if task_id:
+                status_placeholder = st.empty()
+                if not silent_mode: status_placeholder.text("Esperando agente...")
+                
+                # Timeout razonable para operaciones de renombrado masivo
+                res = wait_for_result(task_id, timeout=300)
+                
+                if not silent_mode: status_placeholder.empty()
+
+                if res and "status" in res:
+                    if res["status"] == "success":
+                         msg = res.get("message", "Finalizado correctamente")
+                         stats = res.get("stats", {})
+                         renamed = stats.get("renamed", 0)
+                         errors = stats.get("errors", 0)
+                         return f"{msg} (Renombrados: {renamed}, Errores: {errors})"
+                    else:
+                         return f"Error del agente: {res.get('message', 'Desconocido')}"
+                else:
+                     return f"Error del agente: {res.get('error', 'Desconocido')}"
+            else:
+                return "No se pudo crear la tarea en el servidor."
+
+        # --- SERVER EXECUTION ---
         carpetas_procesadas, archivos_renombrados, errores = 0, 0, 0
         
         progress_bar = None
@@ -2391,7 +2597,10 @@ def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_
             progress_bar = st.progress(0, text="Añadiendo sufijos...")
             
         total = len(data_rows)
-        for index, (folder_name, suffix) in enumerate(data_rows):
+        for index, item in enumerate(data_rows):
+            folder_name = item["folder"]
+            suffix = item["suffix"]
+            
             if not silent_mode:
                 progress_bar.progress((index + 1) / total)
             
@@ -2422,106 +2631,6 @@ def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_
         return f"Finalizado. Carpetas: {carpetas_procesadas}, Renombrados: {archivos_renombrados}, Errores: {errores}"
     except Exception as e:
         return f"Error crítico: {e}"
-
-def worker_autorizacion_docx_desde_excel(uploaded_file, sheet_name, col_folder, col_auth, base_path, use_filter=False, silent_mode=False):
-    try:
-        data_rows = []
-        if isinstance(uploaded_file, bytes):
-            uploaded_file = io.BytesIO(uploaded_file)
-        if hasattr(uploaded_file, 'seek'):
-            uploaded_file.seek(0)
-
-        if use_filter:
-            wb = openpyxl.load_workbook(uploaded_file, data_only=True)
-            if sheet_name not in wb.sheetnames: return "Hoja no encontrada"
-            ws = wb[sheet_name]
-            
-            header = [cell.value for cell in ws[1]]
-            try:
-                idx_folder = header.index(col_folder)
-                idx_auth = header.index(col_auth)
-            except ValueError: return "Columnas no encontradas en encabezado"
-            
-            for row in ws.iter_rows(min_row=2):
-                if not ws.row_dimensions[row[0].row].hidden:
-                    val_folder = row[idx_folder].value
-                    val_auth = row[idx_auth].value
-                    if val_folder and val_auth:
-                        data_rows.append((str(val_folder).strip(), str(val_auth).strip()))
-        else:
-            df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
-            if col_folder not in df.columns or col_auth not in df.columns:
-                 return f"Columnas '{col_folder}' o '{col_auth}' no encontradas."
-            for _, row in df.iterrows():
-                if pd.notna(row[col_folder]) and pd.notna(row[col_auth]):
-                    data_rows.append((str(row[col_folder]).strip(), str(row[col_auth]).strip()))
-
-        modificados, errores = 0, 0
-        docx_pattern = re.compile(r'CRC_.*_FEOV.*\.docx$', re.IGNORECASE)
-        
-        progress_bar = None
-        if not silent_mode:
-            progress_bar = st.progress(0, text="Actualizando autorizaciones...")
-            
-        total = len(data_rows)
-        for index, (folder_name, new_auth) in enumerate(data_rows):
-            if not silent_mode:
-                progress_bar.progress((index + 1) / total)
-            
-            if not folder_name or not new_auth: continue
-            
-            target_dir = os.path.join(base_path, folder_name)
-            if not os.path.isdir(target_dir):
-                errores += 1
-                continue
-                
-            target_docx = next((os.path.join(target_dir, f) for f in os.listdir(target_dir) if docx_pattern.match(f)), None)
-            if not target_docx:
-                errores += 1
-                continue
-                
-            try:
-                doc = Document(target_docx)
-                changed = False
-                for p in doc.paragraphs:
-                    if "AUTORIZACION:" in p.text.upper():
-                        p.text = re.sub(r'(AUTORIZACION:)\s*.*', r'\1 ' + new_auth, p.text, flags=re.IGNORECASE)
-                        changed = True
-                
-                if changed:
-                    doc.save(target_docx)
-                    modificados += 1
-            except Exception:
-                errores += 1
-                
-        if not silent_mode: progress_bar.empty()
-        return f"Finalizado. Modificados: {modificados}, Errores/No encontrados: {errores}"
-    except Exception as e:
-        return f"Error crítico: {e}"
-
-
-
-    try:
-        df = pd.read_excel(excel_file, sheet_name=sheet_name)
-        count = 0
-        os.makedirs(root_path, exist_ok=True)
-        try: font = ImageFont.truetype(ttf_path, size) if ttf_path else ImageFont.load_default()
-        except: font = ImageFont.load_default()
-        for _, row in df.iterrows():
-            name = str(row[col_full_name]).strip()
-            if name:
-                img = Image.new('RGB', (600, 150), color='white')
-                d = ImageDraw.Draw(img)
-                d.text((20, 50), name, fill='black', font=font)
-                safe_name = "".join(c for c in name if c.isalnum() or c in " _-")
-                out_path = os.path.join(root_path, f"Firma_{safe_name}.png")
-                img.save(out_path)
-                count += 1
-        return f"Generadas {count} firmas."
-    except Exception as e:
-        return f"Error: {e}"
-
-
 
 # --- WORKERS: MISSING FILE OPS ---
 
@@ -2901,6 +3010,41 @@ def worker_renombrar_mapeo_excel(uploaded_file, sheet_name, col_src, col_dst, us
             for _, row in df.iterrows():
                 if pd.notna(row[col_src]) and pd.notna(row[col_dst]):
                     data_rows.append((str(row[col_src]).strip(), str(row[col_dst]).strip()))
+        is_native_mode = st.session_state.get('force_native_mode', False)
+        if is_native_mode:
+            if not send_command:
+                return "Error: Modo nativo activado pero cliente agente no disponible."
+            
+            username = st.session_state.get("username", "admin")
+            
+            files_to_rename = []
+            for src_name, dst_name in data_rows:
+                src_path = os.path.join(root_path, src_name)
+                dst_path = os.path.join(root_path, dst_name)
+                files_to_rename.append({"old_path": src_path, "new_path": dst_path})
+                
+            if not files_to_rename:
+                return "No hay archivos para renombrar."
+                
+            task_id = send_command(username, "rename_files", {"files": files_to_rename})
+            
+            if task_id:
+                status_placeholder = st.empty()
+                if not silent_mode: status_placeholder.text("Esperando agente...")
+                
+                res = wait_for_result(task_id, timeout=300)
+                if not silent_mode: status_placeholder.empty()
+                
+                if res and "error" not in res:
+                    c = res.get("count", 0)
+                    errs = res.get("errors", [])
+                    return f"Renombrados {c} archivos. Errores: {len(errs)}"
+                else:
+                    return f"Error del agente: {res.get('error', 'Desconocido') if res else 'Desconocido'}"
+            else:
+                return "No se pudo crear la tarea."
+
+        # Server Execution
         count = 0
         progress_bar = None
         if not silent_mode: progress_bar = st.progress(0, text="Renombrando...")
@@ -3507,7 +3651,7 @@ def dialog_importar_excel():
                     uploaded.seek(0)
                     result = worker_aplicar_renombrado_excel(uploaded, folder)
                     st.success(result)
-                    render_download_button(folder, "dl_ren_excel", "📦 Descargar Carpeta Modificada (ZIP)")
+#                     render_download_button(folder, "dl_ren_excel", "📦 Descargar Carpeta Modificada (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -3517,6 +3661,10 @@ def dialog_importar_excel():
 def dialog_sufijo():
     st.write("### Añadir Sufijo a Archivos (Por Carpeta)")
     st.info("Esta opción busca las carpetas listadas en el Excel y añade el sufijo a TODOS los archivos dentro de ellas.")
+    # Validación de Modo
+    if not st.session_state.get("force_native_mode", True):
+        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
+        
     uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"])
     if uploaded:
         try:
@@ -3542,7 +3690,7 @@ def dialog_sufijo():
                         # Run synchronously
                         result = worker_anadir_sufijo_excel(uploaded, sheet, col_folder, col_suffix, folder, use_filter)
                         st.success(result)
-                        render_download_button(folder, "dl_sufijo", "📦 Descargar Resultados (ZIP)")
+#                         render_download_button(folder, "dl_sufijo", "📦 Descargar Resultados (ZIP)")
                         time.sleep(2)
                         # st.rerun()
                 except Exception as e:
@@ -3553,6 +3701,10 @@ def dialog_sufijo():
 @st.dialog("Renombrar por Mapeo Excel")
 def dialog_renombrar_mapeo_excel():
     st.write("### Renombrar Archivos (Mapeo Columna A -> Columna B)")
+    # Validación de Modo
+    if not st.session_state.get("force_native_mode", True):
+        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
+        
     uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"])
     
     sheet = None
@@ -3589,7 +3741,7 @@ def dialog_renombrar_mapeo_excel():
                         uploaded.seek(0)
                     result = worker_renombrar_mapeo_excel(uploaded, sheet, col_src, col_dst, use_filter, folder)
                     st.success(result)
-                    render_download_button(folder, "dl_ren_map", "📦 Descargar Carpeta Modificada (ZIP)")
+#                     render_download_button(folder, "dl_ren_map", "📦 Descargar Carpeta Modificada (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -3598,6 +3750,10 @@ def dialog_renombrar_mapeo_excel():
 @st.dialog("Modificar DOCX Completo")
 def dialog_modif_docx_completo():
     st.write("### Modificación Masiva de DOCX (Plantillas)")
+    # Validación de Modo
+    if not st.session_state.get("force_native_mode", True):
+        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
+        
     uploaded = st.file_uploader("Subir Excel de Datos", type=["xlsx"])
     
     sheet = None
@@ -3625,7 +3781,7 @@ def dialog_modif_docx_completo():
                     uploaded.seek(0)
                     result = worker_modificar_docx_completo(uploaded, sheet, folder, use_filter)
                     st.success(result)
-                    render_download_button(folder, "dl_mod_docx_full", "📦 Descargar Carpeta Modificada (ZIP)")
+#                     render_download_button(folder, "dl_mod_docx_full", "📦 Descargar Carpeta Modificada (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -3656,7 +3812,7 @@ def dialog_insertar_firma_docx():
                 with st.spinner("Insertando firmas..."):
                     result = worker_firmar_docx_con_imagen_masivo(base_path, docx_name, sig_name)
                     st.success(result)
-                    render_download_button(base_path, "dl_sign_docx", "📦 Descargar Destino (ZIP)")
+#                     render_download_button(base_path, "dl_sign_docx", "📦 Descargar Destino (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -5264,7 +5420,7 @@ def dialog_descargar_historias_ovida():
                 with st.spinner("Descargando historias de OVIDA..."):
                     result = worker_descargar_historias_ovida(uploaded, sheet_name, col_estudio, col_ingreso, col_egreso, col_carpeta, download_path)
                     st.success(result)
-                    render_download_button(download_path, "dl_ovida_root", "📦 Descargar Historias (ZIP)")
+#                     render_download_button(download_path, "dl_ovida_root", "📦 Descargar Historias (ZIP)")
                     time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -5526,6 +5682,8 @@ def worker_xlsx_evento_a_json_masivo(archivo_excel, carpeta_destino, silent_mode
 def worker_autorizacion_docx_desde_excel(carpeta_origen, archivo_excel, sheet_name, col_carpeta, col_auth, use_filter=False, silent_mode=False):
     if not carpeta_origen or not archivo_excel: return "Rutas inválidas."
     
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    
     try:
         if isinstance(archivo_excel, bytes): archivo_excel = io.BytesIO(archivo_excel)
         archivo_excel.seek(0)
@@ -5554,6 +5712,63 @@ def worker_autorizacion_docx_desde_excel(carpeta_origen, archivo_excel, sheet_na
         if col_carpeta not in df.columns or col_auth not in df.columns:
             return f"Columnas no encontradas: {col_carpeta}, {col_auth}"
 
+        if is_native_mode:
+            if not send_command:
+                return "Error: Modo nativo activado pero cliente agente no disponible."
+            
+            username = st.session_state.get("username", "admin")
+            tasks = []
+            for index, fila in df.iterrows():
+                nombre_carpeta = fila[col_carpeta]
+                nueva_autorizacion = fila[col_auth]
+                
+                if pd.isna(nombre_carpeta) or pd.isna(nueva_autorizacion): continue
+                
+                nombre_carpeta = str(nombre_carpeta).strip()
+                nueva_autorizacion = str(int(nueva_autorizacion)) if isinstance(nueva_autorizacion, (float, int)) else str(nueva_autorizacion).strip()
+                
+                if not nombre_carpeta or not nueva_autorizacion: continue
+                
+                tasks.append({
+                    "rel_path": nombre_carpeta,
+                    "file_pattern": r'CRC_.*_FEOV.*\.docx$',
+                    "regex_replacements": [
+                        (r'(AUTORIZACION:)\s*.*', r'\g<1> ' + nueva_autorizacion)
+                    ]
+                })
+                
+            if not tasks:
+                return "No se encontraron tareas válidas para procesar."
+                
+            if not silent_mode:
+                st.info(f"Enviando {len(tasks)} tareas al agente local...")
+                
+            task_id = send_command(username, "fill_docx", {
+                "base_path": carpeta_origen,
+                "tasks": tasks
+            })
+            
+            if task_id:
+                status_placeholder = st.empty()
+                if not silent_mode: status_placeholder.text("Esperando agente...")
+                
+                res = wait_for_result(task_id, timeout=300)
+                
+                if not silent_mode: status_placeholder.empty()
+                
+                if res and "error" not in res:
+                    count = res.get("count", 0)
+                    errors = res.get("errors", [])
+                    msg = f"Finalizado correctamente (Modificados: {count})"
+                    if errors:
+                        msg += f". Hubo {len(errors)} errores."
+                    return msg
+                else:
+                    return f"Error del agente: {res.get('error', 'Desconocido') if res else 'Desconocido'}"
+            else:
+                return "No se pudo crear la tarea en el servidor."
+
+        # SERVER MODE
         modificados, errores_carpeta, errores_docx, errores_proceso = 0, 0, 0, 0
         docx_pattern = re.compile(r'CRC_.*_FEOV.*\.docx$', re.IGNORECASE)
         
@@ -5611,6 +5826,8 @@ def worker_autorizacion_docx_desde_excel(carpeta_origen, archivo_excel, sheet_na
 def worker_regimen_docx_desde_excel(carpeta_origen, archivo_excel, sheet_name, col_carpeta, col_regimen, use_filter=False, silent_mode=False):
     if not carpeta_origen or not archivo_excel: return "Rutas inválidas."
     
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    
     try:
         if isinstance(archivo_excel, bytes): archivo_excel = io.BytesIO(archivo_excel)
         archivo_excel.seek(0)
@@ -5639,6 +5856,63 @@ def worker_regimen_docx_desde_excel(carpeta_origen, archivo_excel, sheet_name, c
         if col_carpeta not in df.columns or col_regimen not in df.columns:
             return f"Columnas no encontradas: {col_carpeta}, {col_regimen}"
 
+        if is_native_mode:
+            if not send_command:
+                return "Error: Modo nativo activado pero cliente agente no disponible."
+            
+            username = st.session_state.get("username", "admin")
+            tasks = []
+            for index, fila in df.iterrows():
+                nombre_carpeta = fila[col_carpeta]
+                nuevo_regimen = fila[col_regimen]
+                
+                if pd.isna(nombre_carpeta) or pd.isna(nuevo_regimen): continue
+                
+                nombre_carpeta = str(nombre_carpeta).strip()
+                nuevo_regimen = str(nuevo_regimen).strip()
+                
+                if not nombre_carpeta or not nuevo_regimen: continue
+                
+                tasks.append({
+                    "rel_path": nombre_carpeta,
+                    "file_pattern": r'CRC_.*_FEOV.*\.docx$',
+                    "regex_replacements": [
+                        (r'(REGIMEN:)\s*.*', r'\g<1> ' + nuevo_regimen)
+                    ]
+                })
+                
+            if not tasks:
+                return "No se encontraron tareas válidas para procesar."
+                
+            if not silent_mode:
+                st.info(f"Enviando {len(tasks)} tareas al agente local...")
+                
+            task_id = send_command(username, "fill_docx", {
+                "base_path": carpeta_origen,
+                "tasks": tasks
+            })
+            
+            if task_id:
+                status_placeholder = st.empty()
+                if not silent_mode: status_placeholder.text("Esperando agente...")
+                
+                res = wait_for_result(task_id, timeout=300)
+                
+                if not silent_mode: status_placeholder.empty()
+                
+                if res and "error" not in res:
+                    count = res.get("count", 0)
+                    errors = res.get("errors", [])
+                    msg = f"Finalizado correctamente (Modificados: {count})"
+                    if errors:
+                        msg += f". Hubo {len(errors)} errores."
+                    return msg
+                else:
+                    return f"Error del agente: {res.get('error', 'Desconocido') if res else 'Desconocido'}"
+            else:
+                return "No se pudo crear la tarea en el servidor."
+
+        # SERVER MODE
         modificados, errores_carpeta, errores_docx, errores_proceso = 0, 0, 0, 0
         docx_pattern = re.compile(r'CRC_.*_FEOV.*\.docx$', re.IGNORECASE)
         
@@ -6044,7 +6318,7 @@ def dialog_organizar_feov_avanzado():
                 with st.spinner("Organizando facturas..."):
                     result = worker_organizar_facturas_por_pdf_avanzado(path_dest, path_orig)
                     st.success(result)
-                    render_download_button(path_dest, "dl_feov_adv", "📦 Descargar Destino (ZIP)")
+#                     render_download_button(path_dest, "dl_feov_adv", "📦 Descargar Destino (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
@@ -6054,6 +6328,10 @@ def dialog_organizar_feov_avanzado():
 def dialog_autorizacion_docx():
     st.write("Modifica el campo AUTORIZACION en DOCX masivamente.")
     
+    # Validación de Modo
+    if not st.session_state.get("force_native_mode", True):
+        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
+        
     uploaded = st.file_uploader("Excel", type=["xlsx"], key="auth_up")
     sheet = None
     col_folder = None
@@ -6089,7 +6367,7 @@ def dialog_autorizacion_docx():
                 with st.spinner("Modificando DOCX..."):
                     result = worker_autorizacion_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_auth, use_filter)
                     st.success(result)
-                    render_download_button(base_path, "dl_auth_docx", "📦 Descargar DOCX Modificados (ZIP)")
+#                     render_download_button(base_path, "dl_auth_docx", "📦 Descargar DOCX Modificados (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -6097,6 +6375,10 @@ def dialog_autorizacion_docx():
 def dialog_regimen_docx():
     st.write("Modifica el campo REGIMEN en DOCX masivamente.")
     
+    # Validación de Modo
+    if not st.session_state.get("force_native_mode", True):
+        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
+        
     uploaded = st.file_uploader("Excel", type=["xlsx"], key="reg_up")
     sheet = None
     col_folder = None
@@ -6132,7 +6414,7 @@ def dialog_regimen_docx():
                 with st.spinner("Modificando Régimen..."):
                     result = worker_regimen_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_reg, use_filter)
                     st.success(result)
-                    render_download_button(base_path, "dl_reg_docx", "📦 Descargar DOCX Modificados (ZIP)")
+#                     render_download_button(base_path, "dl_reg_docx", "📦 Descargar DOCX Modificados (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -6347,7 +6629,7 @@ def dialog_crear_carpetas_excel():
                 with st.spinner("Creando carpetas..."):
                     result = worker_crear_carpetas_excel_avanzado(file_bytes, sheet, col_name, base_path, use_filter)
                     st.success(result)
-                    render_download_button(base_path, "dl_create_fold_excel", "📦 Descargar Estructura (ZIP)")
+#                     render_download_button(base_path, "dl_create_fold_excel", "📦 Descargar Estructura (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -6401,7 +6683,7 @@ def dialog_copiar_mapeo():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_mapeo_subcarpetas(file_bytes, sheet, col_src, col_dst, src_base, dst_base, use_filter)
                     st.success(result)
-                    render_download_button(dst_base, "dl_copy_map_sub", "📦 Descargar Destino (ZIP)")
+#                     render_download_button(dst_base, "dl_copy_map_sub", "📦 Descargar Destino (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -6460,7 +6742,7 @@ def dialog_copiar_raiz():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_archivos_desde_raiz_mapeo(file_bytes, sheet, col_id, col_folder, root_src, root_dst, use_filter)
                     st.success(result)
-                    render_download_button(root_dst, "dl_copy_root_map", "📦 Descargar Destino (ZIP)")
+#                     render_download_button(root_dst, "dl_copy_root_map", "📦 Descargar Destino (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -6492,7 +6774,7 @@ def dialog_rips_masivos():
                         excel_path = os.path.join(folder_src, file_dst)
                         result = worker_json_evento_a_xlsx_masivo(folder_src, excel_path)
                         st.success(result)
-                        render_download_button(excel_path, f"dl_rips_json_excel_{int(time.time())}", f"📥 Descargar {file_dst}")
+#                         render_download_button(excel_path, f"dl_rips_json_excel_{int(time.time())}", f"📥 Descargar {file_dst}")
                         # if os.path.exists(excel_path):
                         #     with open(excel_path, "rb") as f:
                         #         st.download_button("📥 Descargar Excel", f, file_name=file_dst)
@@ -6520,7 +6802,7 @@ def dialog_rips_masivos():
                     with st.spinner("Generando JSONs..."):
                         result = worker_xlsx_evento_a_json_masivo(t_path, folder_dst)
                         st.success(result)
-                        render_download_button(folder_dst, "dl_rips_excel_json", "📦 Descargar JSONs Generados (ZIP)")
+#                         render_download_button(folder_dst, "dl_rips_excel_json", "📦 Descargar JSONs Generados (ZIP)")
                         # time.sleep(2)
                         # st.rerun()
                 except Exception as e:
@@ -6537,27 +6819,85 @@ def dialog_exportar_renombrado():
     default_path = st.session_state.get("current_path", os.getcwd())
     folder = render_path_selector(
         key="renombrar_export_src",
-        label="Carpeta",
+        label="Carpeta a Analizar",
+        default_path=default_path
+    )
+    
+    dest_path = render_path_selector(
+        key="renombrar_export_dst",
+        label="Carpeta Destino (donde se guardará el Excel)",
         default_path=default_path
     )
     
     if st.button("Generar Excel"):
-        if folder:
+        if folder and dest_path:
             try:
-                # Create a simple Excel with OldName, NewName
+                is_native_mode = st.session_state.get('force_native_mode', False)
+                
                 data = []
-                for f in os.listdir(folder):
-                    if os.path.isfile(os.path.join(folder, f)):
-                        data.append({"NombreActual": f, "NuevoNombre": f})
+                
+                if is_native_mode:
+                    if not send_command:
+                        st.error("Error: Modo nativo activado pero cliente agente no disponible.")
+                        return
+                    
+                    username = st.session_state.get("username", "admin")
+                    with st.spinner("Buscando archivos con el agente local..."):
+                        task_id = send_command(username, "search_files", {
+                            "path": folder,
+                            "patterns": ["*"],
+                            "recursive": False,
+                            "item_type": "file"
+                        })
+                        if task_id:
+                            res = wait_for_result(task_id, timeout=60)
+                            if res and "status" in res and res["status"] == "success":
+                                items = res.get("result", {}).get("items", [])
+                                for item in items:
+                                    if item.get("type") == "file":
+                                        fname = item.get("name")
+                                        data.append({"Nombre Actual": fname, "Nombre Nuevo": fname})
+                            else:
+                                st.error(f"Error del agente: {res.get('error', 'Desconocido')}")
+                                return
+                        else:
+                            st.error("No se pudo crear la tarea de búsqueda.")
+                            return
+                else:
+                    for f in os.listdir(folder):
+                        if os.path.isfile(os.path.join(folder, f)):
+                            data.append({"Nombre Actual": f, "Nombre Nuevo": f})
                 
                 if data:
                     df = pd.DataFrame(data)
-                    out_path = os.path.join(folder, "Renombrar_Archivos.xlsx")
-                    df.to_excel(out_path, index=False)
-                    st.success(f"Excel generado en: {out_path}")
-                    render_download_button(out_path, f"dl_renom_exp_{int(time.time())}", "⬇️ Descargar Excel")
-                    # with open(out_path, "rb") as f:
-                    #     st.download_button("⬇️ Descargar Excel", f, file_name="Renombrar_Archivos.xlsx")
+                    out_path = os.path.join(dest_path, "Renombrar_Archivos.xlsx")
+                    
+                    if is_native_mode:
+                        import io
+                        import base64
+                        mem_excel = io.BytesIO()
+                        df.to_excel(mem_excel, index=False)
+                        b64_content = base64.b64encode(mem_excel.getvalue()).decode('utf-8')
+                        
+                        with st.spinner("Guardando Excel mediante el agente..."):
+                            write_task = send_command(username, "write_files", {
+                                "files": [{
+                                    "path": out_path,
+                                    "content": b64_content,
+                                    "encoding": "base64"
+                                }]
+                            })
+                            if write_task:
+                                write_res = wait_for_result(write_task)
+                                if write_res and write_res.get("status") == "success":
+                                    st.success(f"Excel generado exitosamente en: {out_path}")
+                                else:
+                                    st.error(f"Error al guardar Excel: {write_res.get('error', 'Desconocido')}")
+                            else:
+                                st.error("No se pudo crear la tarea de guardado.")
+                    else:
+                        df.to_excel(out_path, index=False)
+                        st.success(f"Excel generado en: {out_path}")
                 else:
                     st.warning("No se encontraron archivos en la carpeta.")
             except Exception as e:
@@ -6566,6 +6906,11 @@ def dialog_exportar_renombrado():
 @st.dialog("Aplicar Renombrado (Excel)")
 def dialog_aplicar_renombrado():
     st.write("Renombra archivos basándose en un Excel (NombreActual -> NuevoNombre).")
+    
+    # Validación de Modo
+    if not st.session_state.get("force_native_mode", True):
+        st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
+        
     excel_file = st.file_uploader("Archivo Excel", type=["xlsx"])
     
     c1, c2 = st.columns([0.8, 0.2])
@@ -6580,18 +6925,15 @@ def dialog_aplicar_renombrado():
     if st.button("Aplicar Cambios"):
         if excel_file and folder:
             try:
-                # Save temp excel
-                t_path = os.path.join(folder, "temp_renombrar.xlsx")
-                with open(t_path, "wb") as f: f.write(excel_file.getbuffer())
-                
+                # En lugar de guardar temporalmente en 'folder' (que puede ser ruta cliente en modo nativo),
+                # leemos el Excel directamente desde memoria.
                 with st.spinner("Renombrando archivos..."):
-                    result = worker_aplicar_renombrado_excel(t_path, folder)
+                    result = worker_aplicar_renombrado_excel(excel_file, folder)
                     st.success(result)
-                    render_download_button(folder, "dl_renombrado_apply", "📦 Descargar Archivos Renombrados (ZIP)")
-                    # time.sleep(2)
-                    # st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
+        else:
+            st.error("Seleccione archivo Excel y carpeta.")
 
 @st.dialog("Copiar Archivo a Subcarpetas")
 def dialog_copiar_archivo_a_subcarpetas():
@@ -6623,7 +6965,7 @@ def dialog_copiar_archivo_a_subcarpetas():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_archivo_a_subcarpetas(t_path, dest_base_path)
                     st.success(result)
-                    render_download_button(dest_base_path, "dl_copy_sub", "📦 Descargar Destino (ZIP)")
+#                     render_download_button(dest_base_path, "dl_copy_sub", "📦 Descargar Destino (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
@@ -6658,7 +7000,7 @@ def dialog_organizar_feov():
                 with st.spinner("Organizando facturas..."):
                     result = worker_organizar_facturas_feov(source_path, target_path)
                     st.success(result)
-                    render_download_button(target_path, "dl_feov", "📦 Descargar Facturas Organizadas (ZIP)")
+#                     render_download_button(target_path, "dl_feov", "📦 Descargar Facturas Organizadas (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
             except Exception as e:
@@ -6706,7 +7048,7 @@ def render():
                             result = worker_unificar_por_carpeta(path_unif, "Unificado")
                             st.success(result)
                             out_file = os.path.join(path_unif, "Unificado.pdf")
-                            render_download_button(out_file, f"dl_unif_pdf_{int(time.time())}", "⬇️ Descargar PDF Unificado")
+#                             render_download_button(out_file, f"dl_unif_pdf_{int(time.time())}", "⬇️ Descargar PDF Unificado")
                             # if os.path.exists(out_file):
                             #    with open(out_file, "rb") as f:
                             #        st.download_button("⬇️ Descargar PDF Unificado", f, file_name="Unificado.pdf")
@@ -6720,7 +7062,7 @@ def render():
                             result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "JPG")
                             st.success(result)
                             out_file = os.path.join(path_unif, "Unificado.pdf")
-                            render_download_button(out_file, f"dl_unif_jpg_{int(time.time())}", "⬇️ Descargar PDF (JPGs)")
+#                             render_download_button(out_file, f"dl_unif_jpg_{int(time.time())}", "⬇️ Descargar PDF (JPGs)")
                             # if os.path.exists(out_file):
                             #    with open(out_file, "rb") as f:
                             #        st.download_button("⬇️ Descargar PDF (JPGs)", f, file_name="Unificado_JPG.pdf")
@@ -6734,7 +7076,7 @@ def render():
                             result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "PNG")
                             st.success(result)
                             out_file = os.path.join(path_unif, "Unificado.pdf")
-                            render_download_button(out_file, f"dl_unif_png_{int(time.time())}", "⬇️ Descargar PDF (PNGs)")
+#                             render_download_button(out_file, f"dl_unif_png_{int(time.time())}", "⬇️ Descargar PDF (PNGs)")
                             # if os.path.exists(out_file):
                             #    with open(out_file, "rb") as f:
                             #        st.download_button("⬇️ Descargar PDF (PNGs)", f, file_name="Unificado_PNG.pdf")
@@ -6748,7 +7090,7 @@ def render():
                             result = worker_unificar_docx_por_carpeta(path_unif, "Unificado.docx")
                             st.success(result)
                             out_file = os.path.join(path_unif, "Unificado.docx")
-                            render_download_button(out_file, f"dl_unif_docx_{int(time.time())}", "⬇️ Descargar DOCX Unificado")
+#                             render_download_button(out_file, f"dl_unif_docx_{int(time.time())}", "⬇️ Descargar DOCX Unificado")
                             # if os.path.exists(out_file):
                             #    with open(out_file, "rb") as f:
                             #        st.download_button("⬇️ Descargar DOCX Unificado", f, file_name="Unificado.docx")
@@ -6764,7 +7106,8 @@ def render():
                             st.success(result)
                             div_folder = os.path.join(path_unif, "Dividido")
                             if os.path.exists(div_folder):
-                                render_download_button(div_folder, "dl_split_mass", "📦 Descargar Carpeta Dividido (ZIP)")
+#                                 render_download_button(div_folder, "dl_split_mass", "📦 Descargar Carpeta Dividido (ZIP)")
+                                pass
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -6780,7 +7123,7 @@ def render():
                              out_path = os.path.join(st.session_state.get('current_path', '.'), "Unificado_Manual.pdf")
                              result = worker_unificar_pdfs_list(uploaded_pdfs, out_path)
                              st.success(result)
-                             render_download_button(out_path, f"dl_unif_man_{int(time.time())}", "⬇️ Descargar Unificado Manual")
+#                              render_download_button(out_path, f"dl_unif_man_{int(time.time())}", "⬇️ Descargar Unificado Manual")
                             # if os.path.exists(out_path):
                             #     with open(out_path, "rb") as f:
                             #         st.download_button("⬇️ Descargar Unificado Manual", f, file_name="Unificado_Manual.pdf")
@@ -6798,7 +7141,7 @@ def render():
                             out_folder = os.path.join(st.session_state.get('current_path', '.'), "Dividido")
                             result = worker_dividir_pdf_paginas(uploaded_split, out_folder)
                             st.success(result)
-                            render_download_button(out_folder, "dl_split_man", "📦 Descargar Páginas Divididas (ZIP)")
+#                             render_download_button(out_folder, "dl_split_man", "📦 Descargar Páginas Divididas (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -6824,7 +7167,7 @@ def render():
                         with st.spinner("Moviendo archivos por coincidencia..."):
                             result = worker_mover_por_coincidencia(path_org)
                             st.success(result)
-                            render_download_button(path_org, "dl_org_move", "📦 Descargar Resultado (ZIP)")
+#                             render_download_button(path_org, "dl_org_move", "📦 Descargar Resultado (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
@@ -6843,7 +7186,7 @@ def render():
                         with st.spinner("Consolidando subcarpetas..."):
                             result = worker_consolidar_subcarpetas(path_org)
                             st.success(result)
-                            render_download_button(path_org, "dl_org_consol", "📦 Descargar Consolidado (ZIP)")
+#                             render_download_button(path_org, "dl_org_consol", "📦 Descargar Consolidado (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -6929,10 +7272,12 @@ def render():
 
                     if len(files_created) == 1:
                         # Download single file
-                        render_download_button(files_created[0], f"{key_prefix}_dl", f"📥 Descargar {os.path.basename(files_created[0])}")
+#                         render_download_button(files_created[0], f"{key_prefix}_dl", f"📥 Descargar {os.path.basename(files_created[0])}")
+                        pass
                     elif len(files_created) > 1:
                         # Download folder as ZIP
-                        render_download_button(temp_dir, f"{key_prefix}_dl_zip", "📦 Descargar Todos (ZIP)")
+#                         render_download_button(temp_dir, f"{key_prefix}_dl_zip", "📦 Descargar Todos (ZIP)")
+                        pass
                         
                 elif result:
                      st.warning("El resultado no tiene el formato esperado para descarga directa.")

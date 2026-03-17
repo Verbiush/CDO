@@ -1,3 +1,6 @@
+import tkinter as tk
+from tkinter import ttk
+
 # Importar la clase del módulo RIPS
 try:
     from rips_module import OrganizadorArchivosApp as RipsApp # type: ignore
@@ -13,7 +16,7 @@ class MainApp: # Renombramos la clase principal para evitar conflicto
         self.create_widgets()
         # ...
     
-    def create_widgets(self):
+    def create_widgets(self, notebook):
         # ...
         # ================== TAB RIPS (Nueva Pestaña) ==================
         if RipsApp: # Si el módulo RIPS se importó correctamente
