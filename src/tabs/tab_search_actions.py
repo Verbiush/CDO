@@ -552,8 +552,16 @@ def worker_editar_texto(file_list, search_text, replace_text, silent_mode=False)
             if not silent_mode:
                 st.info("Enviando tarea de edición de texto al Agente Local...")
             
+            # Extract paths if file_list contains dicts
+            items = []
+            for f in file_list:
+                if isinstance(f, dict):
+                    items.append(f.get("Ruta completa"))
+                else:
+                    items.append(f)
+            
             task_id = agent_client.send_command(username, "edit_text", {
-                "items": file_list,
+                "items": items,
                 "find": search_text,
                 "replace": replace_text
             })
@@ -696,8 +704,17 @@ def worker_copiar_lista(file_list, target_folder, silent_mode=False):
     if is_native and agent_client:
         try:
             username = st.session_state.get("username", "default")
+            
+            # Extract paths if file_list contains dicts
+            items = []
+            for f in file_list:
+                if isinstance(f, dict):
+                    items.append(f.get("Ruta completa"))
+                else:
+                    items.append(f)
+            
             task_id = agent_client.send_command(username, "copy_files", {
-                "items": file_list,
+                "items": items,
                 "target_folder": target_folder
             })
             
@@ -787,8 +804,17 @@ def worker_mover_lista(file_list, target_folder, silent_mode=False):
     if is_native and agent_client:
         try:
             username = st.session_state.get("username", "default")
+            
+            # Extract paths if file_list contains dicts
+            items = []
+            for f in file_list:
+                if isinstance(f, dict):
+                    items.append(f.get("Ruta completa"))
+                else:
+                    items.append(f)
+            
             task_id = agent_client.send_command(username, "move_files", {
-                "items": file_list,
+                "items": items,
                 "target_folder": target_folder
             })
             
@@ -978,7 +1004,13 @@ def worker_comprimir_zip(file_list, output_path, silent_mode=False):
     if is_native and agent_client:
         try:
             username = st.session_state.get("username", "default")
-            items = [f["Ruta completa"] for f in file_list]
+            
+            items = []
+            for f in file_list:
+                if isinstance(f, dict):
+                    items.append(f.get("Ruta completa"))
+                else:
+                    items.append(f)
             
             task_id = agent_client.send_command(username, "compress_zip", {
                 "items": items,
@@ -1019,7 +1051,13 @@ def worker_comprimir_individual(file_list, silent_mode=False):
     if is_native and agent_client:
         try:
             username = st.session_state.get("username", "default")
-            items = [f["Ruta completa"] for f in file_list]
+            
+            items = []
+            for f in file_list:
+                if isinstance(f, dict):
+                    items.append(f.get("Ruta completa"))
+                else:
+                    items.append(f)
             
             task_id = agent_client.send_command(username, "compress_individual", {
                 "items": items
