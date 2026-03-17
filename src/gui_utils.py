@@ -14,6 +14,8 @@ except ImportError:
     except ImportError:
         database = None
 
+import multiprocessing
+
 try:
     import tkinter as tk
     from tkinter import filedialog
@@ -21,31 +23,72 @@ try:
 except ImportError:
     TKINTER_AVAILABLE = False
 
+def _tkinter_folder_dialog_worker(title, initial_dir, queue):
+    """Worker function to run Tkinter dialog in a separate process."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', 1)
+        
+        # Ensure initial_dir is valid
+        if not initial_dir or not os.path.exists(initial_dir):
+            initial_dir = os.getcwd()
+            
+        folder_path = filedialog.askdirectory(title=title, initialdir=initial_dir)
+        root.destroy()
+        queue.put(folder_path)
+    except Exception as e:
+        print(f"Tkinter process error: {e}")
+        queue.put(None)
+
+def _tkinter_file_dialog_worker(title, initial_dir, file_types, queue):
+    """Worker function to run Tkinter dialog in a separate process."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', 1)
+        
+        if not initial_dir or not os.path.exists(initial_dir):
+            initial_dir = os.getcwd()
+            
+        if not file_types:
+            file_types = [("Todos los archivos", "*.*")]
+            
+        file_path = filedialog.askopenfilename(title=title, initialdir=initial_dir, filetypes=file_types)
+        root.destroy()
+        queue.put(file_path)
+    except Exception as e:
+        print(f"Tkinter process error: {e}")
+        queue.put(None)
+
 def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
     """
-    Abre un diálogo de selección de carpeta nativo usando Tkinter.
+    Abre un diálogo de selección de carpeta nativo usando Tkinter en un proceso separado.
     Retorna la ruta seleccionada o None si se cancela.
     """
     # Intentar Tkinter primero si estamos en modo nativo
-    # Optimizacion: Solo usar Tkinter si estamos en Windows (asumimos que es local)
-    # En Linux (AWS) pasamos directo al Agente para evitar errores/delays
     is_windows = platform.system() == "Windows"
     if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE and is_windows:
         try:
-            # Verificar si estamos en un entorno compatible (local)
-            root = tk.Tk()
-            root.withdraw()  # Ocultar la ventana principal
-            root.wm_attributes('-topmost', 1)  # Mantener siempre encima
+            # Use multiprocessing to isolate Tkinter from Streamlit's loop
+            queue = multiprocessing.Queue()
+            p = multiprocessing.Process(target=_tkinter_folder_dialog_worker, args=(title, initial_dir, queue))
+            p.start()
+            p.join() # Wait for process to finish
             
-            if not initial_dir:
-                initial_dir = os.getcwd()
-                
-            folder_path = filedialog.askdirectory(title=title, initialdir=initial_dir)
-            
-            root.destroy()
-            return folder_path if folder_path else None
+            # Get result
+            if not queue.empty():
+                folder_path = queue.get()
+                return folder_path if folder_path else None
+            else:
+                return None
         except Exception as e:
-            print(f"DEBUG: Tkinter failed ({e}). Trying Agent fallback...")
+            print(f"DEBUG: Tkinter multiprocessing failed ({e}). Trying Agent fallback...")
+            # Fall through to Agent
     
     # Fallback al Agente Local (funciona en Web y Nativo si Tkinter falla)
     try:
@@ -71,29 +114,26 @@ def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
 
 def abrir_dialogo_archivo_nativo(title="Seleccionar Archivo", initial_dir=None, file_types=None):
     """
-    Abre un diálogo de selección de archivo nativo usando Tkinter.
+    Abre un diálogo de selección de archivo nativo usando Tkinter en un proceso separado.
     Retorna la ruta seleccionada o None si se cancela.
     """
     # Intentar Tkinter primero si estamos en modo nativo
     is_windows = platform.system() == "Windows"
     if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE and is_windows:
         try:
-            root = tk.Tk()
-            root.withdraw()
-            root.wm_attributes('-topmost', 1)
+            # Use multiprocessing to isolate Tkinter
+            queue = multiprocessing.Queue()
+            p = multiprocessing.Process(target=_tkinter_file_dialog_worker, args=(title, initial_dir, file_types, queue))
+            p.start()
+            p.join()
             
-            if not initial_dir:
-                initial_dir = os.getcwd()
-                
-            if not file_types:
-                file_types = [("Todos los archivos", "*.*")]
-                
-            file_path = filedialog.askopenfilename(title=title, initialdir=initial_dir, filetypes=file_types)
-            
-            root.destroy()
-            return file_path if file_path else None
+            if not queue.empty():
+                file_path = queue.get()
+                return file_path if file_path else None
+            else:
+                return None
         except Exception as e:
-            print(f"DEBUG: Tkinter failed ({e}). Trying Agent fallback...")
+            print(f"DEBUG: Tkinter multiprocessing failed ({e}). Trying Agent fallback...")
             
     # Fallback al Agente Local
     try:
@@ -266,7 +306,7 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                 # Get current path from state or default
                 current = st.session_state.get(key, target_path)
                 
-                st.toast("Solicitando al Agente...", icon="🤖")
+                st.toast("Abriendo selector...", icon="📂")
                 
                 selected = abrir_dialogo_carpeta_nativo(title=label, initial_dir=current)
                 
@@ -276,9 +316,9 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                     # Also update the text input keys to reflect change immediately
                     st.session_state[f"input_{key}"] = selected
                     st.session_state[f"input_{key}_disabled"] = selected
-                    st.rerun()
+                    # No llamamos a st.rerun() para evitar bloqueos por doble ejecución rápida
                 else:
-                    st.toast("No se seleccionó ninguna carpeta o hubo un error.", icon="⚠️")
+                    st.toast("No se seleccionó ninguna carpeta.", icon="⚠️")
             
             st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom, on_click=on_click_folder)
 
