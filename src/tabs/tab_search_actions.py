@@ -882,14 +882,23 @@ def run_mover_lista_task(file_list, target_folder):
     return {"message": worker_mover_lista(file_list, target_folder, silent_mode=True)}
 
 
-def worker_eliminar_lista(file_list, silent_mode=False):
+def worker_eliminar_lista(file_list, force_delete=False, silent_mode=False):
     # Native Mode Agent Integration
     is_native = st.session_state.get("force_native_mode", True)
     if is_native and agent_client:
         try:
             username = st.session_state.get("username", "default")
+            # Extract paths if file_list contains dicts
+            items = []
+            for f in file_list:
+                if isinstance(f, dict):
+                    items.append(f.get("Ruta completa"))
+                else:
+                    items.append(f)
+            
             task_id = agent_client.send_command(username, "delete_files", {
-                "items": file_list
+                "items": items,
+                "force": force_delete
             })
             
             if task_id:
@@ -932,17 +941,27 @@ def worker_eliminar_lista(file_list, silent_mode=False):
     for i, item in enumerate(file_list):
         if not silent_mode:
             progress_bar.progress(min(i/total, 1.0), text=f"Eliminando {i+1}/{total}")
-        path = item["Ruta completa"]
+        
+        path = item["Ruta completa"] if isinstance(item, dict) else item
+        
         try:
             if os.path.exists(path):
                 safe_path = os.path.normpath(path)
-                send2trash(safe_path)
-                count_del += 1
+                
+                if force_delete:
+                    if os.path.isdir(safe_path):
+                        shutil.rmtree(safe_path)
+                    else:
+                        os.remove(safe_path)
+                    count_del += 1
+                else:
+                    send2trash(safe_path)
+                    count_del += 1
         except Exception as e:
             log(f"Error eliminando {path}: {e}")
             errors += 1
     
-    msg = f"Se enviaron {count_del} archivos a la papelera. Errores: {errors}"
+    msg = f"Se enviaron {count_del} archivos a la papelera (Forzado={force_delete}). Errores: {errors}"
     if not silent_mode:
         progress_bar.progress(1.0, text="Finalizado.")
         st.success(msg)
@@ -952,7 +971,88 @@ def worker_eliminar_lista(file_list, silent_mode=False):
     return msg
 
 def run_eliminar_lista_task(file_list):
-    return {"message": worker_eliminar_lista(file_list, silent_mode=True)}
+    return {"message": worker_eliminar_lista(file_list, force_delete=False, silent_mode=True)}
+
+def worker_comprimir_zip(file_list, output_path, silent_mode=False):
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            items = [f["Ruta completa"] for f in file_list]
+            
+            task_id = agent_client.send_command(username, "compress_zip", {
+                "items": items,
+                "output_path": output_path
+            })
+            
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Comprimiendo archivos vía Agente..."):
+                        res = agent_client.wait_for_result(task_id, timeout=600)
+                else:
+                    res = agent_client.wait_for_result(task_id, timeout=600)
+
+                if res and res.get("status") == "SUCCESS":
+                    r_data = res.get("result", {})
+                    count = r_data.get("count", 0)
+                    errors = r_data.get("errors", [])
+                    msg = f"Agente: Comprimidos {count} elementos en {os.path.basename(output_path)}."
+                    if errors: msg += f" Errores: {len(errors)}"
+                    
+                    if not silent_mode:
+                        st.success(msg)
+                        if errors:
+                             with st.expander("Errores de compresión"):
+                                 for e in errors: st.write(e)
+                    return msg
+                else:
+                    err = res.get("result") if res else "Error desconocido"
+                    if not silent_mode: st.error(f"Fallo Agente: {err}")
+                    return f"Error: {err}"
+        except Exception as e:
+            if not silent_mode: st.error(f"Error conexión Agente: {e}")
+            return f"Error: {e}"
+    return "Modo nativo no activo o agente no conectado."
+
+def worker_comprimir_individual(file_list, silent_mode=False):
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            items = [f["Ruta completa"] for f in file_list]
+            
+            task_id = agent_client.send_command(username, "compress_individual", {
+                "items": items
+            })
+            
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Comprimiendo individualmente vía Agente..."):
+                        res = agent_client.wait_for_result(task_id, timeout=600)
+                else:
+                    res = agent_client.wait_for_result(task_id, timeout=600)
+
+                if res and res.get("status") == "SUCCESS":
+                    r_data = res.get("result", {})
+                    count = r_data.get("count", 0)
+                    errors = r_data.get("errors", [])
+                    msg = f"Agente: Comprimidos {count} elementos individualmente."
+                    if errors: msg += f" Errores: {len(errors)}"
+                    
+                    if not silent_mode:
+                        st.success(msg)
+                        if errors:
+                             with st.expander("Errores de compresión"):
+                                 for e in errors: st.write(e)
+                    return msg
+                else:
+                    err = res.get("result") if res else "Error desconocido"
+                    if not silent_mode: st.error(f"Fallo Agente: {err}")
+                    return f"Error: {err}"
+        except Exception as e:
+            if not silent_mode: st.error(f"Error conexión Agente: {e}")
+            return f"Error: {e}"
+    return "Modo nativo no activo o agente no conectado."
 
 # --- DIALOGS ---
 
@@ -1118,59 +1218,62 @@ def dialogo_confirmar_eliminar():
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
         if st.button("🗑️ Sí, eliminar", type="primary", use_container_width=True):
-            count_del = 0
-            progress_bar = st.progress(0, text="Eliminando...")
-            total = len(results)
-            
-            for i, item in enumerate(results):
-                progress_bar.progress(min(i/total, 1.0), text=f"Eliminando {i+1}/{total}")
-                path = item["Ruta completa"]
-                try:
-                    if os.path.exists(path):
-                        safe_path = os.path.normpath(path)
-                        
-                        # Si force_delete está activo, vamos directo a borrar
-                        if force_delete:
-                             if os.path.isdir(safe_path):
-                                 shutil.rmtree(safe_path)
-                             else:
-                                 os.remove(safe_path)
-                             count_del += 1
-                        else:
-                            # Intentar papelera
-                            try:
-                                if send2trash is not None:
-                                    send2trash(safe_path)
-                                    count_del += 1
-                                else:
-                                    raise ImportError("send2trash no disponible")
-                            except Exception as e_trash:
-                                # Fallback automático si falla la papelera en modo web
-                                if is_web_mode:
-                                     if os.path.isdir(safe_path):
-                                         shutil.rmtree(safe_path)
-                                     else:
-                                         os.remove(safe_path)
-                                     count_del += 1
-                                     log(f"Papelera falló, borrado permanente (Web Mode): {safe_path}")
-                                else:
-                                    log(f"Error enviando a papelera {path}: {e_trash}")
-                                    st.error(f"No se pudo enviar a papelera: {os.path.basename(path)}. Active 'Forzar borrado' si desea eliminarlo permanentemente.")
-                except Exception as e:
-                    log(f"Error eliminando {path}: {e}")
-            
-            progress_bar.progress(1.0, text="Finalizado.")
-            if count_del > 0:
-                st.success(f"Se eliminaron {count_del} elementos.")
-                st.session_state.search_results = [] 
-                time.sleep(1.5)
-                st.rerun()
-            else:
-                st.warning("No se pudieron eliminar los archivos. Verifique permisos o active el borrado forzado.")
+            worker_eliminar_lista(results, force_delete=force_delete, silent_mode=False)
             
     with col_cancel:
         if st.button("Cancelar", use_container_width=True):
             st.rerun()
+
+@st.dialog("Comprimir en ZIP")
+def dialogo_comprimir_zip():
+    st.write("Comprimirá todos los elementos seleccionados en un único archivo ZIP.")
+    
+    if not st.session_state.get("search_results", []):
+        st.error("No hay elementos seleccionados.")
+        return
+        
+    st.info(f"Elementos a comprimir: {len(st.session_state.get('search_results', []))}")
+    
+    # Default name and location
+    current_path = st.session_state.get("current_path", os.getcwd())
+    default_name = f"archivo_{int(time.time())}.zip"
+    
+    zip_name = st.text_input("Nombre del archivo ZIP:", value=default_name)
+    
+    # Folder selector for destination
+    target_path = render_path_selector(
+        label="Carpeta Destino:",
+        key="zip_dest_input",
+        default_path=current_path
+    )
+    
+    if st.button("🚀 Comprimir"):
+        if not zip_name:
+            st.warning("Ingresa un nombre para el archivo.")
+            return
+        if not target_path:
+            st.warning("Selecciona una carpeta destino.")
+            return
+            
+        full_zip_path = os.path.join(target_path, zip_name)
+        if not full_zip_path.lower().endswith(".zip"):
+            full_zip_path += ".zip"
+            
+        worker_comprimir_zip(st.session_state.get("search_results", []), full_zip_path, silent_mode=False)
+
+@st.dialog("Comprimir Individualmente")
+def dialogo_comprimir_individual():
+    st.write("Cada carpeta/archivo seleccionado se comprimirá en su propio archivo ZIP en la misma ubicación.")
+    st.warning("Esta acción creará múltiples archivos ZIP.")
+    
+    if not st.session_state.get("search_results", []):
+        st.error("No hay elementos seleccionados.")
+        return
+        
+    st.info(f"Elementos a procesar: {len(st.session_state.get('search_results', []))}")
+    
+    if st.button("🚀 Comprimir Individualmente"):
+         worker_comprimir_individual(st.session_state.get("search_results", []), silent_mode=False)
 
 # --- RENDER FUNCTION ---
 
@@ -1304,7 +1407,9 @@ def render(container):
                 "Copiar a carpeta", 
                 "Mover a carpeta", 
                 "Modificar nombre", 
-                "Editar texto"
+                "Editar texto",
+                "Comprimir en ZIP",
+                "Comprimir individualmente"
             ], label_visibility="collapsed", key="action_radio")
             st.markdown('</div>', unsafe_allow_html=True)
         
@@ -1335,6 +1440,10 @@ def render(container):
                     dialogo_copiar_lista()
                 elif action == "Mover a carpeta":
                     dialogo_mover_lista()
+                elif action == "Comprimir en ZIP":
+                    dialogo_comprimir_zip()
+                elif action == "Comprimir individualmente":
+                    dialogo_comprimir_individual()
                 else:
                     funcion_no_implementada(f"Acción: {action}")
                 

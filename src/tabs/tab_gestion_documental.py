@@ -1130,10 +1130,12 @@ def render():
                             username = st.session_state.get("username", "default")
                             
                             with st.spinner("Ejecutando renombrado masivo vía Agente Local..."):
+                                item_type_val = st.session_state.get("item_type", "both")
                                 task_id = send_command(username, "bulk_rename", {
                                     "path": source_path,
                                     "items": items_to_rename,
-                                    "separator": separator_suf
+                                    "separator": separator_suf,
+                                    "item_type": item_type_val
                                 })
                                 
                                 if task_id:
@@ -1176,6 +1178,10 @@ def render():
                         progress_bar = st.progress(0)
                         total_records = len(records)
                         
+                        item_type_val = st.session_state.get("item_type", "both")
+                        scope_folders = str(item_type_val).lower() in ["todo", "both", "carpetas", "folders", "directory"]
+                        scope_files = str(item_type_val).lower() in ["todo", "both", "archivos", "files", "file"]
+
                         for i, r in enumerate(records):
                             match_key = str(r.get(match_col, "")).strip()
                             if not match_key: continue
@@ -1185,52 +1191,50 @@ def render():
                             if not suffix_val: continue
 
                             # A) FOLDER MODE
-                            matching_folders = []
-                            normalized_key = match_key.lower()
-                            
-                            for d in root_folders:
-                                d_lower = d.lower()
-                                if d_lower == normalized_key:
-                                    matching_folders.append(d)
-                                    continue
-                                if d_lower.startswith(normalized_key):
-                                    remainder = d_lower[len(normalized_key):]
-                                    if remainder.startswith("_") and len(remainder) > 1 and remainder[1:].isdigit():
+                            if scope_folders:
+                                matching_folders = []
+                                normalized_key = match_key.lower()
+                                
+                                for d in root_folders:
+                                    d_lower = d.lower()
+                                    if d_lower == normalized_key:
                                         matching_folders.append(d)
-                            
-                            for folder_name in matching_folders:
-                                folder_path = os.path.join(source_path, folder_name)
-                                if os.path.isdir(folder_path):
-                                    try:
-                                        files = os.listdir(folder_path)
-                                        for filename in files:
-                                            file_full_path = os.path.join(folder_path, filename)
-                                            if os.path.isfile(file_full_path):
-                                                base_name, ext = os.path.splitext(filename)
-                                                if not base_name.endswith(f"{separator_suf}{suffix_val}"):
-                                                    new_name = f"{base_name}{separator_suf}{suffix_val}{ext}"
-                                                    new_file_path = os.path.join(folder_path, new_name)
-                                                    os.rename(file_full_path, new_file_path)
-                                                    count_suf += 1
-                                    except Exception as e:
-                                        print(f"Error iterating folder {folder_name}: {e}")
-                                        errors_suf += 1
+                                        continue
+                                    if d_lower.startswith(normalized_key):
+                                        remainder = d_lower[len(normalized_key):]
+                                        if remainder.startswith("_") and len(remainder) > 1 and remainder[1:].isdigit():
+                                            matching_folders.append(d)
+                                
+                                for folder_name in matching_folders:
+                                    folder_path = os.path.join(source_path, folder_name)
+                                    if os.path.isdir(folder_path):
+                                        # Check if folder name already has suffix
+                                        if not folder_name.endswith(f"{separator_suf}{suffix_val}"):
+                                            new_folder_name = f"{folder_name}{separator_suf}{suffix_val}"
+                                            new_folder_path = os.path.join(source_path, new_folder_name)
+                                            try:
+                                                os.rename(folder_path, new_folder_path)
+                                                count_suf += 1
+                                            except Exception as e:
+                                                print(f"Error renaming folder {folder_name}: {e}")
+                                                errors_suf += 1
                             
                             # B) FLAT FILES
-                            for filename in root_files:
-                                if match_key in filename:
-                                    try:
-                                        file_full_path = os.path.join(source_path, filename)
-                                        if not os.path.exists(file_full_path): continue 
-                                        base_name, ext = os.path.splitext(filename)
-                                        if not base_name.endswith(f"{separator_suf}{suffix_val}"):
-                                            new_name = f"{base_name}{separator_suf}{suffix_val}{ext}"
-                                            new_file_path = os.path.join(source_path, new_name)
-                                            if os.path.exists(new_file_path): continue
-                                            os.rename(file_full_path, new_file_path)
-                                            count_suf += 1
-                                    except Exception as e:
-                                        errors_suf += 1
+                            if scope_files:
+                                for filename in root_files:
+                                    if match_key in filename:
+                                        try:
+                                            file_full_path = os.path.join(source_path, filename)
+                                            if not os.path.exists(file_full_path): continue 
+                                            base_name, ext = os.path.splitext(filename)
+                                            if not base_name.endswith(f"{separator_suf}{suffix_val}"):
+                                                new_name = f"{base_name}{separator_suf}{suffix_val}{ext}"
+                                                new_file_path = os.path.join(source_path, new_name)
+                                                if os.path.exists(new_file_path): continue
+                                                os.rename(file_full_path, new_file_path)
+                                                count_suf += 1
+                                        except Exception as e:
+                                            errors_suf += 1
                             
                             progress_bar.progress((i + 1) / total_records)
                         

@@ -1,6 +1,7 @@
 import time
 from datetime import datetime
 import requests
+import zipfile
 try:
     from selenium import webdriver
     from selenium.webdriver.common.by import By
@@ -1000,7 +1001,7 @@ def process_desconsolidate_json(file_path, dest_folder):
     # Stub implementation to prevent crashes
     return {"status": "error", "message": "Función desconsolidate_json no implementada en el Agente Local aún."}
 
-def process_bulk_rename(source_path, items, separator="_"):
+def process_bulk_rename(source_path, items, separator="_", item_type="both"):
     count_renamed = 0
     errors = []
     
@@ -1015,6 +1016,9 @@ def process_bulk_rename(source_path, items, separator="_"):
     root_folders = [d for d in root_items if os.path.isdir(os.path.join(source_path, d))]
     root_files = [f for f in root_items if os.path.isfile(os.path.join(source_path, f))]
     
+    scope_folders = str(item_type).lower() in ["todo", "both", "carpetas", "folders", "directory"]
+    scope_files = str(item_type).lower() in ["todo", "both", "archivos", "files", "file"]
+    
     for item in items:
         match_key = str(item.get("key", "")).strip()
         suffix_val = str(item.get("suffix", "")).strip()
@@ -1025,62 +1029,64 @@ def process_bulk_rename(source_path, items, separator="_"):
         normalized_key = match_key.lower()
         
         # 1. Matching Folders
-        matching_folders = []
-        for d in root_folders:
-            if d.lower() == normalized_key or \
-               (d.lower().startswith(normalized_key + "_") and d[len(normalized_key)+1:].isdigit()) or \
-               (d.lower().startswith(normalized_key + " (") and d.endswith(")")):
-               matching_folders.append(d)
-        
-        for folder_name in matching_folders:
-            folder_path = os.path.join(source_path, folder_name)
+        if scope_folders:
+            matching_folders = []
+            for d in root_folders:
+                if d.lower() == normalized_key or \
+                   (d.lower().startswith(normalized_key + "_") and d[len(normalized_key)+1:].isdigit()) or \
+                   (d.lower().startswith(normalized_key + " (") and d.endswith(")")):
+                   matching_folders.append(d)
             
-            # Check if folder name already has suffix
-            if not folder_name.endswith(f"{separator}{suffix_val}"):
-                new_folder_name = f"{folder_name}{separator}{suffix_val}"
-                new_folder_path = os.path.join(source_path, new_folder_name)
+            for folder_name in matching_folders:
+                folder_path = os.path.join(source_path, folder_name)
                 
-                try:
-                    os.rename(folder_path, new_folder_path)
-                    count_renamed += 1
-                except Exception as e:
-                    errors.append(f"Error renombrando carpeta {folder_name}: {str(e)}")
-            
-            # Rename internal files
-            try:
-                if os.path.exists(folder_path): # Might have been renamed
-                    target_path = folder_path 
-                elif os.path.exists(new_folder_path):
-                    target_path = new_folder_path
-                else:
-                    continue
+                # Check if folder name already has suffix
+                if not folder_name.endswith(f"{separator}{suffix_val}"):
+                    new_folder_name = f"{folder_name}{separator}{suffix_val}"
+                    new_folder_path = os.path.join(source_path, new_folder_name)
                     
-                for filename in os.listdir(target_path):
-                    file_full_path = os.path.join(target_path, filename)
-                    if os.path.isfile(file_full_path):
-                        base_name, ext = os.path.splitext(filename)
-                        if not base_name.endswith(f"{separator}{suffix_val}"):
-                            new_name = f"{base_name}{separator}{suffix_val}{ext}"
-                            try:
-                                os.rename(file_full_path, os.path.join(target_path, new_name))
-                                count_renamed += 1
-                            except: pass
-            except Exception as e:
-                errors.append(f"Error procesando archivos internos de {folder_name}: {str(e)}")
-
-        # 2. Matching Files in Root
-        for filename in root_files:
-            if match_key in filename:
-                file_full_path = os.path.join(source_path, filename)
-                base_name, ext = os.path.splitext(filename)
-                
-                if not base_name.endswith(f"{separator}{suffix_val}"):
-                    new_name = f"{base_name}{separator}{suffix_val}{ext}"
                     try:
-                        os.rename(file_full_path, os.path.join(source_path, new_name))
+                        os.rename(folder_path, new_folder_path)
                         count_renamed += 1
                     except Exception as e:
-                        errors.append(f"Error renombrando archivo {filename}: {str(e)}")
+                        errors.append(f"Error renombrando carpeta {folder_name}: {str(e)}")
+                
+                # Rename internal files
+                try:
+                    if os.path.exists(folder_path): # Might have been renamed
+                        target_path = folder_path 
+                    elif os.path.exists(new_folder_path):
+                        target_path = new_folder_path
+                    else:
+                        continue
+                        
+                    for filename in os.listdir(target_path):
+                        file_full_path = os.path.join(target_path, filename)
+                        if os.path.isfile(file_full_path):
+                            base_name, ext = os.path.splitext(filename)
+                            if not base_name.endswith(f"{separator}{suffix_val}"):
+                                new_name = f"{base_name}{separator}{suffix_val}{ext}"
+                                try:
+                                    os.rename(file_full_path, os.path.join(target_path, new_name))
+                                    count_renamed += 1
+                                except: pass
+                except Exception as e:
+                    errors.append(f"Error procesando archivos internos de {folder_name}: {str(e)}")
+
+        # 2. Matching Files in Root
+        if scope_files:
+            for filename in root_files:
+                if match_key in filename:
+                    file_full_path = os.path.join(source_path, filename)
+                    base_name, ext = os.path.splitext(filename)
+                    
+                    if not base_name.endswith(f"{separator}{suffix_val}"):
+                        new_name = f"{base_name}{separator}{suffix_val}{ext}"
+                        try:
+                            os.rename(file_full_path, os.path.join(source_path, new_name))
+                            count_renamed += 1
+                        except Exception as e:
+                            errors.append(f"Error renombrando archivo {filename}: {str(e)}")
 
     return {"count": count_renamed, "errors": errors}
 
@@ -1304,6 +1310,190 @@ def process_download_ovida(base_path, records):
         if driver: driver.quit()
         return {"status": "error", "message": str(e)}
 
+def process_edit_text(items, find_text, replace_text):
+    count_modified = 0
+    errors = []
+    
+    if not items:
+        return {"count": 0, "errors": ["No se proporcionaron archivos para editar"]}
+        
+    print(f"DEBUG: Editando texto en {len(items)} archivos. Buscar: '{find_text}', Reemplazar: '{replace_text}'")
+    
+    text_extensions = ['.txt', '.json', '.xml', '.csv', '.html', '.md', '.log', '.py', '.js', '.css', '.bat', '.ps1', '.sql', '.ini', '.yaml', '.yml']
+    
+    for file_path in items:
+        if not os.path.exists(file_path):
+            errors.append(f"Archivo no encontrado: {file_path}")
+            continue
+            
+        if os.path.isdir(file_path):
+            continue
+            
+        try:
+            ext = os.path.splitext(file_path)[1].lower()
+            modified = False
+            
+            # Archivos de texto plano
+            if ext in text_extensions:
+                try:
+                    # Try reading with utf-8 first
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                    except UnicodeDecodeError:
+                        # Fallback to latin-1 or system default
+                        with open(file_path, 'r', encoding='latin-1') as f:
+                            content = f.read()
+                    
+                    if find_text in content:
+                        new_content = content.replace(find_text, replace_text)
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            f.write(new_content)
+                        modified = True
+                except Exception as e:
+                    errors.append(f"Error leyendo/escribiendo {os.path.basename(file_path)}: {e}")
+
+            # Documentos de Word
+            elif ext == '.docx':
+                try:
+                    if Document is not None:
+                        doc = Document(file_path)
+                        doc_modified = False
+                        
+                        # Paragraphs
+                        for p in doc.paragraphs:
+                            if find_text in p.text:
+                                p.text = p.text.replace(find_text, replace_text)
+                                doc_modified = True
+                        
+                        # Tables
+                        for table in doc.tables:
+                            for row in table.rows:
+                                for cell in row.cells:
+                                    for p in cell.paragraphs:
+                                        if find_text in p.text:
+                                            p.text = p.text.replace(find_text, replace_text)
+                                            doc_modified = True
+                                            
+                        if doc_modified:
+                            doc.save(file_path)
+                            modified = True
+                    else:
+                        errors.append(f"Omitido {os.path.basename(file_path)}: Librería python-docx no disponible")
+                except Exception as e:
+                    errors.append(f"Error procesando DOCX {os.path.basename(file_path)}: {e}")
+            
+            if modified:
+                count_modified += 1
+                
+        except Exception as e:
+            errors.append(f"Error general en {os.path.basename(file_path)}: {e}")
+            
+    return {"count": count_modified, "errors": errors}
+
+def process_delete_files(items, force=False):
+    count = 0
+    errors = []
+    
+    if not items:
+        return {"count": 0, "errors": ["No se proporcionaron archivos para eliminar"]}
+        
+    # Try importing send2trash if not force delete
+    send2trash_func = None
+    if not force:
+        try:
+            from send2trash import send2trash as s2t
+            send2trash_func = s2t
+        except ImportError:
+            return {"count": 0, "errors": ["Librería send2trash no instalada en el Agente. Use borrado forzado."]}
+
+    for item in items:
+        if not os.path.exists(item):
+            errors.append(f"No encontrado: {item}")
+            continue
+            
+        try:
+            if force:
+                if os.path.isdir(item):
+                    shutil.rmtree(item)
+                else:
+                    os.remove(item)
+            else:
+                # Send to trash
+                send2trash_func(os.path.normpath(item))
+            count += 1
+        except Exception as e:
+            errors.append(f"Error eliminando {os.path.basename(item)}: {e}")
+            
+    return {"count": count, "errors": errors}
+
+def process_compress_zip(items, output_path):
+    count = 0
+    errors = []
+    
+    if not items:
+        return {"count": 0, "errors": ["No se proporcionaron archivos para comprimir"]}
+        
+    try:
+        # Create directory for zip if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for item in items:
+                if not os.path.exists(item):
+                    errors.append(f"No encontrado: {item}")
+                    continue
+                    
+                if os.path.isfile(item):
+                    zipf.write(item, os.path.basename(item))
+                    count += 1
+                elif os.path.isdir(item):
+                    base_folder = os.path.basename(item)
+                    for root, dirs, files in os.walk(item):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            # Create relative path starting with folder name
+                            rel_path = os.path.relpath(file_path, os.path.dirname(item))
+                            zipf.write(file_path, rel_path)
+                    count += 1
+                    
+    except Exception as e:
+        return {"count": count, "errors": [str(e)]}
+        
+    return {"count": count, "errors": errors}
+
+def process_compress_individual(items):
+    count = 0
+    errors = []
+    
+    if not items:
+        return {"count": 0, "errors": ["No se proporcionaron elementos para comprimir"]}
+        
+    for item in items:
+        if not os.path.exists(item):
+            errors.append(f"No encontrado: {item}")
+            continue
+            
+        try:
+            # Create zip file with same name as item
+            zip_name = f"{item}.zip"
+            
+            with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                if os.path.isdir(item):
+                    for root, dirs, files in os.walk(item):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            rel_path = os.path.relpath(file_path, item)
+                            zipf.write(file_path, rel_path)
+                else:
+                    zipf.write(item, os.path.basename(item))
+            count += 1
+            
+        except Exception as e:
+            errors.append(f"Error comprimiendo {os.path.basename(item)}: {e}")
+            
+    return {"count": count, "errors": errors}
+
 class AgentWorker:
     def __init__(self, username, task_url, result_url, password=None):
         self.username = username
@@ -1440,9 +1630,10 @@ class AgentWorker:
                 path = params.get("path")
                 items = params.get("items", [])
                 separator = params.get("separator", "_")
+                item_type = params.get("item_type", "both")
                 
                 if path:
-                    res = process_bulk_rename(path, items, separator)
+                    res = process_bulk_rename(path, items, separator, item_type)
                     result["result"] = res
                 else:
                     result["status"] = "ERROR"
@@ -1737,6 +1928,54 @@ class AgentWorker:
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros (base_path o names)"}
+
+            elif command == "edit_text":
+                items = params.get("items", [])
+                find_text = params.get("find", "")
+                replace_text = params.get("replace", "")
+                
+                if items and find_text:
+                    self.log(f"Editando texto en {len(items)} archivos")
+                    res = process_edit_text(items, find_text, replace_text)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (items, find)"}
+
+            elif command == "delete_files":
+                items = params.get("items", [])
+                force = params.get("force", False)
+                
+                if items:
+                    self.log(f"Eliminando {len(items)} archivos (Forzado: {force})")
+                    res = process_delete_files(items, force)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (items)"}
+
+            elif command == "compress_zip":
+                items = params.get("items", [])
+                output_path = params.get("output_path")
+                
+                if items and output_path:
+                    self.log(f"Comprimiendo {len(items)} elementos en: {output_path}")
+                    res = process_compress_zip(items, output_path)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (items, output_path)"}
+
+            elif command == "compress_individual":
+                items = params.get("items", [])
+                
+                if items:
+                    self.log(f"Comprimiendo individualmente {len(items)} elementos")
+                    res = process_compress_individual(items)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (items)"}
 
             else:
                 result["status"] = "ERROR"

@@ -2505,7 +2505,7 @@ def worker_mover_archivos_por_coincidencia(base_path, silent_mode=False):
     if not silent_mode: progress_bar.empty()
     return f"Proceso finalizado. Movidos: {movidos}, Errores: {errores}"
 
-def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_suffix, base_path, use_filter=False, silent_mode=False):
+def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_suffix, base_path, use_filter=False, silent_mode=False, item_type="both"):
     try:
         data_rows = []
         if isinstance(uploaded_file, bytes):
@@ -2559,11 +2559,19 @@ def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_
             
             username = st.session_state.get("username", "admin")
             if not silent_mode:
-                st.info(f"Enviando tarea al agente local para procesar {len(data_rows)} carpetas...")
+                st.info(f"Enviando tarea al agente local para procesar {len(data_rows)} items...")
 
-            task_id = send_command(username, "add_suffix_excel", {
-                "base_path": base_path,
-                "items": data_rows
+            # Map to bulk_rename format
+            items_for_agent = [{"key": r["folder"], "suffix": r["suffix"]} for r in data_rows]
+            
+            task_id = send_command(username, "bulk_rename", {
+                "path": base_path,
+                "items": items_for_agent,
+                "separator": "", # Suffix in excel usually includes separator or logic handles it? Logic below uses direct concatenation.
+                # Actually server logic below does: new_name = f"{name}{suffix}{ext}" -> No separator added!
+                # But bulk_rename usually expects separator.
+                # Let's use empty separator here to match server logic, OR assume user provides suffix with separator.
+                "item_type": item_type
             })
 
             if task_id:
@@ -2575,17 +2583,15 @@ def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_
                 
                 if not silent_mode: status_placeholder.empty()
 
-                if res and "status" in res:
-                    if res["status"] == "success":
-                         msg = res.get("message", "Finalizado correctamente")
-                         stats = res.get("stats", {})
-                         renamed = stats.get("renamed", 0)
-                         errors = stats.get("errors", 0)
-                         return f"{msg} (Renombrados: {renamed}, Errores: {errors})"
-                    else:
-                         return f"Error del agente: {res.get('message', 'Desconocido')}"
+                if res and "result" in res:
+                    r = res["result"]
+                    count = r.get("count", 0)
+                    errs = r.get("errors", [])
+                    return f"Finalizado. Renombrados: {count}, Errores: {len(errs)}"
+                elif res and "error" in res:
+                     return f"Error del agente: {res.get('error')}"
                 else:
-                     return f"Error del agente: {res.get('error', 'Desconocido')}"
+                     return "Respuesta inválida del agente."
             else:
                 return "No se pudo crear la tarea en el servidor."
 
@@ -2597,6 +2603,21 @@ def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_
             progress_bar = st.progress(0, text="Añadiendo sufijos...")
             
         total = len(data_rows)
+        
+        scope_folders = str(item_type).lower() in ["todo", "both", "carpetas", "folders", "directory"]
+        scope_files = str(item_type).lower() in ["todo", "both", "archivos", "files", "file"]
+
+        # Helper to resolve path using search results
+        def _resolve_path(name, base):
+            if "search_results" in st.session_state and st.session_state.search_results:
+                name_norm = str(name).strip().lower()
+                for res in st.session_state.search_results:
+                    r_name = str(res.get("name", res.get("Nombre", ""))).strip().lower()
+                    r_path = res.get("path", res.get("Ruta completa", ""))
+                    if r_name == name_norm and r_path:
+                        return r_path
+            return os.path.join(base, name)
+
         for index, item in enumerate(data_rows):
             folder_name = item["folder"]
             suffix = item["suffix"]
@@ -2604,31 +2625,66 @@ def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_
             if not silent_mode:
                 progress_bar.progress((index + 1) / total)
             
-            target_dir = os.path.join(base_path, folder_name)
-            if os.path.isdir(target_dir):
-                carpetas_procesadas += 1
-                for fname in os.listdir(target_dir):
-                    fpath = os.path.join(target_dir, fname)
-                    if os.path.isfile(fpath):
-                        name, ext = os.path.splitext(fname)
-                        new_name = f"{name}{suffix}{ext}"
-                        new_path = os.path.join(target_dir, new_name)
-                        
-                        if fpath == new_path: continue
-                        if os.path.exists(new_path):
-                            errores += 1
-                            continue
+            target_path = _resolve_path(folder_name, base_path)
+            
+            # 1. RENAME FOLDER ITSELF (If scope_folders)
+            if scope_folders and os.path.isdir(target_path):
+                if not folder_name.endswith(suffix): # Simple check, suffix might contain separator
+                     new_folder_name = f"{folder_name}{suffix}"
+                     # Use dirname of target_path to reconstruct new path
+                     parent_dir = os.path.dirname(target_path)
+                     new_folder_path = os.path.join(parent_dir, new_folder_name)
+                     try:
+                         os.rename(target_path, new_folder_path)
+                         carpetas_procesadas += 1
+                         target_path = new_folder_path # Update for file processing
+                     except Exception:
+                         errores += 1
+            
+            # 2. RENAME FILES INSIDE (If scope_files)
+            if scope_files:
+                if os.path.isdir(target_path):
+                    # It's a folder, rename files inside
+                    for fname in os.listdir(target_path):
+                        fpath = os.path.join(target_path, fname)
+                        if os.path.isfile(fpath):
+                            name, ext = os.path.splitext(fname)
+                            new_name = f"{name}{suffix}{ext}"
+                            new_path = os.path.join(target_path, new_name)
                             
-                        try:
-                            os.rename(fpath, new_path)
-                            archivos_renombrados += 1
-                        except Exception:
-                            errores += 1
-            else:
-                errores += 1 # Folder not found
-                
+                            if fpath == new_path: continue
+                            if os.path.exists(new_path):
+                                errores += 1
+                                continue
+                                
+                            try:
+                                os.rename(fpath, new_path)
+                                archivos_renombrados += 1
+                            except Exception:
+                                errores += 1
+                elif os.path.isfile(target_path):
+                     # It's a specific file (found via search or direct path)
+                     # Rename the file itself
+                     parent_dir = os.path.dirname(target_path)
+                     fname = os.path.basename(target_path)
+                     name, ext = os.path.splitext(fname)
+                     
+                     if not name.endswith(suffix):
+                         new_name = f"{name}{suffix}{ext}"
+                         new_path = os.path.join(parent_dir, new_name)
+                         try:
+                             os.rename(target_path, new_path)
+                             archivos_renombrados += 1
+                         except Exception:
+                             errores += 1
+            elif not os.path.isdir(target_path) and not (scope_files and os.path.isfile(target_path)):
+                 # Only count error if it wasn't handled above
+                 if not os.path.exists(target_path):
+                    errores += 1 # Path not found
+
+                        
         if not silent_mode: progress_bar.empty()
-        return f"Finalizado. Carpetas: {carpetas_procesadas}, Renombrados: {archivos_renombrados}, Errores: {errores}"
+        return f"Finalizado. Carpetas Renombradas: {carpetas_procesadas}, Archivos Renombrados: {archivos_renombrados}, Errores: {errores}"
     except Exception as e:
         return f"Error crítico: {e}"
 
