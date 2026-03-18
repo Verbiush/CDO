@@ -307,8 +307,8 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                 
                 if selected:
                     st.session_state[key] = selected
-                    # Do not set input keys directly to avoid StreamlitAPIException
-                    # Instead, we just rerun and let the input field pick up the new default
+                    # Also update the text input key directly so the widget picks it up
+                    st.session_state[input_key] = selected
                     st.rerun()
 
         # Sync the return value with the current state of the input if custom is used
@@ -453,7 +453,8 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
                 selected = abrir_dialogo_archivo_nativo(initial_dir=os.path.dirname(current) if os.path.isfile(current) else current, file_types=file_types)
                 if selected:
                     st.session_state[key] = selected
-                    # Do not set input keys directly to avoid StreamlitAPIException
+                    # Also update the text input key directly so the widget picks it up
+                    st.session_state[input_key] = selected
                     st.rerun()
             
         # Sync the return value with the current state of the input if custom is used
