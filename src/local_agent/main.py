@@ -1391,6 +1391,77 @@ def process_edit_text(items, find_text, replace_text):
             
     return {"count": count_modified, "errors": errors}
 
+def process_copy_files(items, target_folder):
+    count = 0
+    errors = []
+    
+    if not items:
+        return {"count": 0, "errors": ["No se proporcionaron archivos para copiar"]}
+        
+    try:
+        if not os.path.exists(target_folder):
+            os.makedirs(target_folder)
+    except Exception as e:
+        return {"count": 0, "errors": [f"Error creando carpeta destino: {e}"]}
+
+    for item in items:
+        if not os.path.exists(item):
+            errors.append(f"No encontrado: {item}")
+            continue
+            
+        try:
+            filename = os.path.basename(item)
+            dest_path = os.path.join(target_folder, filename)
+            
+            # Manejar colisiones
+            if os.path.exists(dest_path):
+                base, ext = os.path.splitext(filename)
+                dest_path = os.path.join(target_folder, f"{base}_{int(time.time())}{ext}")
+            
+            if os.path.isdir(item):
+                shutil.copytree(item, dest_path)
+            else:
+                shutil.copy2(item, dest_path)
+            count += 1
+        except Exception as e:
+            errors.append(f"Error copiando {os.path.basename(item)}: {e}")
+            
+    return {"count": count, "errors": errors}
+
+def process_move_files(items, target_folder):
+    count = 0
+    errors = []
+    
+    if not items:
+        return {"count": 0, "errors": ["No se proporcionaron archivos para mover"]}
+        
+    try:
+        if not os.path.exists(target_folder):
+            os.makedirs(target_folder)
+    except Exception as e:
+        return {"count": 0, "errors": [f"Error creando carpeta destino: {e}"]}
+
+    for item in items:
+        if not os.path.exists(item):
+            errors.append(f"No encontrado: {item}")
+            continue
+            
+        try:
+            filename = os.path.basename(item)
+            dest_path = os.path.join(target_folder, filename)
+            
+            # Manejar colisiones
+            if os.path.exists(dest_path):
+                base, ext = os.path.splitext(filename)
+                dest_path = os.path.join(target_folder, f"{base}_{int(time.time())}{ext}")
+            
+            shutil.move(item, dest_path)
+            count += 1
+        except Exception as e:
+            errors.append(f"Error moviendo {os.path.basename(item)}: {e}")
+            
+    return {"count": count, "errors": errors}
+
 def process_delete_files(items, force=False):
     count = 0
     errors = []
@@ -1977,13 +2048,37 @@ class AgentWorker:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros (items)"}
 
+            elif command == "copy_files":
+                items = params.get("items", [])
+                target_folder = params.get("target_folder")
+                
+                if items and target_folder:
+                    self.log(f"Copiando {len(items)} archivos a {target_folder}")
+                    res = process_copy_files(items, target_folder)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (items, target_folder)"}
+
+            elif command == "move_files":
+                items = params.get("items", [])
+                target_folder = params.get("target_folder")
+                
+                if items and target_folder:
+                    self.log(f"Moviendo {len(items)} archivos a {target_folder}")
+                    res = process_move_files(items, target_folder)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (items, target_folder)"}
+
             else:
                 result["status"] = "ERROR"
-                result["result"] = f"Comando desconocido: {command}"
+                result["result"] = {"error": f"Comando desconocido: {command}"}
 
         except Exception as e:
             result["status"] = "ERROR"
-            result["result"] = str(e)
+            result["result"] = {"error": str(e)}
             self.log(f"Error procesando tarea: {e}")
 
         # Send result

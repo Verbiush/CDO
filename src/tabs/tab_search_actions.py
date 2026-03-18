@@ -725,8 +725,8 @@ def worker_copiar_lista(file_list, target_folder, silent_mode=False):
                 else:
                     res = agent_client.wait_for_result(task_id, timeout=600)
 
-                if res and res.get("status") == "SUCCESS":
-                    r_data = res.get("result", {})
+                if res and isinstance(res, dict) and "count" in res:
+                    r_data = res
                     count = r_data.get("count", 0)
                     errors = r_data.get("errors", [])
                     msg = f"Agente: Copiados {count} archivos."
@@ -738,8 +738,12 @@ def worker_copiar_lista(file_list, target_folder, silent_mode=False):
                              with st.expander("Errores de copia"):
                                  for e in errors: st.write(e)
                     return msg
+                elif res and isinstance(res, dict) and "error" in res:
+                    err_msg = res.get("error")
+                    if not silent_mode: st.error(f"Fallo Agente: {err_msg}")
+                    return f"Error: {err_msg}"
                 else:
-                    err = res.get("result") if res else "Error desconocido"
+                    err = str(res) if res else "Error desconocido"
                     if not silent_mode: st.error(f"Fallo Agente: {err}")
                     return f"Error: {err}"
         except Exception as e:
@@ -825,8 +829,8 @@ def worker_mover_lista(file_list, target_folder, silent_mode=False):
                 else:
                     res = agent_client.wait_for_result(task_id, timeout=600)
 
-                if res and res.get("status") == "SUCCESS":
-                    r_data = res.get("result", {})
+                if res and isinstance(res, dict) and "count" in res:
+                    r_data = res
                     count = r_data.get("count", 0)
                     errors = r_data.get("errors", [])
                     msg = f"Agente: Movidos {count} archivos."
@@ -842,8 +846,12 @@ def worker_mover_lista(file_list, target_folder, silent_mode=False):
                         time.sleep(1.5)
                         st.rerun()
                     return msg
+                elif res and isinstance(res, dict) and "error" in res:
+                    err_msg = res.get("error")
+                    if not silent_mode: st.error(f"Fallo Agente: {err_msg}")
+                    return f"Error: {err_msg}"
                 else:
-                    err = res.get("result") if res else "Error desconocido"
+                    err = str(res) if res else "Error desconocido"
                     if not silent_mode: st.error(f"Fallo Agente: {err}")
                     return f"Error: {err}"
         except Exception as e:
@@ -934,8 +942,8 @@ def worker_eliminar_lista(file_list, force_delete=False, silent_mode=False):
                 else:
                     res = agent_client.wait_for_result(task_id, timeout=600)
 
-                if res and res.get("status") == "SUCCESS":
-                    r_data = res.get("result", {})
+                if res and isinstance(res, dict) and "count" in res:
+                    r_data = res
                     count = r_data.get("count", 0)
                     errors = r_data.get("errors", [])
                     msg = f"Agente: Eliminados {count} archivos."
@@ -950,8 +958,12 @@ def worker_eliminar_lista(file_list, force_delete=False, silent_mode=False):
                         time.sleep(1.5)
                         st.rerun()
                     return msg
+                elif res and isinstance(res, dict) and "error" in res:
+                    err_msg = res.get("error")
+                    if not silent_mode: st.error(f"Fallo Agente: {err_msg}")
+                    return f"Error: {err_msg}"
                 else:
-                    err = res.get("result") if res else "Error desconocido"
+                    err = str(res) if res else "Error desconocido"
                     if not silent_mode: st.error(f"Fallo Agente: {err}")
                     return f"Error: {err}"
         except Exception as e:
