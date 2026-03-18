@@ -278,6 +278,13 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         target_path = default_path
         st.session_state[key] = target_path
 
+    # SYNC FIX: Ensure the input widget key is synced with the main key
+    # This handles the case where the path was updated programmatically (e.g. by the folder button)
+    # and we need the text_input to reflect that change on the next render.
+    input_key = f"input_{key}"
+    if use_custom and input_key in st.session_state and st.session_state[input_key] != target_path:
+        st.session_state[input_key] = target_path
+
     # --- RENDER UI ---
     is_native = st.session_state.get("force_native_mode", True)
     
@@ -285,7 +292,7 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         # --- NATIVE MODE ---
         col1, col2 = st.columns([0.8, 0.2])
         with col1:
-            input_key = f"input_{key}"
+            # input_key is already defined above
             if use_custom:
                 # To avoid Streamlit warning about value and key, ensure session_state has the value
                 if input_key not in st.session_state:
