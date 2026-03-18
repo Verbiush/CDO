@@ -1150,6 +1150,7 @@ def dialogo_modificar_nombres():
             
     with col_cancel:
         if st.button("❌ Cancelar", use_container_width=True):
+            st.session_state.active_action_dialog = None
             st.rerun()
 
 @st.dialog("Editar Texto en Archivos")
@@ -1169,12 +1170,18 @@ def dialogo_editar_texto():
     search_text = st.text_input("Texto a buscar:")
     replace_text = st.text_input("Reemplazar con:")
     
-    if st.button("🚀 Ejecutar Reemplazo"):
-        if not search_text:
-            st.warning("Debes ingresar el texto a buscar.")
-            return
+    col_ok, col_cancel = st.columns([1, 1])
+    with col_ok:
+        if st.button("🚀 Ejecutar Reemplazo", use_container_width=True):
+            if not search_text:
+                st.warning("Debes ingresar el texto a buscar.")
+            else:
+                worker_editar_texto(st.session_state.get("search_results", []), search_text, replace_text, silent_mode=False)
             
-        worker_editar_texto(st.session_state.get("search_results", []), search_text, replace_text, silent_mode=False)
+    with col_cancel:
+        if st.button("❌ Cerrar", use_container_width=True):
+            st.session_state.active_action_dialog = None
+            st.rerun()
 
 @st.dialog("Copiar Archivos de Lista")
 def dialogo_copiar_lista():
@@ -1197,12 +1204,19 @@ def dialogo_copiar_lista():
         default_path=current_global_path
     )
     
-    if st.button("🚀 Copiar"):
-        dest = st.session_state.get("copy_dest_input")
-        if not dest:
-            st.warning("Selecciona una carpeta destino.")
-            return
-        worker_copiar_lista(st.session_state.get("search_results", []), dest, silent_mode=False)
+    col_ok, col_cancel = st.columns([1, 1])
+    with col_ok:
+        if st.button("🚀 Copiar", use_container_width=True):
+            dest = st.session_state.get("copy_dest_input")
+            if not dest:
+                st.warning("Selecciona una carpeta destino.")
+            else:
+                worker_copiar_lista(st.session_state.get("search_results", []), dest, silent_mode=False)
+            
+    with col_cancel:
+        if st.button("❌ Cerrar", use_container_width=True):
+            st.session_state.active_action_dialog = None
+            st.rerun()
 
 @st.dialog("Mover Archivos de Lista")
 def dialogo_mover_lista():
@@ -1228,11 +1242,18 @@ def dialogo_mover_lista():
         help_text="Donde se moverán los archivos."
     )
 
-    if st.button("🚀 Mover"):
-        if not target_move_path:
-            st.warning("Selecciona una carpeta destino.")
-            return
-        worker_mover_lista(st.session_state.get("search_results", []), target_move_path, silent_mode=False)
+    col_ok, col_cancel = st.columns([1, 1])
+    with col_ok:
+        if st.button("🚀 Mover", use_container_width=True):
+            if not target_move_path:
+                st.warning("Selecciona una carpeta destino.")
+            else:
+                worker_mover_lista(st.session_state.get("search_results", []), target_move_path, silent_mode=False)
+
+    with col_cancel:
+        if st.button("❌ Cerrar", use_container_width=True):
+            st.session_state.active_action_dialog = None
+            st.rerun()
 
 
 @st.dialog("Confirmar Eliminación")
@@ -1305,6 +1326,10 @@ def dialogo_comprimir_zip():
             full_zip_path += ".zip"
             
         worker_comprimir_zip(st.session_state.get("search_results", []), full_zip_path, silent_mode=False)
+        
+    if st.button("❌ Cerrar", key="btn_close_zip"):
+        st.session_state.active_action_dialog = None
+        st.rerun()
 
 @st.dialog("Comprimir Individualmente")
 def dialogo_comprimir_individual():
@@ -1317,8 +1342,15 @@ def dialogo_comprimir_individual():
         
     st.info(f"Elementos a procesar: {len(st.session_state.get('search_results', []))}")
     
-    if st.button("🚀 Comprimir Individualmente"):
-         worker_comprimir_individual(st.session_state.get("search_results", []), silent_mode=False)
+    col_ok, col_cancel = st.columns([1, 1])
+    with col_ok:
+        if st.button("🚀 Comprimir Individualmente"):
+             worker_comprimir_individual(st.session_state.get("search_results", []), silent_mode=False)
+    
+    with col_cancel:
+        if st.button("❌ Cerrar"):
+            st.session_state.active_action_dialog = None
+            st.rerun()
 
 # --- RENDER FUNCTION ---
 
@@ -1477,20 +1509,27 @@ def render(container):
         with col_btns[1]:
             if st.button("▶️ Ejecutar", use_container_width=True, help="Ejecutar acción seleccionada"):
                 action = st.session_state.get("action_radio")
-                if action == "Modificar nombre":
-                    dialogo_modificar_nombres()
-                elif action == "Editar texto":
-                    dialogo_editar_texto()
-                elif action == "Copiar a carpeta":
-                    dialogo_copiar_lista()
-                elif action == "Mover a carpeta":
-                    dialogo_mover_lista()
-                elif action == "Comprimir en ZIP":
-                    dialogo_comprimir_zip()
-                elif action == "Comprimir individualmente":
-                    dialogo_comprimir_individual()
-                else:
-                    funcion_no_implementada(f"Acción: {action}")
+                st.session_state.active_action_dialog = action
+            
+            # Manejo de diálogos persistentes
+            active_dialog = st.session_state.get("active_action_dialog")
+            
+            if active_dialog == "Modificar nombre":
+                dialogo_modificar_nombres()
+            elif active_dialog == "Editar texto":
+                dialogo_editar_texto()
+            elif active_dialog == "Copiar a carpeta":
+                dialogo_copiar_lista()
+            elif active_dialog == "Mover a carpeta":
+                dialogo_mover_lista()
+            elif active_dialog == "Comprimir en ZIP":
+                dialogo_comprimir_zip()
+            elif active_dialog == "Comprimir individualmente":
+                dialogo_comprimir_individual()
+            elif active_dialog:
+                # Caso fallback o error
+                funcion_no_implementada(f"Acción: {active_dialog}")
+                st.session_state.active_action_dialog = None
                 
         with col_btns[2]:
             if st.button("🧹 Limpiar", use_container_width=True, help="Limpiar lista de resultados"):
