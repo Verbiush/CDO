@@ -287,10 +287,15 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         with col1:
             input_key = f"input_{key}"
             if use_custom:
-                st.text_input(label, value=target_path, key=input_key, help=help_text,
+                # To avoid Streamlit warning about value and key, ensure session_state has the value
+                if input_key not in st.session_state:
+                    st.session_state[input_key] = target_path
+                st.text_input(label, key=input_key, help=help_text,
                               on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
             else:
-                st.text_input(label, value=target_path, key=f"{input_key}_disabled", disabled=True, help=help_text)
+                if f"{input_key}_disabled" not in st.session_state:
+                    st.session_state[f"{input_key}_disabled"] = target_path
+                st.text_input(label, key=f"{input_key}_disabled", disabled=True, help=help_text)
 
         with col2:
             st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
@@ -300,23 +305,20 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                 # Get current path from state or default
                 current = st.session_state.get(key, target_path)
                 
-                st.toast("Abriendo selector...", icon="📂")
-                
                 selected = abrir_dialogo_carpeta_nativo(title=label, initial_dir=current)
                 
                 if selected:
-                    st.toast(f"Carpeta seleccionada: {selected}", icon="✅")
                     st.session_state[key] = selected
                     # Also update the text input keys to reflect change immediately
-                    st.session_state[f"input_{key}"] = selected
-                    st.session_state[f"input_{key}_disabled"] = selected
-                    # No llamamos a st.rerun() para evitar bloqueos por doble ejecución rápida
-                else:
-                    st.toast("No se seleccionó ninguna carpeta.", icon="⚠️")
+                    st.session_state[input_key] = selected
+                    st.session_state[f"{input_key}_disabled"] = selected
             
             st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom, on_click=on_click_folder)
 
-        # Return the current path stored in session state
+        # Sync the return value with the current state of the input if custom is used
+        if use_custom and input_key in st.session_state:
+            st.session_state[key] = st.session_state[input_key]
+            
         return st.session_state.get(key, target_path)
 
     else:
@@ -435,18 +437,36 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
             input_key = f"input_{key}"
             if use_custom:
                 # Active input with on_change sync
-                st.text_input(label, value=target_path, key=input_key, help=help_text,
+                if input_key not in st.session_state:
+                    st.session_state[input_key] = target_path
+                st.text_input(label, key=input_key, help=help_text,
                               on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
             else:
                 # Disabled input
-                st.text_input(label, value=target_path, key=f"{input_key}_disabled", disabled=True, help=help_text)
+                if f"{input_key}_disabled" not in st.session_state:
+                    st.session_state[f"{input_key}_disabled"] = target_path
+                st.text_input(label, key=f"{input_key}_disabled", disabled=True, help=help_text)
 
         with col2:
             st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
             # Button to open dialog
             btn_key = f"btn_{key}"
-            st.button("📄", key=btn_key, help="Seleccionar Archivo", disabled=not use_custom,
-                  on_click=lambda: update_path_key(key, abrir_dialogo_archivo_nativo(initial_dir=os.path.dirname(target_path) if os.path.isfile(target_path) else target_path, file_types=file_types), widget_key=input_key))
+            
+            def on_click_file():
+                current = st.session_state.get(key, target_path)
+                selected = abrir_dialogo_archivo_nativo(initial_dir=os.path.dirname(current) if os.path.isfile(current) else current, file_types=file_types)
+                if selected:
+                    st.session_state[key] = selected
+                    st.session_state[input_key] = selected
+                    st.session_state[f"{input_key}_disabled"] = selected
+
+            st.button("📄", key=btn_key, help="Seleccionar Archivo", disabled=not use_custom, on_click=on_click_file)
+            
+        # Sync the return value with the current state of the input if custom is used
+        if use_custom and input_key in st.session_state:
+            st.session_state[key] = st.session_state[input_key]
+            
+        return st.session_state.get(key, target_path)
     else:
         # --- WEB MODE ---
         st.markdown(f"**{label}**")
