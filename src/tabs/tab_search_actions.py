@@ -1189,10 +1189,12 @@ def dialogo_copiar_lista():
     current_global_path = st.session_state.get("current_path", os.getcwd())
     if not current_global_path: current_global_path = os.getcwd()
 
+    st.text_input("Carpeta Origen (Búsqueda inicial):", value=current_global_path, disabled=True)
+
     target_copy_path = render_path_selector(
         label="Carpeta Destino:",
         key="copy_dest_input",
-        default_path=st.session_state.get("current_path", os.getcwd())
+        default_path=current_global_path
     )
     
     if st.button("🚀 Copiar"):
@@ -1213,11 +1215,16 @@ def dialogo_mover_lista():
 
     st.info(f"Elementos a mover: {len(st.session_state.get('search_results', []))}")
     
+    current_global_path = st.session_state.get("current_path", os.getcwd())
+    if not current_global_path: current_global_path = os.getcwd()
+
+    st.text_input("Carpeta Origen (Búsqueda inicial):", value=current_global_path, disabled=True)
+
     # Selector de Ruta Estandarizado
     target_move_path = render_path_selector(
-        label="Carpeta Destino",
+        label="Carpeta Destino:",
         key="move_dest_input",
-        default_path=st.session_state.get("current_path", os.getcwd()),
+        default_path=current_global_path,
         help_text="Donde se moverán los archivos."
     )
 
