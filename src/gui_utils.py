@@ -14,7 +14,8 @@ except ImportError:
     except ImportError:
         database = None
 
-import multiprocessing
+import subprocess
+import sys
 
 try:
     import tkinter as tk
@@ -23,47 +24,48 @@ try:
 except ImportError:
     TKINTER_AVAILABLE = False
 
-def _tkinter_folder_dialog_worker(title, initial_dir, queue):
-    """Worker function to run Tkinter dialog in a separate process."""
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.wm_attributes('-topmost', 1)
-        
-        # Ensure initial_dir is valid
-        if not initial_dir or not os.path.exists(initial_dir):
-            initial_dir = os.getcwd()
-            
-        folder_path = filedialog.askdirectory(title=title, initialdir=initial_dir)
-        root.destroy()
-        queue.put(folder_path)
-    except Exception as e:
-        print(f"Tkinter process error: {e}")
-        queue.put(None)
+def _run_tkinter_dialog_subprocess(dialog_type, title, initial_dir, file_types=None):
+    """
+    Runs a tkinter dialog in a completely separate python process using subprocess.
+    This avoids the multiprocessing Streamlit reload issue on Windows.
+    dialog_type: 'directory' or 'file'
+    """
+    script = f"""
+import tkinter as tk
+from tkinter import filedialog
+import sys
 
-def _tkinter_file_dialog_worker(title, initial_dir, file_types, queue):
-    """Worker function to run Tkinter dialog in a separate process."""
+try:
+    root = tk.Tk()
+    root.withdraw()
+    root.wm_attributes('-topmost', 1)
+    
+    if '{dialog_type}' == 'directory':
+        res = filedialog.askdirectory(title={repr(title)}, initialdir={repr(initial_dir)})
+    else:
+        file_types = {repr(file_types)}
+        res = filedialog.askopenfilename(title={repr(title)}, initialdir={repr(initial_dir)}, filetypes=file_types)
+    
+    root.destroy()
+    if res:
+        print(res)
+except Exception as e:
+    sys.stderr.write(str(e))
+    sys.exit(1)
+"""
     try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        root.wm_attributes('-topmost', 1)
-        
-        if not initial_dir or not os.path.exists(initial_dir):
-            initial_dir = os.getcwd()
-            
-        if not file_types:
-            file_types = [("Todos los archivos", "*.*")]
-            
-        file_path = filedialog.askopenfilename(title=title, initialdir=initial_dir, filetypes=file_types)
-        root.destroy()
-        queue.put(file_path)
+        # Run python executable with the script
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        output = result.stdout.strip()
+        return output if output else None
     except Exception as e:
-        print(f"Tkinter process error: {e}")
-        queue.put(None)
+        print(f"Subprocess Tkinter error: {e}")
+        return None
 
 def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
     """
@@ -74,20 +76,14 @@ def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
     is_windows = platform.system() == "Windows"
     if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE and is_windows:
         try:
-            # Use multiprocessing to isolate Tkinter from Streamlit's loop
-            queue = multiprocessing.Queue()
-            p = multiprocessing.Process(target=_tkinter_folder_dialog_worker, args=(title, initial_dir, queue))
-            p.start()
-            p.join() # Wait for process to finish
-            
-            # Get result
-            if not queue.empty():
-                folder_path = queue.get()
-                return folder_path if folder_path else None
-            else:
-                return None
+            if not initial_dir or not os.path.exists(initial_dir):
+                initial_dir = os.getcwd()
+                
+            # Use subprocess to isolate Tkinter from Streamlit's loop
+            folder_path = _run_tkinter_dialog_subprocess('directory', title, initial_dir)
+            return folder_path
         except Exception as e:
-            print(f"DEBUG: Tkinter multiprocessing failed ({e}). Trying Agent fallback...")
+            print(f"DEBUG: Tkinter subprocess failed ({e}). Trying Agent fallback...")
             # Fall through to Agent
     
     # Fallback al Agente Local (funciona en Web y Nativo si Tkinter falla)
@@ -121,19 +117,17 @@ def abrir_dialogo_archivo_nativo(title="Seleccionar Archivo", initial_dir=None, 
     is_windows = platform.system() == "Windows"
     if st.session_state.get("force_native_mode", True) and TKINTER_AVAILABLE and is_windows:
         try:
-            # Use multiprocessing to isolate Tkinter
-            queue = multiprocessing.Queue()
-            p = multiprocessing.Process(target=_tkinter_file_dialog_worker, args=(title, initial_dir, file_types, queue))
-            p.start()
-            p.join()
-            
-            if not queue.empty():
-                file_path = queue.get()
-                return file_path if file_path else None
-            else:
-                return None
+            if not initial_dir or not os.path.exists(initial_dir):
+                initial_dir = os.getcwd()
+                
+            if not file_types:
+                file_types = [("Todos los archivos", "*.*")]
+                
+            # Use subprocess to isolate Tkinter
+            file_path = _run_tkinter_dialog_subprocess('file', title, initial_dir, file_types)
+            return file_path
         except Exception as e:
-            print(f"DEBUG: Tkinter multiprocessing failed ({e}). Trying Agent fallback...")
+            print(f"DEBUG: Tkinter subprocess failed ({e}). Trying Agent fallback...")
             
     # Fallback al Agente Local
     try:
