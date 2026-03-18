@@ -300,20 +300,16 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         with col2:
             st.markdown('<div style="margin-top: 28px;"></div>', unsafe_allow_html=True)
             btn_key = f"btn_{key}"
-            # Use on_click to trigger dialog and update state
-            def on_click_folder():
-                # Get current path from state or default
+            
+            if st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom):
                 current = st.session_state.get(key, target_path)
-                
                 selected = abrir_dialogo_carpeta_nativo(title=label, initial_dir=current)
                 
                 if selected:
                     st.session_state[key] = selected
-                    # Also update the text input keys to reflect change immediately
                     st.session_state[input_key] = selected
                     st.session_state[f"{input_key}_disabled"] = selected
-            
-            st.button("📁", key=btn_key, help="Seleccionar Carpeta", disabled=not use_custom, on_click=on_click_folder)
+                    st.rerun()
 
         # Sync the return value with the current state of the input if custom is used
         if use_custom and input_key in st.session_state:
@@ -452,15 +448,14 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
             # Button to open dialog
             btn_key = f"btn_{key}"
             
-            def on_click_file():
+            if st.button("📄", key=btn_key, help="Seleccionar Archivo", disabled=not use_custom):
                 current = st.session_state.get(key, target_path)
                 selected = abrir_dialogo_archivo_nativo(initial_dir=os.path.dirname(current) if os.path.isfile(current) else current, file_types=file_types)
                 if selected:
                     st.session_state[key] = selected
                     st.session_state[input_key] = selected
                     st.session_state[f"{input_key}_disabled"] = selected
-
-            st.button("📄", key=btn_key, help="Seleccionar Archivo", disabled=not use_custom, on_click=on_click_file)
+                    st.rerun()
             
         # Sync the return value with the current state of the input if custom is used
         if use_custom and input_key in st.session_state:
