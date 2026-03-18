@@ -2786,6 +2786,25 @@ def worker_txt_a_json_masivo(folder_path, silent_mode=False):
 
 
 def worker_analisis_carpetas(root_path, silent_mode=False):
+    # --- Agent Delegation ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    if is_native_mode:
+        if not silent_mode: st.info(f"Delegando análisis de carpetas al Agente Local...")
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "admin")
+            task_id = send_command(username, "analisis_carpetas", {"path": root_path})
+            if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
+            
+            res = wait_for_result(username, task_id, timeout=300)
+            if res and res.get("status") == "COMPLETED":
+                return res.get("result")
+            else:
+                return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
+        except Exception as e:
+            return {"error": f"Fallo en delegación a agente: {e}"}
+    # ------------------------
+
     if not silent_mode: st.info(f"Analizando: {root_path}")
     data = []
     for root, dirs, files in os.walk(root_path):
@@ -3904,6 +3923,25 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
     Analiza masivamente los archivos PDF para extraer datos de historias clínicas.
     Retorna bytes de Excel.
     """
+    # --- Agent Delegation ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    if is_native_mode:
+        if not silent_mode: st.info(f"Delegando análisis HC al Agente Local...")
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "admin")
+            task_id = send_command(username, "analisis_hc", {"file_list": file_list})
+            if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
+            
+            res = wait_for_result(username, task_id, timeout=300)
+            if res and res.get("status") == "COMPLETED":
+                return res.get("result")
+            else:
+                return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
+        except Exception as e:
+            return {"error": f"Fallo en delegación a agente: {e}"}
+    # ------------------------
+
     if not file_list:
         if not silent_mode: st.error("No hay archivos para analizar.")
         return None
@@ -4011,6 +4049,25 @@ def worker_leer_pdf_retefuente(file_list, silent_mode=False):
     Lee archivos PDF de Retefuente y extrae RAZON SOCIAL y NIT.
     Retorna bytes de Excel.
     """
+    # --- Agent Delegation ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    if is_native_mode:
+        if not silent_mode: st.info(f"Delegando análisis Retefuente al Agente Local...")
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "admin")
+            task_id = send_command(username, "analisis_rete", {"file_list": file_list})
+            if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
+            
+            res = wait_for_result(username, task_id, timeout=300)
+            if res and res.get("status") == "COMPLETED":
+                return res.get("result")
+            else:
+                return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
+        except Exception as e:
+            return {"error": f"Fallo en delegación a agente: {e}"}
+    # ------------------------
+    
     if not file_list: return None
     
     archivos_pdf = [f for f in file_list if f.lower().endswith('.pdf')]
@@ -4165,6 +4222,25 @@ def worker_analisis_emssanar(file_list, silent_mode=False):
     Resalta columnas en amarillo.
     Retorna bytes de Excel.
     """
+    # --- Agent Delegation ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    if is_native_mode:
+        if not silent_mode: st.info(f"Delegando análisis Emssanar al Agente Local...")
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "admin")
+            task_id = send_command(username, "analisis_emssanar", {"file_list": file_list})
+            if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
+            
+            res = wait_for_result(username, task_id, timeout=300)
+            if res and res.get("status") == "COMPLETED":
+                return res.get("result")
+            else:
+                return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
+        except Exception as e:
+            return {"error": f"Fallo en delegación a agente: {e}"}
+    # ------------------------
+
     if not file_list: return None
     
     archivos_pdf = [f for f in file_list if f.lower().endswith('.pdf')]
@@ -4402,6 +4478,25 @@ def worker_analisis_fomag(file_list, silent_mode=False):
     Extrae información del encabezado, paciente, prestador y servicios.
     Retorna bytes de Excel.
     """
+    # --- Agent Delegation ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    if is_native_mode:
+        if not silent_mode: st.info(f"Delegando análisis Fomag al Agente Local...")
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "admin")
+            task_id = send_command(username, "analisis_fomag", {"file_list": file_list})
+            if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
+            
+            res = wait_for_result(username, task_id, timeout=300)
+            if res and res.get("status") == "COMPLETED":
+                return res.get("result")
+            else:
+                return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
+        except Exception as e:
+            return {"error": f"Fallo en delegación a agente: {e}"}
+    # ------------------------
+
     if not file_list: return None
     
     archivos_pdf = [f for f in file_list if f.lower().endswith('.pdf')]
@@ -4697,6 +4792,31 @@ def worker_analisis_sos(file_list, silent_mode=False, use_ai=False, api_key=None
     Analiza archivos PDF de SOS (Autorizaciones).
     Soporta modo 'Studio' (Reglas/PDFPlumber) y opcionalmente IA.
     """
+    # --- Agent Delegation ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    if is_native_mode:
+        if not silent_mode: st.info(f"Delegando análisis SOS al Agente Local...")
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "admin")
+            payload = {
+                "file_list": file_list,
+                "use_ai": use_ai,
+                "api_key": api_key
+            }
+            task_id = send_command(username, "analisis_sos", payload)
+            if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
+            
+            res = wait_for_result(username, task_id, timeout=600) # Longer timeout for AI
+            if res and res.get("status") == "COMPLETED":
+                return res.get("result")
+            else:
+                return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
+        except Exception as e:
+            return {"error": f"Fallo en delegación a agente: {e}"}
+    # ------------------------
+
+    # ... Rest of local implementation ...
     if not file_list: return None
     
     archivos_pdf = [f for f in file_list if f.lower().endswith('.pdf')]
@@ -4828,6 +4948,25 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
     Analiza archivos PDF de Autorizaciones Nueva EPS usando PyMuPDF (fitz).
     Retorna bytes de Excel.
     """
+    # --- Agent Delegation ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    if is_native_mode:
+        if not silent_mode: st.info(f"Delegando análisis Nueva EPS al Agente Local...")
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "admin")
+            task_id = send_command(username, "analisis_neps", {"file_list": file_list})
+            if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
+            
+            res = wait_for_result(username, task_id, timeout=300)
+            if res and res.get("status") == "COMPLETED":
+                return res.get("result")
+            else:
+                return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
+        except Exception as e:
+            return {"error": f"Fallo en delegación a agente: {e}"}
+    # ------------------------
+
     if not fitz:
         if not silent_mode: st.error("Librería 'fitz' (PyMuPDF) no instalada.")
         return None
@@ -4906,6 +5045,25 @@ def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
     Analiza archivos PDF de Cargue Sanitas (FEOV) usando PyMuPDF (fitz).
     Retorna bytes de Excel.
     """
+    # --- Agent Delegation ---
+    is_native_mode = st.session_state.get('force_native_mode', False)
+    if is_native_mode:
+        if not silent_mode: st.info(f"Delegando análisis Sanitas al Agente Local...")
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "admin")
+            task_id = send_command(username, "analisis_sanitas", {"file_list": file_list})
+            if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
+            
+            res = wait_for_result(username, task_id, timeout=300)
+            if res and res.get("status") == "COMPLETED":
+                return res.get("result")
+            else:
+                return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
+        except Exception as e:
+            return {"error": f"Fallo en delegación a agente: {e}"}
+    # ------------------------
+
     if not fitz:
         if not silent_mode: st.error("Librería 'fitz' (PyMuPDF) no instalada.")
         return None
@@ -7307,34 +7465,7 @@ def render():
                     result = func(*args)
                 
                 if result and isinstance(result, dict) and "files" in result:
-                    st.success(result.get("message", "Análisis completado."))
-                    
-                    # Create temp dir for results
-                    timestamp = int(time.time())
-                    temp_dir = os.path.join("temp_downloads", f"{key_prefix}_{timestamp}")
-                    os.makedirs(temp_dir, exist_ok=True)
-                    
-                    files_created = []
-                    for i, f in enumerate(result["files"]):
-                        data = f["data"]
-                        if hasattr(data, "getvalue"): data = data.getvalue()
-                        
-                        file_name = f["name"]
-                        file_path = os.path.join(temp_dir, file_name)
-                        
-                        with open(file_path, "wb") as fp:
-                            fp.write(data)
-                        files_created.append(file_path)
-
-                    if len(files_created) == 1:
-                        # Download single file
-#                         render_download_button(files_created[0], f"{key_prefix}_dl", f"📥 Descargar {os.path.basename(files_created[0])}")
-                        pass
-                    elif len(files_created) > 1:
-                        # Download folder as ZIP
-#                         render_download_button(temp_dir, f"{key_prefix}_dl_zip", "📦 Descargar Todos (ZIP)")
-                        pass
-                        
+                    st.session_state[f"analysis_result_{key_prefix}"] = result
                 elif result:
                      st.warning("El resultado no tiene el formato esperado para descarga directa.")
                 else:
@@ -7342,18 +7473,38 @@ def render():
             except Exception as e:
                 st.error(f"Error: {e}")
 
+        # Renderizar resultados guardados en session_state
+        def render_analysis_results(key_prefix):
+            state_key = f"analysis_result_{key_prefix}"
+            if state_key in st.session_state:
+                result = st.session_state[state_key]
+                st.success(result.get("message", "Análisis completado."))
+                for i, f in enumerate(result["files"]):
+                    data = f["data"]
+                    if hasattr(data, "getvalue"): data = data.getvalue()
+                    
+                    st.download_button(
+                        label=f["label"] if "label" in f else f"📥 Descargar {f['name']}",
+                        data=data,
+                        file_name=f["name"],
+                        mime=f.get("mime", "application/octet-stream"),
+                        key=f"{key_prefix}_dl_{i}"
+                    )
+
         with col_a1:
             if st.button("📊 Análisis Carpetas (Excel)", key="btn_an_folders"):
                 if path_an and os.path.exists(path_an):
                      run_analysis_sync(worker_analisis_carpetas, [path_an], "an_folders")
                 else:
                     st.warning("Seleccione una carpeta válida.")
+            render_analysis_results("an_folders")
             
             if st.button("📊 Análisis SOS", key="btn_an_sos"):
                  if files_pdf: 
                      run_analysis_sync(worker_analisis_sos, [files_pdf], "an_sos")
                  else: 
                      st.warning("No se encontraron PDFs.")
+            render_analysis_results("an_sos")
 
         with col_a2:
             if st.button("📊 Análisis Historia Clínica", key="btn_an_hc"):
@@ -7361,36 +7512,42 @@ def render():
                     run_analysis_sync(worker_analisis_historia_clinica, [files_pdf], "an_hc")
                 else:
                     st.warning("No se encontraron PDFs.")
+            render_analysis_results("an_hc")
             
             if st.button("📊 Análisis Autoriz. Nueva EPS", key="btn_an_neps"):
                 if files_pdf:
                     run_analysis_sync(worker_analisis_autorizacion_nueva_eps, [files_pdf], "an_neps")
                 else:
                     st.warning("No se encontraron PDFs.")
+            render_analysis_results("an_neps")
 
             if st.button("📊 Análisis Cargue Sanitas", key="btn_an_sanitas"):
                  if files_pdf:
                     run_analysis_sync(worker_analisis_cargue_sanitas, [files_pdf], "an_sanitas")
                  else:
                     st.warning("No se encontraron PDFs.")
+            render_analysis_results("an_sanitas")
 
             if st.button("📊 Análisis Retefuente/ICA", key="btn_an_rete"):
                  if files_pdf:
                     run_analysis_sync(worker_leer_pdf_retefuente, [files_pdf], "an_rete")
                  else:
                     st.warning("No se encontraron PDFs.")
+            render_analysis_results("an_rete")
 
             if st.button("📊 Análisis Aut. Emssanar", key="btn_an_emssanar"):
                  if files_pdf:
                     run_analysis_sync(worker_analisis_emssanar, [files_pdf], "an_emssanar")
                  else:
                     st.warning("No se encontraron PDFs.")
+            render_analysis_results("an_emssanar")
 
             if st.button("📊 Análisis Aut. FOMAG", key="btn_an_fomag"):
                  if files_pdf:
                     run_analysis_sync(worker_analisis_fomag, [files_pdf], "an_fomag")
                  else:
                     st.warning("No se encontraron PDFs.")
+            render_analysis_results("an_fomag")
 
     # --- TAB 5: Creación y Otros ---
     with tab_create:

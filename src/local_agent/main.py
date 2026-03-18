@@ -87,6 +87,20 @@ CONFIG_FILE = find_config_file()
 
 # --- FILE PROCESSING LOGIC ---
 
+def _encode_bytes(data):
+    if hasattr(data, 'getvalue'):
+        data = data.getvalue()
+    if isinstance(data, bytes):
+        return base64.b64encode(data).decode('utf-8')
+    return data
+
+def _serialize_analysis_result(res):
+    if isinstance(res, dict) and "files" in res:
+        for f in res["files"]:
+            if "data" in f:
+                f["data"] = _encode_bytes(f["data"])
+    return res
+
 def recursive_update_cups(data, old_val, new_val):
     count = 0
     if isinstance(data, dict):
@@ -2071,6 +2085,100 @@ class AgentWorker:
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros (items, target_folder)"}
+
+            elif command == "analisis_carpetas":
+                path = params.get("path")
+                if path:
+                    from src.tabs.tab_automated_actions import worker_analisis_carpetas
+                    res = worker_analisis_carpetas(path, silent_mode=True)
+                    result["result"] = _serialize_analysis_result(res)
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (path)"}
+
+            elif command == "analisis_sos":
+                files = params.get("files", [])
+                use_ai = params.get("use_ai", False)
+                if files:
+                    from src.modules.analisis_sos import worker_analisis_sos
+                    res = worker_analisis_sos(files, use_ai=use_ai, silent_mode=True)
+                    if isinstance(res, tuple):
+                        out_xlsx, out_txt = res
+                        result["result"] = {
+                            "files": [
+                                {"name": "Analisis_SOS.xlsx", "data": _encode_bytes(out_xlsx), "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "label": "Excel"},
+                                {"name": "Analisis_SOS.txt", "data": _encode_bytes(out_txt), "mime": "text/csv", "label": "CSV/TXT"}
+                            ],
+                            "message": "Análisis SOS completado."
+                        }
+                    elif res:
+                        result["result"] = {
+                            "files": [{"name": "Analisis_SOS.xlsx", "data": _encode_bytes(res), "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "label": "Excel"}],
+                            "message": "Análisis SOS completado."
+                        }
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (files)"}
+
+            elif command == "analisis_hc":
+                files = params.get("files", [])
+                if files:
+                    from src.tabs.tab_automated_actions import worker_analisis_historia_clinica
+                    res = worker_analisis_historia_clinica(files, silent_mode=True)
+                    result["result"] = _serialize_analysis_result(res)
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (files)"}
+
+            elif command == "analisis_neps":
+                files = params.get("files", [])
+                if files:
+                    from src.tabs.tab_automated_actions import worker_analisis_autorizacion_nueva_eps
+                    res = worker_analisis_autorizacion_nueva_eps(files, silent_mode=True)
+                    result["result"] = _serialize_analysis_result(res)
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (files)"}
+
+            elif command == "analisis_sanitas":
+                files = params.get("files", [])
+                if files:
+                    from src.tabs.tab_automated_actions import worker_analisis_cargue_sanitas
+                    res = worker_analisis_cargue_sanitas(files, silent_mode=True)
+                    result["result"] = _serialize_analysis_result(res)
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (files)"}
+
+            elif command == "analisis_rete":
+                files = params.get("files", [])
+                if files:
+                    from src.tabs.tab_automated_actions import worker_leer_pdf_retefuente
+                    res = worker_leer_pdf_retefuente(files, silent_mode=True)
+                    result["result"] = _serialize_analysis_result(res)
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (files)"}
+
+            elif command == "analisis_emssanar":
+                files = params.get("files", [])
+                if files:
+                    from src.tabs.tab_automated_actions import worker_analisis_emssanar
+                    res = worker_analisis_emssanar(files, silent_mode=True)
+                    result["result"] = _serialize_analysis_result(res)
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (files)"}
+
+            elif command == "analisis_fomag":
+                files = params.get("files", [])
+                if files:
+                    from src.tabs.tab_automated_actions import worker_analisis_fomag
+                    res = worker_analisis_fomag(files, silent_mode=True)
+                    result["result"] = _serialize_analysis_result(res)
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (files)"}
 
             else:
                 result["status"] = "ERROR"

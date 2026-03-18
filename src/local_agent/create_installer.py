@@ -73,7 +73,8 @@ def build_installer():
         "--hidden-import=tkinter.filedialog",
         "--hidden-import=tkinter.messagebox",
         "--hidden-import=tkinter.scrolledtext",
-        "--hidden-import=tkinter.ttk"
+        "--hidden-import=tkinter.ttk",
+        "--hidden-import=fitz"
     ]
     
     # Add parent directory (src) to paths so bot_zeus.py can be found

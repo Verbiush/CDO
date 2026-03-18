@@ -5,3 +5,4 @@ openpyxl
 Pillow
 selenium
 webdriver-manager
+PyMuPDF
