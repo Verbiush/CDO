@@ -1198,10 +1198,12 @@ def dialogo_copiar_lista():
 
     st.text_input("Carpeta Origen (Búsqueda inicial):", value=current_global_path, disabled=True)
 
+    # Use omit_checkbox=True to force the use of the custom path behavior
     target_copy_path = render_path_selector(
         label="Carpeta Destino:",
         key="copy_dest_input",
-        default_path=current_global_path
+        default_path=current_global_path,
+        omit_checkbox=True
     )
     
     col_ok, col_cancel = st.columns([1, 1])
@@ -1235,11 +1237,13 @@ def dialogo_mover_lista():
     st.text_input("Carpeta Origen (Búsqueda inicial):", value=current_global_path, disabled=True)
 
     # Selector de Ruta Estandarizado
+    # Use omit_checkbox=True to force the use of the custom path behavior
     target_move_path = render_path_selector(
         label="Carpeta Destino:",
         key="move_dest_input",
         default_path=current_global_path,
-        help_text="Donde se moverán los archivos."
+        help_text="Donde se moverán los archivos.",
+        omit_checkbox=True
     )
 
     col_ok, col_cancel = st.columns([1, 1])
