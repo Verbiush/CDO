@@ -2212,13 +2212,19 @@ def _create_column_map_from_headers(df):
     return required_map, []
 
 def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_filter=False, silent_mode=False):
-    is_native_mode = st.session_state.get('force_native_mode', True)
     try:
+        is_native_mode = st.session_state.get('force_native_mode', True)
+        should_delegate = is_native_mode and not silent_mode and _should_delegate(root_path)
+        
         if isinstance(uploaded_file, bytes): uploaded_file = io.BytesIO(uploaded_file)
         uploaded_file.seek(0)
 
         df = None
         if use_filter:
+            # Re-read file if seekable, otherwise assuming it's fresh or handled
+            if hasattr(uploaded_file, 'seek'):
+                uploaded_file.seek(0)
+                
             import openpyxl
             wb = openpyxl.load_workbook(uploaded_file, data_only=True)
             if sheet_name not in wb.sheetnames: return "Hoja no encontrada."
@@ -2247,7 +2253,7 @@ def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_fil
         modificados = 0
         errores = 0
         
-        if is_native_mode:
+        if should_delegate:
             if not send_command:
                 return "Error: Modo nativo activado pero cliente agente no disponible."
             
