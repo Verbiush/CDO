@@ -400,10 +400,11 @@ def process_fill_docx_ovida_full(base_path, tasks):
         
         try:
             target_docx = None
-            for f in os.listdir(full_path):
-                if f.lower().endswith('.docx') and not f.startswith('~'):
-                    target_docx = os.path.join(full_path, f)
-                    break
+            if os.path.exists(full_path):
+                for f in os.listdir(full_path):
+                    if f.lower().endswith('.docx') and not f.startswith('~'):
+                        target_docx = os.path.join(full_path, f)
+                        break
                     
             if not target_docx:
                 errors.append(f"No se encontró archivo docx en: {full_path}")
