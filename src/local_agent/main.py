@@ -101,6 +101,22 @@ def _serialize_analysis_result(res):
                 f["data"] = _encode_bytes(f["data"])
     return res
 
+def _expand_file_list(files):
+    """
+    Expande una lista de archivos/directorios.
+    Si un elemento es un directorio, busca recursivamente archivos .pdf.
+    """
+    expanded = []
+    for item in files:
+        if os.path.isdir(item):
+            for root, _, filenames in os.walk(item):
+                for f in filenames:
+                    if f.lower().endswith('.pdf'):
+                        expanded.append(os.path.join(root, f))
+        elif os.path.isfile(item):
+            expanded.append(item)
+    return expanded
+
 def recursive_update_cups(data, old_val, new_val):
     count = 0
     if isinstance(data, dict):
@@ -2097,7 +2113,8 @@ class AgentWorker:
                     result["result"] = {"error": "Falta parámetro (path)"}
 
             elif command == "analisis_sos":
-                files = params.get("files", [])
+                files_param = params.get("file_list", params.get("files", []))
+                files = _expand_file_list(files_param)
                 use_ai = params.get("use_ai", False)
                 if files:
                     from src.modules.analisis_sos import worker_analisis_sos
@@ -2121,7 +2138,8 @@ class AgentWorker:
                     result["result"] = {"error": "Falta parámetro (files)"}
 
             elif command == "analisis_hc":
-                files = params.get("files", [])
+                files_param = params.get("file_list", params.get("files", []))
+                files = _expand_file_list(files_param)
                 if files:
                     from src.tabs.tab_automated_actions import worker_analisis_historia_clinica
                     res = worker_analisis_historia_clinica(files, silent_mode=True)
@@ -2131,7 +2149,8 @@ class AgentWorker:
                     result["result"] = {"error": "Falta parámetro (files)"}
 
             elif command == "analisis_neps":
-                files = params.get("files", [])
+                files_param = params.get("file_list", params.get("files", []))
+                files = _expand_file_list(files_param)
                 if files:
                     from src.tabs.tab_automated_actions import worker_analisis_autorizacion_nueva_eps
                     res = worker_analisis_autorizacion_nueva_eps(files, silent_mode=True)
@@ -2141,7 +2160,8 @@ class AgentWorker:
                     result["result"] = {"error": "Falta parámetro (files)"}
 
             elif command == "analisis_sanitas":
-                files = params.get("files", [])
+                files_param = params.get("file_list", params.get("files", []))
+                files = _expand_file_list(files_param)
                 if files:
                     from src.tabs.tab_automated_actions import worker_analisis_cargue_sanitas
                     res = worker_analisis_cargue_sanitas(files, silent_mode=True)
@@ -2151,7 +2171,8 @@ class AgentWorker:
                     result["result"] = {"error": "Falta parámetro (files)"}
 
             elif command == "analisis_rete":
-                files = params.get("files", [])
+                files_param = params.get("file_list", params.get("files", []))
+                files = _expand_file_list(files_param)
                 if files:
                     from src.tabs.tab_automated_actions import worker_leer_pdf_retefuente
                     res = worker_leer_pdf_retefuente(files, silent_mode=True)
@@ -2161,7 +2182,8 @@ class AgentWorker:
                     result["result"] = {"error": "Falta parámetro (files)"}
 
             elif command == "analisis_emssanar":
-                files = params.get("files", [])
+                files_param = params.get("file_list", params.get("files", []))
+                files = _expand_file_list(files_param)
                 if files:
                     from src.tabs.tab_automated_actions import worker_analisis_emssanar
                     res = worker_analisis_emssanar(files, silent_mode=True)
@@ -2171,7 +2193,8 @@ class AgentWorker:
                     result["result"] = {"error": "Falta parámetro (files)"}
 
             elif command == "analisis_fomag":
-                files = params.get("files", [])
+                files_param = params.get("file_list", params.get("files", []))
+                files = _expand_file_list(files_param)
                 if files:
                     from src.tabs.tab_automated_actions import worker_analisis_fomag
                     res = worker_analisis_fomag(files, silent_mode=True)

@@ -6,3 +6,4 @@ Pillow
 selenium
 webdriver-manager
 PyMuPDF
+PyPDF2

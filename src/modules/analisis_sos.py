@@ -947,8 +947,15 @@ def extract_sos_data(pdf_path):
 
 def worker_analisis_sos(file_list, use_ai=False, silent_mode=False):
     if not file_list: return None
-    pdf_files = [f for f in file_list if f["Ruta completa"].lower().endswith(".pdf")]
     
+    # Handle both list of strings and list of dicts with "Ruta completa"
+    pdf_files = []
+    for f in file_list:
+        if isinstance(f, dict) and "Ruta completa" in f and f["Ruta completa"].lower().endswith(".pdf"):
+            pdf_files.append(f)
+        elif isinstance(f, str) and f.lower().endswith(".pdf"):
+            pdf_files.append({"Ruta completa": f})
+            
     extracted_data = []
     
     # Progress bar setup (needs st context, assuming called from app_web)
