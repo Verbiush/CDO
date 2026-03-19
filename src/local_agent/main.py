@@ -381,6 +381,7 @@ def iter_all_paragraphs(doc_obj):
                     for p_element in txbx.iter(qn('w:p')):
                         yield Paragraph(p_element, footer)
 
+import os
 def process_fill_docx_ovida_full(base_path, tasks):
     count_success = 0
     errors = []
