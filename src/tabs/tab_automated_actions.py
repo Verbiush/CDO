@@ -2817,21 +2817,34 @@ def worker_analisis_carpetas(root_path, silent_mode=False):
     # ------------------------
 
     if not silent_mode: st.info(f"Analizando: {root_path}")
-    data = []
+    data_summary = []
+    data_details = []
+    
     for root, dirs, files in os.walk(root_path):
         folder_name = os.path.basename(root)
         count = len(files)
         size = sum(os.path.getsize(os.path.join(root, f)) for f in files)
-        data.append({"Carpeta": folder_name, "Archivos": count, "Peso (KB)": round(size/1024, 2), "Ruta": root})
+        data_summary.append({"Carpeta": folder_name, "Archivos": count, "Peso (KB)": round(size/1024, 2), "Ruta": root})
+        
+        for f in files:
+            data_details.append({
+                "Carpeta Principal": folder_name,
+                "Ruta": os.path.join(root, f),
+                "Archivo": f,
+                "Peso (KB)": round(os.path.getsize(os.path.join(root, f))/1024, 2)
+            })
     
-    if not data:
+    if not data_summary:
         if not silent_mode: st.warning("Carpeta vacía o sin acceso.")
         return None
 
-    df = pd.DataFrame(data)
+    df_summary = pd.DataFrame(data_summary)
+    df_details = pd.DataFrame(data_details)
+    
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False)
+        df_details.to_excel(writer, index=False, sheet_name='Detalle')
+        df_summary.to_excel(writer, index=False, sheet_name='Resumen')
     
     return {
         "files": [{
