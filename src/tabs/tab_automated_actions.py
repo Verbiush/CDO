@@ -2852,7 +2852,7 @@ def worker_analisis_carpetas(root_path, silent_mode=False):
             "data": output.getvalue(),
             "label": "Descargar Reporte"
         }],
-        "message": f"Reporte generado con {len(data)} carpetas analizadas."
+        "message": f"Reporte generado con {len(data_summary)} carpetas analizadas."
     }
 
 # --- WORKERS: CONVERSION & AI ---
