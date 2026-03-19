@@ -2288,12 +2288,13 @@ def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_fil
                 res = wait_for_result(task_id, timeout=300)
                 if not silent_mode: status_placeholder.empty()
                 
-                if res and "error" not in res:
-                    c = res.get("count", 0)
-                    errs = res.get("errors", [])
+                if res and isinstance(res, dict) and "error" not in res:
+                    c = res.get("result", {}).get("count", 0) if "result" in res else res.get("count", 0)
+                    errs = res.get("result", {}).get("errors", []) if "result" in res else res.get("errors", [])
                     return f"Proceso finalizado. Modificados: {c}, Errores: {len(errs)}"
                 else:
-                    return f"Error del agente: {res.get('error', 'Desconocido') if res else 'Desconocido'}"
+                    error_msg = res.get('error', 'Desconocido') if isinstance(res, dict) else 'Respuesta no es un diccionario'
+                    return f"Error del agente: {error_msg}"
             else:
                 return "No se pudo crear la tarea."
         
