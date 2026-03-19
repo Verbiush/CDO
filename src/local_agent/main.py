@@ -427,7 +427,7 @@ def process_fill_docx_ovida_full(base_path, tasks):
                 }
                 for key, val in replacements.items():
                     if key in p.text:
-                        p.text = re.sub(rf'({key})\s*.*', r'\1 ' + val, p.text, count=1)
+                        p.text = re.sub(rf'({key})\s*.*', r'\1 ' + str(val), p.text, count=1)
             
             sig_idx = -1
             for idx, p in enumerate(doc.paragraphs):

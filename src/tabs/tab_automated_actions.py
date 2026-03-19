@@ -2344,7 +2344,7 @@ def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_fil
                     }
                     for key, val in replacements.items():
                         if key in p.text:
-                            p.text = re.sub(rf'({key})\s*.*', r'\1 ' + val, p.text, count=1)
+                            p.text = re.sub(rf'({key})\s*.*', r'\1 ' + str(val), p.text, count=1)
                 
                 sig_idx = -1
                 for i, p in enumerate(doc.paragraphs):
