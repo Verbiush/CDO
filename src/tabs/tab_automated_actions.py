@@ -7447,12 +7447,6 @@ def render():
                 dialog_renombrar_mapeo_excel()
                 
         with col_m2:
-            if st.button("✍️ Modif. Autorización DOCX", key="btn_mod_auth"):
-                dialog_autorizacion_docx()
-                
-            if st.button("✍️ Modif. Régimen DOCX", key="btn_mod_reg"):
-                dialog_regimen_docx()
-                
             if st.button("✍️ Modif. DOCX Completo", key="btn_mod_full"):
                 dialog_modif_docx_completo()
                 
