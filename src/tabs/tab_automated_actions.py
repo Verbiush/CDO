@@ -4,6 +4,17 @@ import time
 import shutil
 import pandas as pd
 import json
+
+def _should_delegate(path_or_list):
+    import os
+    if not path_or_list: return False
+    path = path_or_list
+    if isinstance(path_or_list, list):
+        path = path_or_list[0]
+    if isinstance(path, dict):
+        path = path.get("Ruta completa", "")
+    return not os.path.exists(path)
+
 import re
 import random
 import math
@@ -2788,7 +2799,7 @@ def worker_txt_a_json_masivo(folder_path, silent_mode=False):
 def worker_analisis_carpetas(root_path, silent_mode=False):
     # --- Agent Delegation ---
     is_native_mode = st.session_state.get('force_native_mode', True)
-    if is_native_mode and not silent_mode:
+    if is_native_mode and not silent_mode and _should_delegate(root_path):
         if not silent_mode: st.info(f"Delegando análisis de carpetas al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
@@ -2796,9 +2807,9 @@ def worker_analisis_carpetas(root_path, silent_mode=False):
             task_id = send_command(username, "analisis_carpetas", {"path": root_path})
             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
             
-            res = wait_for_result(username, task_id, timeout=300)
-            if res and res.get("status") == "COMPLETED":
-                return res.get("result")
+            res = wait_for_result(task_id, timeout=300)
+            if res and "error" not in res:
+                return res
             else:
                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
         except Exception as e:
@@ -3925,7 +3936,7 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
     """
     # --- Agent Delegation ---
     is_native_mode = st.session_state.get('force_native_mode', True)
-    if is_native_mode and not silent_mode:
+    if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis HC al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
@@ -3933,9 +3944,9 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
             task_id = send_command(username, "analisis_hc", {"file_list": file_list})
             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
             
-            res = wait_for_result(username, task_id, timeout=300)
-            if res and res.get("status") == "COMPLETED":
-                return res.get("result")
+            res = wait_for_result(task_id, timeout=300)
+            if res and "error" not in res:
+                return res
             else:
                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
         except Exception as e:
@@ -4051,7 +4062,7 @@ def worker_leer_pdf_retefuente(file_list, silent_mode=False):
     """
     # --- Agent Delegation ---
     is_native_mode = st.session_state.get('force_native_mode', True)
-    if is_native_mode and not silent_mode:
+    if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis Retefuente al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
@@ -4059,9 +4070,9 @@ def worker_leer_pdf_retefuente(file_list, silent_mode=False):
             task_id = send_command(username, "analisis_rete", {"file_list": file_list})
             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
             
-            res = wait_for_result(username, task_id, timeout=300)
-            if res and res.get("status") == "COMPLETED":
-                return res.get("result")
+            res = wait_for_result(task_id, timeout=300)
+            if res and "error" not in res:
+                return res
             else:
                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
         except Exception as e:
@@ -4224,7 +4235,7 @@ def worker_analisis_emssanar(file_list, silent_mode=False):
     """
     # --- Agent Delegation ---
     is_native_mode = st.session_state.get('force_native_mode', True)
-    if is_native_mode and not silent_mode:
+    if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis Emssanar al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
@@ -4232,9 +4243,9 @@ def worker_analisis_emssanar(file_list, silent_mode=False):
             task_id = send_command(username, "analisis_emssanar", {"file_list": file_list})
             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
             
-            res = wait_for_result(username, task_id, timeout=300)
-            if res and res.get("status") == "COMPLETED":
-                return res.get("result")
+            res = wait_for_result(task_id, timeout=300)
+            if res and "error" not in res:
+                return res
             else:
                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
         except Exception as e:
@@ -4488,9 +4499,9 @@ def worker_analisis_fomag(file_list, silent_mode=False):
             task_id = send_command(username, "analisis_fomag", {"file_list": file_list})
             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
             
-            res = wait_for_result(username, task_id, timeout=300)
-            if res and res.get("status") == "COMPLETED":
-                return res.get("result")
+            res = wait_for_result(task_id, timeout=300)
+            if res and "error" not in res:
+                return res
             else:
                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
         except Exception as e:
@@ -4794,7 +4805,7 @@ def worker_analisis_sos(file_list, silent_mode=False, use_ai=False, api_key=None
     """
     # --- Agent Delegation ---
     is_native_mode = st.session_state.get('force_native_mode', True)
-    if is_native_mode and not silent_mode:
+    if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis SOS al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
@@ -4807,9 +4818,9 @@ def worker_analisis_sos(file_list, silent_mode=False, use_ai=False, api_key=None
             task_id = send_command(username, "analisis_sos", payload)
             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
             
-            res = wait_for_result(username, task_id, timeout=600) # Longer timeout for AI
-            if res and res.get("status") == "COMPLETED":
-                return res.get("result")
+            res = wait_for_result(task_id, timeout=600) # Longer timeout for AI
+            if res and "error" not in res:
+                return res
             else:
                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
         except Exception as e:
@@ -4950,7 +4961,7 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
     """
     # --- Agent Delegation ---
     is_native_mode = st.session_state.get('force_native_mode', True)
-    if is_native_mode and not silent_mode:
+    if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis Nueva EPS al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
@@ -4958,9 +4969,9 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
             task_id = send_command(username, "analisis_neps", {"file_list": file_list})
             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
             
-            res = wait_for_result(username, task_id, timeout=300)
-            if res and res.get("status") == "COMPLETED":
-                return res.get("result")
+            res = wait_for_result(task_id, timeout=300)
+            if res and "error" not in res:
+                return res
             else:
                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
         except Exception as e:
@@ -5047,7 +5058,7 @@ def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
     """
     # --- Agent Delegation ---
     is_native_mode = st.session_state.get('force_native_mode', True)
-    if is_native_mode and not silent_mode:
+    if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis Sanitas al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
@@ -5055,9 +5066,9 @@ def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
             task_id = send_command(username, "analisis_sanitas", {"file_list": file_list})
             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
             
-            res = wait_for_result(username, task_id, timeout=300)
-            if res and res.get("status") == "COMPLETED":
-                return res.get("result")
+            res = wait_for_result(task_id, timeout=300)
+            if res and "error" not in res:
+                return res
             else:
                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
         except Exception as e:
@@ -7103,10 +7114,10 @@ def dialog_exportar_renombrado():
                             })
                             if write_task:
                                 write_res = wait_for_result(write_task)
-                                if write_res and write_res.get("status") == "success":
+                                if write_res and "error" not in write_res and not write_res.get("errors"):
                                     st.success(f"Excel generado exitosamente en: {out_path}")
                                 else:
-                                    st.error(f"Error al guardar Excel: {write_res.get('error', 'Desconocido')}")
+                                    st.error(f"Error al guardar Excel: {write_res.get('error', write_res.get('errors', 'Desconocido')) if write_res else 'Sin respuesta'}")
                             else:
                                 st.error("No se pudo crear la tarea de guardado.")
                     else:
@@ -7476,8 +7487,13 @@ def render():
                 with st.spinner("Procesando..."):
                     result = func(*args)
                 
-                if result and isinstance(result, dict) and "files" in result:
-                    st.session_state[f"analysis_result_{key_prefix}"] = result
+                if result and isinstance(result, dict):
+                    if "error" in result:
+                        st.error(f"Error en análisis: {result['error']}")
+                    elif "files" in result:
+                        st.session_state[f"analysis_result_{key_prefix}"] = result
+                    else:
+                         st.warning("El resultado no tiene el formato esperado para descarga directa.")
                 elif result:
                      st.warning("El resultado no tiene el formato esperado para descarga directa.")
                 else:

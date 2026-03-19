@@ -27,3 +27,4 @@ xlrd
 lxml
 mysql-connector-python
 psycopg2-binary
+PyPDF2

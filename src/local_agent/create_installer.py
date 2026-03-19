@@ -75,7 +75,9 @@ def build_installer():
         "--hidden-import=tkinter.scrolledtext",
         "--hidden-import=tkinter.ttk",
         "--hidden-import=fitz",
-        "--hidden-import=PyPDF2"
+        "--hidden-import=PyPDF2",
+        "--hidden-import=pdfplumber",
+        "--hidden-import=xlsxwriter"
     ]
     
     # Add parent directory (src) to paths so bot_zeus.py can be found

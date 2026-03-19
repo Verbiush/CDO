@@ -7,3 +7,5 @@ selenium
 webdriver-manager
 PyMuPDF
 PyPDF2
+pdfplumber
+xlsxwriter

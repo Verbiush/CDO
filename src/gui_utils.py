@@ -253,7 +253,7 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
     last_default_key = f"last_default_{key}"
     last_default_val = st.session_state.get(last_default_key, None)
     
-    if default_path != last_default_val:
+    if default_path is not None and default_path != last_default_val:
         # Default path changed externally (or first run)
         # We update the local key to match the new default
         st.session_state[key] = default_path
@@ -262,12 +262,12 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         # Also update the text input key to reflect change immediately in the widget
         input_key = f"input_{key}"
         if input_key in st.session_state:
-             st.session_state[input_key] = default_path
+             del st.session_state[input_key]
              
         # Also update the disabled key if it exists
         input_key_disabled = f"input_{key}_disabled"
         if input_key_disabled in st.session_state:
-             st.session_state[input_key_disabled] = default_path
+             del st.session_state[input_key_disabled]
 
     # Determine target path
     if use_custom:
@@ -278,12 +278,7 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         target_path = default_path
         st.session_state[key] = target_path
 
-    # SYNC FIX: Ensure the input widget key is synced with the main key
-    # This handles the case where the path was updated programmatically (e.g. by the folder button)
-    # and we need the text_input to reflect that change on the next render.
     input_key = f"input_{key}"
-    if use_custom and input_key in st.session_state and st.session_state[input_key] != target_path:
-        st.session_state[input_key] = target_path
 
     # --- RENDER UI ---
     is_native = st.session_state.get("force_native_mode", True)
@@ -294,11 +289,11 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
         with col1:
             # input_key is already defined above
             if use_custom:
-                # To avoid Streamlit warning about value and key, ensure session_state has the value
                 if input_key not in st.session_state:
                     st.session_state[input_key] = target_path
-                st.text_input(label, key=input_key, help=help_text,
-                              on_change=lambda: st.session_state.update({key: st.session_state[input_key]}))
+                
+                val = st.text_input(label, key=input_key, help=help_text)
+                st.session_state[key] = val
             else:
                 if f"{input_key}_disabled" not in st.session_state:
                     st.session_state[f"{input_key}_disabled"] = target_path
@@ -314,9 +309,9 @@ def render_path_selector(label, key, default_path=None, help_text=None, omit_che
                 
                 if selected:
                     st.session_state[key] = selected
-                    # Note: We do not update input_key here because Streamlit throws an exception 
-                    # if the widget is already instantiated. We rely on the rerun to pick up the 
-                    # new value from the main key.
+                    # Force Streamlit to use the new value for the text input
+                    if input_key in st.session_state:
+                        del st.session_state[input_key]
                     st.rerun()
 
         # Sync the return value with the current state of the input if custom is used
@@ -461,9 +456,8 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
                 selected = abrir_dialogo_archivo_nativo(initial_dir=os.path.dirname(current) if os.path.isfile(current) else current, file_types=file_types)
                 if selected:
                     st.session_state[key] = selected
-                    # Note: We do not update input_key here because Streamlit throws an exception 
-                    # if the widget is already instantiated. We rely on the rerun to pick up the 
-                    # new value from the main key.
+                    if input_key in st.session_state:
+                        del st.session_state[input_key]
                     st.rerun()
             
         # Sync the return value with the current state of the input if custom is used
