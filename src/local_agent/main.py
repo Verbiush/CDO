@@ -2105,9 +2105,20 @@ class AgentWorker:
             elif command == "analisis_carpetas":
                 path = params.get("path")
                 if path:
-                    from src.tabs.tab_automated_actions import worker_analisis_carpetas
-                    res = worker_analisis_carpetas(path, silent_mode=True)
-                    result["result"] = _serialize_analysis_result(res)
+                    import sys
+                    import os
+                    # Ensure src can be imported
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    
+                    try:
+                        from src.tabs.tab_automated_actions import worker_analisis_carpetas
+                        res = worker_analisis_carpetas(path, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        import traceback
+                        self.log(f"Error importando worker: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (path)"}
@@ -2117,22 +2128,28 @@ class AgentWorker:
                 files = _expand_file_list(files_param)
                 use_ai = params.get("use_ai", False)
                 if files:
-                    from src.modules.analisis_sos import worker_analisis_sos
-                    res = worker_analisis_sos(files, use_ai=use_ai, silent_mode=True)
-                    if isinstance(res, tuple):
-                        out_xlsx, out_txt = res
-                        result["result"] = {
-                            "files": [
-                                {"name": "Analisis_SOS.xlsx", "data": _encode_bytes(out_xlsx), "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "label": "Excel"},
-                                {"name": "Analisis_SOS.txt", "data": _encode_bytes(out_txt), "mime": "text/csv", "label": "CSV/TXT"}
-                            ],
-                            "message": "Análisis SOS completado."
-                        }
-                    elif res:
-                        result["result"] = {
-                            "files": [{"name": "Analisis_SOS.xlsx", "data": _encode_bytes(res), "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "label": "Excel"}],
-                            "message": "Análisis SOS completado."
-                        }
+                    try:
+                        from src.modules.analisis_sos import worker_analisis_sos
+                        res = worker_analisis_sos(files, use_ai=use_ai, silent_mode=True)
+                        if isinstance(res, tuple):
+                            out_xlsx, out_txt = res
+                            result["result"] = {
+                                "files": [
+                                    {"name": "Analisis_SOS.xlsx", "data": _encode_bytes(out_xlsx), "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "label": "Excel"},
+                                    {"name": "Analisis_SOS.txt", "data": _encode_bytes(out_txt), "mime": "text/csv", "label": "CSV/TXT"}
+                                ],
+                                "message": "Análisis SOS completado."
+                            }
+                        elif res:
+                            result["result"] = {
+                                "files": [{"name": "Analisis_SOS.xlsx", "data": _encode_bytes(res), "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "label": "Excel"}],
+                                "message": "Análisis SOS completado."
+                            }
+                    except Exception as e:
+                        import traceback
+                        self.log(f"Error importando worker SOS: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
@@ -2141,9 +2158,15 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    from src.tabs.tab_automated_actions import worker_analisis_historia_clinica
-                    res = worker_analisis_historia_clinica(files, silent_mode=True)
-                    result["result"] = _serialize_analysis_result(res)
+                    try:
+                        from src.tabs.tab_automated_actions import worker_analisis_historia_clinica
+                        res = worker_analisis_historia_clinica(files, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        import traceback
+                        self.log(f"Error importando worker HC: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
@@ -2152,9 +2175,15 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    from src.tabs.tab_automated_actions import worker_analisis_autorizacion_nueva_eps
-                    res = worker_analisis_autorizacion_nueva_eps(files, silent_mode=True)
-                    result["result"] = _serialize_analysis_result(res)
+                    try:
+                        from src.tabs.tab_automated_actions import worker_analisis_autorizacion_nueva_eps
+                        res = worker_analisis_autorizacion_nueva_eps(files, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        import traceback
+                        self.log(f"Error importando worker NEPS: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
@@ -2163,9 +2192,15 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    from src.tabs.tab_automated_actions import worker_analisis_cargue_sanitas
-                    res = worker_analisis_cargue_sanitas(files, silent_mode=True)
-                    result["result"] = _serialize_analysis_result(res)
+                    try:
+                        from src.tabs.tab_automated_actions import worker_analisis_cargue_sanitas
+                        res = worker_analisis_cargue_sanitas(files, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        import traceback
+                        self.log(f"Error importando worker Sanitas: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
@@ -2174,9 +2209,15 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    from src.tabs.tab_automated_actions import worker_leer_pdf_retefuente
-                    res = worker_leer_pdf_retefuente(files, silent_mode=True)
-                    result["result"] = _serialize_analysis_result(res)
+                    try:
+                        from src.tabs.tab_automated_actions import worker_leer_pdf_retefuente
+                        res = worker_leer_pdf_retefuente(files, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        import traceback
+                        self.log(f"Error importando worker Retefuente: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
@@ -2185,9 +2226,15 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    from src.tabs.tab_automated_actions import worker_analisis_emssanar
-                    res = worker_analisis_emssanar(files, silent_mode=True)
-                    result["result"] = _serialize_analysis_result(res)
+                    try:
+                        from src.tabs.tab_automated_actions import worker_analisis_emssanar
+                        res = worker_analisis_emssanar(files, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        import traceback
+                        self.log(f"Error importando worker Emssanar: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
@@ -2196,9 +2243,15 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    from src.tabs.tab_automated_actions import worker_analisis_fomag
-                    res = worker_analisis_fomag(files, silent_mode=True)
-                    result["result"] = _serialize_analysis_result(res)
+                    try:
+                        from src.tabs.tab_automated_actions import worker_analisis_fomag
+                        res = worker_analisis_fomag(files, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        import traceback
+                        self.log(f"Error importando worker FOMAG: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
