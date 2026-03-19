@@ -5208,7 +5208,7 @@ def worker_descargar_firmas(uploaded_file, sheet_name, col_id, col_folder, root_
             # Use helper to find folder path (supports search results)
             # In Native Mode, this returns the constructed path string (G:/...) even if not exists locally
             target_dir = find_folder_path(root_path, nombre_carpeta)
-            dest_path = os.path.join(target_dir, "firma.jpg")
+            dest_path = os.path.join(target_dir, "tipografia", "firma.jpg")
             url_completa = f"{base_url}{id_firma}.png"
             
             tasks.append({
