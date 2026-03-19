@@ -2317,7 +2317,12 @@ def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_fil
                     errores += 1
                     continue
                     
-                target_docx = next((os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.lower().endswith('.docx') and 'plantilla' in f.lower()), None)
+                target_docx = None
+                for f in os.listdir(target_dir):
+                    if f.lower().endswith('.docx') and not f.startswith('~'):
+                        target_docx = os.path.join(target_dir, f)
+                        break
+                        
                 if not target_docx:
                     errores += 1
                     continue

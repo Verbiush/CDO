@@ -399,9 +399,14 @@ def process_fill_docx_ovida_full(base_path, tasks):
         full_path = os.path.join(base_path, rel_path)
         
         try:
-            target_docx = next((os.path.join(full_path, f) for f in os.listdir(full_path) if f.lower().endswith('.docx') and 'plantilla' in f.lower()), None)
+            target_docx = None
+            for f in os.listdir(full_path):
+                if f.lower().endswith('.docx') and not f.startswith('~'):
+                    target_docx = os.path.join(full_path, f)
+                    break
+                    
             if not target_docx:
-                errors.append(f"No se encontró plantilla en: {full_path}")
+                errors.append(f"No se encontró archivo docx en: {full_path}")
                 continue
             
             doc = Document(target_docx)
