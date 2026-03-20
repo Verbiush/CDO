@@ -1099,18 +1099,18 @@ def process_bulk_rename(source_path, items, separator="_", item_type="both", ren
                         else:
                             continue
                         
-                    for filename in os.listdir(target_path):
-                        file_full_path = os.path.join(target_path, filename)
-                        if os.path.isfile(file_full_path):
-                            base_name, ext = os.path.splitext(filename)
-                            if not base_name.endswith(f"{separator}{suffix_val}"):
-                                new_name = f"{base_name}{separator}{suffix_val}{ext}"
-                                try:
-                                    os.rename(file_full_path, os.path.join(target_path, new_name))
-                                    count_renamed += 1
-                                except: pass
-                except Exception as e:
-                    errors.append(f"Error procesando archivos internos de {folder_name}: {str(e)}")
+                        for filename in os.listdir(target_path):
+                            file_full_path = os.path.join(target_path, filename)
+                            if os.path.isfile(file_full_path):
+                                base_name, ext = os.path.splitext(filename)
+                                if not base_name.endswith(f"{separator}{suffix_val}"):
+                                    new_name = f"{base_name}{separator}{suffix_val}{ext}"
+                                    try:
+                                        os.rename(file_full_path, os.path.join(target_path, new_name))
+                                        count_renamed += 1
+                                    except: pass
+                    except Exception as e:
+                        errors.append(f"Error procesando archivos internos de {folder_name}: {str(e)}")
 
         # 2. Matching Files in Root
         if scope_files:
