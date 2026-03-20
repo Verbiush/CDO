@@ -1255,41 +1255,28 @@ def worker_unificar_docx_por_carpeta(carpeta_base, nombre_final_base, silent_mod
         
         if not archivos_docx_a_procesar: continue
 
-        pdfs_temporales = []
         try:
-            for ruta_docx in archivos_docx_a_procesar:
-                nombre_temp_pdf = os.path.splitext(os.path.basename(ruta_docx))[0] + "_temp.pdf"
-                ruta_temp_pdf = os.path.join(carpeta, nombre_temp_pdf)
-                try:
-                    convert_docx_to_pdf(ruta_docx, ruta_temp_pdf)
-                    if os.path.exists(ruta_temp_pdf):
-                        pdfs_temporales.append(ruta_temp_pdf)
-                except: pass
+            nombre_docx_final = f"{nombre_final_base}.docx"
+            ruta_salida = os.path.join(carpeta, nombre_docx_final)
             
-            if pdfs_temporales:
-                nombre_pdf_final = f"{nombre_final_base}.pdf"
-                ruta_salida = os.path.join(carpeta, nombre_pdf_final)
+            # Use docxcompose to merge the docx files directly
+            from docxcompose.composer import Composer
+            from docx import Document as DocxDocument
+            
+            master_doc = DocxDocument(archivos_docx_a_procesar[0])
+            composer = Composer(master_doc)
+            
+            for ruta_docx in archivos_docx_a_procesar[1:]:
+                doc_to_append = DocxDocument(ruta_docx)
+                composer.append(doc_to_append)
                 
-                doc_final = fitz.open()
-                for pdf_temp in pdfs_temporales:
-                    try:
-                        with fitz.open(pdf_temp) as doc_temp:
-                            doc_final.insert_pdf(doc_temp)
-                    except Exception as e:
-                        log.append(f"Error uniendo {pdf_temp}: {e}")
-                
-                doc_final.save(ruta_salida)
-                doc_final.close()
-                pdfs_creados += 1
-                
-                for pdf_temp in pdfs_temporales:
-                    try: os.remove(pdf_temp)
-                    except Exception as e:
-                        log.append(f"Error eliminando {pdf_temp}: {e}")
+            composer.save(ruta_salida)
+            pdfs_creados += 1
+            
         except Exception as e:
             log.append(f"Error en {nombre_subcarpeta}: {e}")
 
-    msg = f"Proceso finalizado. {pdfs_creados} PDFs creados." + (" Errores: " + "; ".join(log) if log else "")
+    msg = f"Proceso finalizado. {pdfs_creados} DOCX unificados creados." + (" Errores: " + "; ".join(log) if log else "")
 
     mem_zip = io.BytesIO()
     with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
