@@ -35,7 +35,7 @@ El agente necesita saber a qué servidor conectarse.
 
 ```json
 {
-    "server_url": "http://3.142.164.128:8000",
+    "server_url": "http://3.15.237.186:8000",
     "username": "su_usuario",
     "password": "su_password"
 }
@@ -44,7 +44,7 @@ El agente necesita saber a qué servidor conectarse.
 **¡IMPORTANTE!**
 *   **NO USE el puerto 8501** (ese es para la página web).
 *   **USE SIEMPRE el puerto 8000** (ese es para la conexión del agente).
-*   URL Correcta: `http://3.142.164.128:8000`
+*   URL Correcta: `http://3.15.237.186:8000`
 
 *Nota: Solicite su usuario y contraseña al administrador del sistema.*
 
@@ -63,5 +63,5 @@ El agente funcionará en segundo plano. Cuando el servidor AWS asigne una tarea 
 
 ## 6. Solución de Problemas
 
-- **Error de conexión:** Verifique que el servidor AWS (3.142.164.128) esté accesible y el puerto 8000 esté abierto.
+- **Error de conexión:** Verifique que el servidor AWS (3.15.237.186) esté accesible y el puerto 8000 esté abierto.
 - **Configuración no encontrada:** Asegúrese de haber editado `agent_config.json` correctamente.

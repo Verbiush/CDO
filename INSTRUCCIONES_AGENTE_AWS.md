@@ -10,7 +10,7 @@ Este instalador permite conectar su **PC Local** con la aplicación alojada en *
 1.  Descargue el archivo `Instalador_Agente_CDO.exe` de este repositorio.
 2.  Ejecútelo en su equipo local (Windows).
 3.  Siga los pasos del asistente.
-    *   El instalador configurará automáticamente la conexión al servidor AWS (`3.142.164.128`).
+    *   El instalador configurará automáticamente la conexión al servidor AWS (`3.15.237.186`).
     *   Configurará el agente para **iniciar automáticamente** al encender el equipo.
 
 ## Verificación

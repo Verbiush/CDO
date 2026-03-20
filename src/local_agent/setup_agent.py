@@ -145,7 +145,7 @@ class AgentInstaller(tk.Tk):
             self.progress['value'] = 10
             try:
                 auth = (self.username, self.password)
-                url = "http://3.142.164.128:8000"
+                url = "http://3.15.237.186:8000"
                 res = requests.get(f"{url}/auth/verify", auth=auth, timeout=10)
                 if res.status_code == 200:
                     self.log("✅ Credenciales válidas.")
@@ -239,11 +239,11 @@ class AgentInstaller(tk.Tk):
             # Write config
             config_file = os.path.join(self.dest_dir, "agent_config.json")
             config = {
-                "server_url": "http://3.142.164.128:8000",
+                "server_url": "http://3.15.237.186:8000",
                 "username": self.username,
                 "password": self.password,
-                "task_url": "http://3.142.164.128:8000/tasks/poll",
-                "result_url": "http://3.142.164.128:8000/tasks"
+                "task_url": "http://3.15.237.186:8000/tasks/poll",
+                "result_url": "http://3.15.237.186:8000/tasks"
             }
             with open(config_file, "w") as f:
                 json.dump(config, f, indent=4)

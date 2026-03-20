@@ -8,7 +8,7 @@ import time
 import signal
 
 # Configuration
-SERVER_IP = "3.142.164.128"
+SERVER_IP = "3.15.237.186"
 SERVER_PORT = "8000"
 SERVER_URL = f"http://{SERVER_IP}:{SERVER_PORT}"
 USERNAME = "admin"
@@ -22,7 +22,7 @@ def setup_agent():
     """
     Configura el agente: pregunta al usuario por la IP del servidor y la guarda.
     """
-    DEFAULT_SERVER_IP = "3.142.164.128" # AWS
+    DEFAULT_SERVER_IP = "3.15.237.186" # AWS
     
     # Intentar usar la carpeta local del proyecto si AppData falla
     try:
