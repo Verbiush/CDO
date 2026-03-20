@@ -7411,7 +7411,7 @@ def render():
         
         col_o1, col_o2 = st.columns(2)
         with col_o1:
-            if st.button("📥 Organizar Facturas (FEOV)", key="btn_org_feov"):
+            if st.button("📥 Organizar Facturas (FEOV)", key="btn_org_feov_new"):
                 dialog_organizar_feov()
                 
             if st.button("📂➡️📁 Mover por Coincidencia", key="btn_org_move"):
@@ -7427,10 +7427,10 @@ def render():
 
 
         with col_o2:
-            if st.button("🗺️ Copiar Archivos (Mapeo Sub)", key="btn_org_map_sub"):
+            if st.button("🗺️ Copiar Archivos (Mapeo Sub)", key="btn_org_map_sub_new"):
                 dialog_copiar_mapeo()
                 
-            if st.button("📜 Copiar Archivos Raíz (Mapeo)", key="btn_org_map_root"):
+            if st.button("📜 Copiar Archivos Raíz (Mapeo)", key="btn_org_map_root_new"):
                 dialog_copiar_raiz()
                 
             if st.button("📤 Consolidar Subcarpetas", key="btn_org_consol"):
@@ -7449,23 +7449,23 @@ def render():
         
         col_m1, col_m2 = st.columns(2)
         with col_m1:
-            if st.button("📤 Exportar para renombrar", key="btn_mod_exp"):
+            if st.button("📤 Exportar para renombrar", key="btn_mod_exp_new"):
                 dialog_exportar_renombrado()
                 
-            if st.button("📥 Aplicar renombrado Excel", key="btn_mod_app"):
+            if st.button("📥 Aplicar renombrado Excel", key="btn_mod_app_new"):
                 dialog_aplicar_renombrado()
                 
-            if st.button("🏷️ Añadir Sufijo desde Excel", key="btn_mod_suf"):
+            if st.button("🏷️ Añadir Sufijo desde Excel", key="btn_mod_suf_new"):
                 dialog_sufijo()
 
-            if st.button("📝 Renombrar Masivo por Mapeo Excel", key="btn_mod_map"):
+            if st.button("📝 Renombrar Masivo por Mapeo Excel", key="btn_mod_map_new"):
                 dialog_renombrar_mapeo_excel()
                 
         with col_m2:
-            if st.button("✍️ Modif. DOCX Completo", key="btn_mod_full"):
+            if st.button("✍️ Modif. DOCX Completo", key="btn_mod_full_new"):
                 dialog_modif_docx_completo()
                 
-            if st.button("🖋️ Firmar DOCX con Imagen", key="btn_mod_sign"):
+            if st.button("🖋️ Firmar DOCX con Imagen", key="btn_mod_sign_new"):
                 dialog_insertar_firma_docx()
 
     # --- TAB 4: Análisis ---
