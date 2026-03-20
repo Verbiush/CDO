@@ -7295,7 +7295,9 @@ def render():
             )
             
             if st.button("🗂️ Unificar PDF por Carpeta", key="btn_unif_pdf"):
-                if path_unif:
+                if not os.path.isdir(path_unif):
+                    st.error("Carpeta inválida o no seleccionada.")
+                elif path_unif:
                     try:
                         with st.spinner("Unificando PDFs..."):
                             result = worker_unificar_por_carpeta(path_unif, "Unificado")
@@ -7313,7 +7315,9 @@ def render():
                         st.error(f"Error: {e}")
             
             if st.button("🖼️ Unificar JPG por Carpeta", key="btn_unif_jpg"):
-                if path_unif:
+                if not os.path.isdir(path_unif):
+                    st.error("Carpeta inválida o no seleccionada.")
+                elif path_unif:
                     try:
                         with st.spinner("Unificando JPGs..."):
                             result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "JPG")
@@ -7330,7 +7334,9 @@ def render():
                         st.error(f"Error: {e}")
                 
             if st.button("🖼️ Unificar PNG por Carpeta", key="btn_unif_png"):
-                if path_unif:
+                if not os.path.isdir(path_unif):
+                    st.error("Carpeta inválida o no seleccionada.")
+                elif path_unif:
                     try:
                         with st.spinner("Unificando PNGs..."):
                             result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "PNG")
@@ -7347,7 +7353,9 @@ def render():
                         st.error(f"Error: {e}")
                 
             if st.button("📄 Unificar DOCX por Carpeta", key="btn_unif_docx"):
-                if path_unif:
+                if not os.path.isdir(path_unif):
+                    st.error("Carpeta inválida o no seleccionada.")
+                elif path_unif:
                     try:
                         with st.spinner("Unificando DOCX..."):
                             result = worker_unificar_docx_por_carpeta(path_unif, "Unificado.docx")
@@ -7365,7 +7373,9 @@ def render():
 
             st.divider()
             if st.button("✂️ Dividir PDFs Masivamente", key="btn_split_mass"):
-                if path_unif:
+                if not os.path.isdir(path_unif):
+                    st.error("Carpeta inválida o no seleccionada.")
+                elif path_unif:
                     try:
                         with st.spinner("Dividiendo PDFs..."):
                             result = worker_dividir_pdfs_masivamente(path_unif)
