@@ -1255,28 +1255,41 @@ def worker_unificar_docx_por_carpeta(carpeta_base, nombre_final_base, silent_mod
         
         if not archivos_docx_a_procesar: continue
 
+        pdfs_temporales = []
         try:
-            nombre_docx_final = f"{nombre_final_base}.docx"
-            ruta_salida = os.path.join(carpeta, nombre_docx_final)
+            for ruta_docx in archivos_docx_a_procesar:
+                nombre_temp_pdf = os.path.splitext(os.path.basename(ruta_docx))[0] + "_temp.pdf"
+                ruta_temp_pdf = os.path.join(carpeta, nombre_temp_pdf)
+                try:
+                    convert_docx_to_pdf(ruta_docx, ruta_temp_pdf)
+                    if os.path.exists(ruta_temp_pdf):
+                        pdfs_temporales.append(ruta_temp_pdf)
+                except: pass
             
-            # Use docxcompose to merge the docx files directly
-            from docxcompose.composer import Composer
-            from docx import Document as DocxDocument
-            
-            master_doc = DocxDocument(archivos_docx_a_procesar[0])
-            composer = Composer(master_doc)
-            
-            for ruta_docx in archivos_docx_a_procesar[1:]:
-                doc_to_append = DocxDocument(ruta_docx)
-                composer.append(doc_to_append)
+            if pdfs_temporales:
+                nombre_pdf_final = f"{nombre_final_base}.pdf"
+                ruta_salida = os.path.join(carpeta, nombre_pdf_final)
                 
-            composer.save(ruta_salida)
-            pdfs_creados += 1
-            
+                doc_final = fitz.open()
+                for pdf_temp in pdfs_temporales:
+                    try:
+                        with fitz.open(pdf_temp) as doc_temp:
+                            doc_final.insert_pdf(doc_temp)
+                    except Exception as e:
+                        log.append(f"Error uniendo {pdf_temp}: {e}")
+                
+                doc_final.save(ruta_salida)
+                doc_final.close()
+                pdfs_creados += 1
+                
+                for pdf_temp in pdfs_temporales:
+                    try: os.remove(pdf_temp)
+                    except Exception as e:
+                        log.append(f"Error eliminando {pdf_temp}: {e}")
         except Exception as e:
             log.append(f"Error en {nombre_subcarpeta}: {e}")
 
-    msg = f"Proceso finalizado. {pdfs_creados} DOCX unificados creados." + (" Errores: " + "; ".join(log) if log else "")
+    msg = f"Proceso finalizado. {pdfs_creados} PDFs creados." + (" Errores: " + "; ".join(log) if log else "")
 
     mem_zip = io.BytesIO()
     with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -7300,110 +7313,177 @@ def render():
             )
             
             if st.button("🗂️ Unificar PDF por Carpeta", key="btn_unif_pdf"):
+                is_native = st.session_state.get('force_native_mode', True)
                 if not path_unif:
                     st.error("Carpeta base inválida.")
-                elif not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif):
+                elif not is_native and not os.path.isdir(path_unif):
                     st.error("Carpeta base inválida.")
                 else:
                     try:
                         with st.spinner("Unificando PDFs..."):
-                            result = worker_unificar_por_carpeta(path_unif, "Unificado")
-                            if isinstance(result, dict) and "error" in result:
-                                st.error(result["error"])
-                            else:
-                                if isinstance(result, dict) and "message" in result:
-                                    st.success(result["message"])
+                            if is_native:
+                                username = st.session_state.get("username", "admin")
+                                task_id = send_command(username, "unify_pdf_folder", {"base_path": path_unif, "output_name": "Unificado.pdf"})
+                                if task_id:
+                                    res = wait_for_result(task_id, timeout=120)
+                                    if res and "error" not in res:
+                                        st.success(res.get("message", "PDFs unificados correctamente por el agente."))
+                                    else:
+                                        st.error(f"Error del agente: {res.get('error', 'Tiempo de espera agotado')}")
                                 else:
-                                    st.success(result)
-                                out_file = os.path.join(path_unif, "Unificado.pdf")
-                                # Try to find if any subfolder has a unificado.pdf since it's a batch operation
-                                render_download_button(path_unif, f"dl_unif_pdf_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
+                                    st.error("Error enviando tarea al agente.")
+                            else:
+                                result = worker_unificar_por_carpeta(path_unif, "Unificado")
+                                if isinstance(result, dict) and "error" in result:
+                                    st.error(result["error"])
+                                else:
+                                    if isinstance(result, dict) and "message" in result:
+                                        st.success(result["message"])
+                                    else:
+                                        st.success(result)
+                                    out_file = os.path.join(path_unif, "Unificado.pdf")
+                                    # Try to find if any subfolder has a unificado.pdf since it's a batch operation
+                                    render_download_button(path_unif, f"dl_unif_pdf_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
             
             if st.button("🖼️ Unificar JPG por Carpeta", key="btn_unif_jpg"):
+                is_native = st.session_state.get('force_native_mode', True)
                 if not path_unif:
                     st.error("Carpeta base inválida.")
-                elif not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif):
+                elif not is_native and not os.path.isdir(path_unif):
                     st.error("Carpeta base inválida.")
                 else:
                     try:
                         with st.spinner("Unificando JPGs..."):
-                            result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "JPG")
-                            if isinstance(result, dict) and "error" in result:
-                                st.error(result["error"])
-                            else:
-                                if isinstance(result, dict) and "message" in result:
-                                    st.success(result["message"])
+                            if is_native:
+                                username = st.session_state.get("username", "admin")
+                                task_id = send_command(username, "unify_img_folder", {"base_path": path_unif, "output_name": "Unificado.pdf", "img_type": "JPG"})
+                                if task_id:
+                                    res = wait_for_result(task_id, timeout=120)
+                                    if res and "error" not in res:
+                                        st.success(res.get("message", "JPGs unificados correctamente por el agente."))
+                                    else:
+                                        st.error(f"Error del agente: {res.get('error', 'Tiempo de espera agotado')}")
                                 else:
-                                    st.success(result)
-                                out_file = os.path.join(path_unif, "Unificado.pdf")
-                                render_download_button(path_unif, f"dl_unif_jpg_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
+                                    st.error("Error enviando tarea al agente.")
+                            else:
+                                result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "JPG")
+                                if isinstance(result, dict) and "error" in result:
+                                    st.error(result["error"])
+                                else:
+                                    if isinstance(result, dict) and "message" in result:
+                                        st.success(result["message"])
+                                    else:
+                                        st.success(result)
+                                    out_file = os.path.join(path_unif, "Unificado.pdf")
+                                    render_download_button(path_unif, f"dl_unif_jpg_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
             if st.button("🖼️ Unificar PNG por Carpeta", key="btn_unif_png"):
+                is_native = st.session_state.get('force_native_mode', True)
                 if not path_unif:
                     st.error("Carpeta base inválida.")
-                elif not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif):
+                elif not is_native and not os.path.isdir(path_unif):
                     st.error("Carpeta base inválida.")
                 else:
                     try:
                         with st.spinner("Unificando PNGs..."):
-                            result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "PNG")
-                            if isinstance(result, dict) and "error" in result:
-                                st.error(result["error"])
-                            else:
-                                if isinstance(result, dict) and "message" in result:
-                                    st.success(result["message"])
+                            if is_native:
+                                username = st.session_state.get("username", "admin")
+                                task_id = send_command(username, "unify_img_folder", {"base_path": path_unif, "output_name": "Unificado.pdf", "img_type": "PNG"})
+                                if task_id:
+                                    res = wait_for_result(task_id, timeout=120)
+                                    if res and "error" not in res:
+                                        st.success(res.get("message", "PNGs unificados correctamente por el agente."))
+                                    else:
+                                        st.error(f"Error del agente: {res.get('error', 'Tiempo de espera agotado')}")
                                 else:
-                                    st.success(result)
-                                out_file = os.path.join(path_unif, "Unificado.pdf")
-                                render_download_button(path_unif, f"dl_unif_png_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
+                                    st.error("Error enviando tarea al agente.")
+                            else:
+                                result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "PNG")
+                                if isinstance(result, dict) and "error" in result:
+                                    st.error(result["error"])
+                                else:
+                                    if isinstance(result, dict) and "message" in result:
+                                        st.success(result["message"])
+                                    else:
+                                        st.success(result)
+                                    out_file = os.path.join(path_unif, "Unificado.pdf")
+                                    render_download_button(path_unif, f"dl_unif_png_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
             if st.button("📄 Unificar DOCX por Carpeta", key="btn_unif_docx"):
+                is_native = st.session_state.get('force_native_mode', True)
                 if not path_unif:
                     st.error("Carpeta base inválida.")
-                elif not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif):
+                elif not is_native and not os.path.isdir(path_unif):
                     st.error("Carpeta base inválida.")
                 else:
                     try:
                         with st.spinner("Unificando DOCX..."):
-                            result = worker_unificar_docx_por_carpeta(path_unif, "Unificado.docx")
-                            if isinstance(result, dict) and "error" in result:
-                                st.error(result["error"])
-                            else:
-                                if isinstance(result, dict) and "message" in result:
-                                    st.success(result["message"])
+                            # Use native agent delegation if active
+                            if is_native:
+                                username = st.session_state.get("username", "admin")
+                                task_id = send_command(username, "unify_docx_folder", {"base_path": path_unif, "output_name": "Unificado.pdf"})
+                                if task_id:
+                                    res = wait_for_result(task_id, timeout=120)
+                                    if res and "error" not in res:
+                                        st.success(res.get("message", "DOCX unificados correctamente por el agente."))
+                                    else:
+                                        err = res.get("error") if res else "Tiempo de espera agotado"
+                                        st.error(f"Error del agente: {err}")
                                 else:
-                                    st.success(result)
-                                out_file = os.path.join(path_unif, "Unificado.docx")
-                                render_download_button(path_unif, f"dl_unif_docx_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
+                                    st.error("Error enviando tarea al agente.")
+                            else:
+                                result = worker_unificar_docx_por_carpeta(path_unif, "Unificado.pdf")
+                                if isinstance(result, dict) and "error" in result:
+                                    st.error(result["error"])
+                                else:
+                                    if isinstance(result, dict) and "message" in result:
+                                        st.success(result["message"])
+                                    else:
+                                        st.success(result)
+                                    out_file = os.path.join(path_unif, "Unificado.pdf")
+                                    render_download_button(path_unif, f"dl_unif_docx_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
             st.divider()
             if st.button("✂️ Dividir PDFs Masivamente", key="btn_split_mass"):
+                is_native = st.session_state.get('force_native_mode', True)
                 if not path_unif:
                     st.error("Carpeta base inválida.")
-                elif not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif):
+                elif not is_native and not os.path.isdir(path_unif):
                     st.error("Carpeta base inválida.")
                 else:
                     try:
                         with st.spinner("Dividiendo PDFs..."):
-                            result = worker_dividir_pdfs_masivamente(path_unif)
-                            if isinstance(result, dict) and "error" in result:
-                                st.error(result["error"])
-                            else:
-                                if isinstance(result, dict) and "message" in result:
-                                    st.success(result["message"])
+                            if is_native:
+                                username = st.session_state.get("username", "admin")
+                                task_id = send_command(username, "split_pdf_massive", {"base_path": path_unif})
+                                if task_id:
+                                    res = wait_for_result(task_id, timeout=120)
+                                    if res and "error" not in res:
+                                        st.success(res.get("message", "PDFs divididos correctamente por el agente."))
+                                    else:
+                                        st.error(f"Error del agente: {res.get('error', 'Tiempo de espera agotado')}")
                                 else:
-                                    st.success(result)
-                                div_folder = os.path.join(path_unif, "Dividido")
-                                if os.path.exists(div_folder):
-                                    render_download_button(div_folder, "dl_split_mass", "📦 Descargar Carpeta Dividido (ZIP)")
+                                    st.error("Error enviando tarea al agente.")
+                            else:
+                                result = worker_dividir_pdfs_masivamente(path_unif)
+                                if isinstance(result, dict) and "error" in result:
+                                    st.error(result["error"])
+                                else:
+                                    if isinstance(result, dict) and "message" in result:
+                                        st.success(result["message"])
+                                    else:
+                                        st.success(result)
+                                    div_folder = os.path.join(path_unif, "Dividido")
+                                    if os.path.exists(div_folder):
+                                        render_download_button(div_folder, "dl_split_mass", "📦 Descargar Carpeta Dividido (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
