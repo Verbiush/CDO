@@ -1,3 +1,4 @@
+import traceback
 import time
 from datetime import datetime
 import requests
@@ -381,7 +382,6 @@ def iter_all_paragraphs(doc_obj):
                     for p_element in txbx.iter(qn('w:p')):
                         yield Paragraph(p_element, footer)
 
-import os
 def process_fill_docx_ovida_full(base_path, tasks):
     count_success = 0
     errors = []
@@ -2112,8 +2112,6 @@ class AgentWorker:
             elif command == "analisis_carpetas":
                 path = params.get("path")
                 if path:
-                    import sys
-                    import os
                     # Ensure src can be imported
                     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     
@@ -2122,8 +2120,7 @@ class AgentWorker:
                         res = worker_analisis_carpetas(path, silent_mode=True)
                         result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
-                        import traceback
-                        self.log(f"Error importando worker: {e}\n{traceback.format_exc()}")
+                                                self.log(f"Error importando worker: {e}\n{traceback.format_exc()}")
                         result["status"] = "ERROR"
                         result["result"] = {"error": f"Error interno: {e}"}
                 else:
@@ -2153,8 +2150,7 @@ class AgentWorker:
                                 "message": "Análisis SOS completado."
                             }
                     except Exception as e:
-                        import traceback
-                        self.log(f"Error importando worker SOS: {e}\n{traceback.format_exc()}")
+                                                self.log(f"Error importando worker SOS: {e}\n{traceback.format_exc()}")
                         result["status"] = "ERROR"
                         result["result"] = {"error": f"Error interno: {e}"}
                 else:
@@ -2170,8 +2166,7 @@ class AgentWorker:
                         res = worker_analisis_historia_clinica(files, silent_mode=True)
                         result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
-                        import traceback
-                        self.log(f"Error importando worker HC: {e}\n{traceback.format_exc()}")
+                                                self.log(f"Error importando worker HC: {e}\n{traceback.format_exc()}")
                         result["status"] = "ERROR"
                         result["result"] = {"error": f"Error interno: {e}"}
                 else:
@@ -2187,8 +2182,7 @@ class AgentWorker:
                         res = worker_analisis_autorizacion_nueva_eps(files, silent_mode=True)
                         result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
-                        import traceback
-                        self.log(f"Error importando worker NEPS: {e}\n{traceback.format_exc()}")
+                                                self.log(f"Error importando worker NEPS: {e}\n{traceback.format_exc()}")
                         result["status"] = "ERROR"
                         result["result"] = {"error": f"Error interno: {e}"}
                 else:
@@ -2204,8 +2198,7 @@ class AgentWorker:
                         res = worker_analisis_cargue_sanitas(files, silent_mode=True)
                         result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
-                        import traceback
-                        self.log(f"Error importando worker Sanitas: {e}\n{traceback.format_exc()}")
+                                                self.log(f"Error importando worker Sanitas: {e}\n{traceback.format_exc()}")
                         result["status"] = "ERROR"
                         result["result"] = {"error": f"Error interno: {e}"}
                 else:
@@ -2221,8 +2214,7 @@ class AgentWorker:
                         res = worker_leer_pdf_retefuente(files, silent_mode=True)
                         result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
-                        import traceback
-                        self.log(f"Error importando worker Retefuente: {e}\n{traceback.format_exc()}")
+                                                self.log(f"Error importando worker Retefuente: {e}\n{traceback.format_exc()}")
                         result["status"] = "ERROR"
                         result["result"] = {"error": f"Error interno: {e}"}
                 else:
@@ -2238,8 +2230,7 @@ class AgentWorker:
                         res = worker_analisis_emssanar(files, silent_mode=True)
                         result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
-                        import traceback
-                        self.log(f"Error importando worker Emssanar: {e}\n{traceback.format_exc()}")
+                                                self.log(f"Error importando worker Emssanar: {e}\n{traceback.format_exc()}")
                         result["status"] = "ERROR"
                         result["result"] = {"error": f"Error interno: {e}"}
                 else:
@@ -2255,8 +2246,7 @@ class AgentWorker:
                         res = worker_analisis_fomag(files, silent_mode=True)
                         result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
-                        import traceback
-                        self.log(f"Error importando worker FOMAG: {e}\n{traceback.format_exc()}")
+                                                self.log(f"Error importando worker FOMAG: {e}\n{traceback.format_exc()}")
                         result["status"] = "ERROR"
                         result["result"] = {"error": f"Error interno: {e}"}
                 else:
