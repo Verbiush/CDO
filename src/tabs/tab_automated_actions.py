@@ -7295,7 +7295,7 @@ def render():
             )
             
             if st.button("🗂️ Unificar PDF por Carpeta", key="btn_unif_pdf"):
-                if not os.path.isdir(path_unif):
+                if not path_unif or (not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif)):
                     st.error("Carpeta inválida o no seleccionada.")
                 elif path_unif:
                     try:
@@ -7315,7 +7315,7 @@ def render():
                         st.error(f"Error: {e}")
             
             if st.button("🖼️ Unificar JPG por Carpeta", key="btn_unif_jpg"):
-                if not os.path.isdir(path_unif):
+                if not path_unif or (not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif)):
                     st.error("Carpeta inválida o no seleccionada.")
                 elif path_unif:
                     try:
@@ -7334,7 +7334,7 @@ def render():
                         st.error(f"Error: {e}")
                 
             if st.button("🖼️ Unificar PNG por Carpeta", key="btn_unif_png"):
-                if not os.path.isdir(path_unif):
+                if not path_unif or (not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif)):
                     st.error("Carpeta inválida o no seleccionada.")
                 elif path_unif:
                     try:
@@ -7353,7 +7353,7 @@ def render():
                         st.error(f"Error: {e}")
                 
             if st.button("📄 Unificar DOCX por Carpeta", key="btn_unif_docx"):
-                if not os.path.isdir(path_unif):
+                if not path_unif or (not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif)):
                     st.error("Carpeta inválida o no seleccionada.")
                 elif path_unif:
                     try:
@@ -7373,7 +7373,7 @@ def render():
 
             st.divider()
             if st.button("✂️ Dividir PDFs Masivamente", key="btn_split_mass"):
-                if not os.path.isdir(path_unif):
+                if not path_unif or (not st.session_state.get('force_native_mode', True) and not os.path.isdir(path_unif)):
                     st.error("Carpeta inválida o no seleccionada.")
                 elif path_unif:
                     try:
