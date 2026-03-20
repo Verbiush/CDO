@@ -958,7 +958,7 @@ def worker_unificar_pdfs_list(file_list, output_path=None, sort_method="Nombre",
             except Exception as e:
                 if not silent_mode: st.warning(f"Omitiendo archivo por error: {e}")
         
-        if output_path:
+        if output_path and not output_path.startswith("Unificado"):
             doc_final.save(output_path)
             doc_final.close()
             return {"message": f"PDF Unificado creado en: {output_path}"}
@@ -7391,7 +7391,7 @@ def render():
                  if uploaded_pdfs:
                      try:
                          with st.spinner("Unificando PDFs seleccionados..."):
-                             out_path = os.path.join(st.session_state.get('current_path', '.'), "Unificado_Manual.pdf")
+                             out_path = "Unificado_Manual.pdf" # Pass generic name to force stream download
                              result = worker_unificar_pdfs_list(uploaded_pdfs, out_path)
                              if isinstance(result, dict) and "error" in result:
                                  st.error(result["error"])
