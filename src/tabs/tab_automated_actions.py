@@ -2843,7 +2843,9 @@ def worker_analisis_carpetas(root_path, silent_mode=False):
         size = 0
         for f in files:
             try:
-                size += os.path.getsize(os.path.join(root, f))
+                full_path = os.path.join(root, f)
+                if os.path.exists(full_path) and os.path.isfile(full_path):
+                    size += os.path.getsize(full_path)
             except Exception:
                 pass
                 
@@ -2852,7 +2854,9 @@ def worker_analisis_carpetas(root_path, silent_mode=False):
         for f in files:
             file_size = 0
             try:
-                file_size = os.path.getsize(os.path.join(root, f))
+                full_path = os.path.join(root, f)
+                if os.path.exists(full_path) and os.path.isfile(full_path):
+                    file_size = os.path.getsize(full_path)
             except Exception:
                 pass
                 
