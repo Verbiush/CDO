@@ -2113,6 +2113,66 @@ class AgentWorker:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros (items, target_folder)"}
 
+            elif command == "unify_pdf_folder":
+                base_path = params.get("base_path")
+                output_name = params.get("output_name", "Unificado")
+                if base_path:
+                    try:
+                        from src.tabs.tab_automated_actions import worker_unificar_por_carpeta
+                        res = worker_unificar_por_carpeta(base_path, output_name, silent_mode=True)
+                        result["result"] = res
+                    except Exception as e:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": str(e)}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (base_path)"}
+
+            elif command == "unify_img_folder":
+                base_path = params.get("base_path")
+                output_name = params.get("output_name", "Unificado.pdf")
+                img_type = params.get("img_type", "JPG")
+                if base_path:
+                    try:
+                        from src.tabs.tab_automated_actions import worker_unificar_imagenes_por_carpeta_rec
+                        res = worker_unificar_imagenes_por_carpeta_rec(base_path, output_name, img_type, silent_mode=True)
+                        result["result"] = res
+                    except Exception as e:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": str(e)}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (base_path)"}
+
+            elif command == "unify_docx_folder":
+                base_path = params.get("base_path")
+                output_name = params.get("output_name", "Unificado")
+                if base_path:
+                    try:
+                        from src.tabs.tab_automated_actions import worker_unificar_docx_por_carpeta
+                        res = worker_unificar_docx_por_carpeta(base_path, output_name, silent_mode=True)
+                        result["result"] = res
+                    except Exception as e:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": str(e)}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (base_path)"}
+
+            elif command == "split_pdf_massive":
+                base_path = params.get("base_path")
+                if base_path:
+                    try:
+                        from src.tabs.tab_automated_actions import worker_dividir_pdfs_masivamente
+                        res = worker_dividir_pdfs_masivamente(base_path, silent_mode=True)
+                        result["result"] = res
+                    except Exception as e:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": str(e)}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (base_path)"}
+
             elif command == "analisis_carpetas":
                 path = params.get("path")
                 if path:
