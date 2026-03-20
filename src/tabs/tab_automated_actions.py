@@ -7581,6 +7581,14 @@ def render():
 
         def run_analysis_sync(func, args, key_prefix):
             try:
+                # Prevent multiple immediate clicks from firing multiple identical requests
+                is_running_key = f"running_{key_prefix}"
+                if st.session_state.get(is_running_key, False):
+                    st.warning("El análisis ya se está ejecutando. Por favor espere.")
+                    return
+                
+                st.session_state[is_running_key] = True
+                
                 with st.spinner("Procesando..."):
                     result = func(*args)
                 
@@ -7597,6 +7605,8 @@ def render():
                     st.warning("No se generaron resultados.")
             except Exception as e:
                 st.error(f"Error: {e}")
+            finally:
+                st.session_state[is_running_key] = False
 
         # Renderizar resultados guardados en session_state
         def render_analysis_results(key_prefix):
@@ -7626,6 +7636,9 @@ def render():
         with col_a1:
             if st.button("📊 Análisis Carpetas (Excel)", key="btn_an_folders"):
                 if path_an:
+                     # Clear previous result to avoid confusion
+                     if "analysis_result_an_folders" in st.session_state:
+                         del st.session_state["analysis_result_an_folders"]
                      run_analysis_sync(worker_analisis_carpetas, [path_an], "an_folders")
                 else:
                     st.warning("Seleccione una carpeta válida.")
