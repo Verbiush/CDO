@@ -997,9 +997,9 @@ def worker_dividir_pdf_paginas(input_pdf, output_folder=None, silent_mode=False)
         os.makedirs(output_folder, exist_ok=True)
         
         for i in range(len(doc)):
-            page = doc.load_page(i)
-            # pix = page.get_pixmap() # Not used
-            out_name = f"{name_base}_pag_{i+1}.pdf"
+            # out_name = f"{name_base}_pag_{i+1}.pdf"
+            # Instead of _pag_, let's format it nicely
+            out_name = f"{name_base} - Pagina {i+1}.pdf"
             
             # Create new PDF for single page
             new_doc = fitz.open()
@@ -7307,7 +7307,8 @@ def render():
                                 else:
                                     st.success(result)
                                 out_file = os.path.join(path_unif, "Unificado.pdf")
-                                render_download_button(out_file, f"dl_unif_pdf_{int(time.time())}", "⬇️ Descargar PDF Unificado")
+                                # Try to find if any subfolder has a unificado.pdf since it's a batch operation
+                                render_download_button(path_unif, f"dl_unif_pdf_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
             
@@ -7324,7 +7325,7 @@ def render():
                                 else:
                                     st.success(result)
                                 out_file = os.path.join(path_unif, "Unificado.pdf")
-                                render_download_button(out_file, f"dl_unif_jpg_{int(time.time())}", "⬇️ Descargar PDF (JPGs)")
+                                render_download_button(path_unif, f"dl_unif_jpg_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
@@ -7341,7 +7342,7 @@ def render():
                                 else:
                                     st.success(result)
                                 out_file = os.path.join(path_unif, "Unificado.pdf")
-                                render_download_button(out_file, f"dl_unif_png_{int(time.time())}", "⬇️ Descargar PDF (PNGs)")
+                                render_download_button(path_unif, f"dl_unif_png_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
@@ -7358,7 +7359,7 @@ def render():
                                 else:
                                     st.success(result)
                                 out_file = os.path.join(path_unif, "Unificado.docx")
-                                render_download_button(out_file, f"dl_unif_docx_{int(time.time())}", "⬇️ Descargar DOCX Unificado")
+                                render_download_button(path_unif, f"dl_unif_docx_{int(time.time())}", "📦 Descargar Resultados (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -7397,9 +7398,19 @@ def render():
                              else:
                                  if isinstance(result, dict) and "message" in result:
                                      st.success(result["message"])
+                                     if "files" in result:
+                                         for f in result["files"]:
+                                             st.download_button(
+                                                 label=f.get("label", f"⬇️ Descargar {f['name']}"),
+                                                 data=f["data"],
+                                                 file_name=f["name"],
+                                                 key=f"dl_unif_man_{f['name']}_{int(time.time())}"
+                                             )
+                                     else:
+                                         render_download_button(out_path, f"dl_unif_man_{int(time.time())}", "⬇️ Descargar Unificado Manual")
                                  else:
                                      st.success(result)
-                                 render_download_button(out_path, f"dl_unif_man_{int(time.time())}", "⬇️ Descargar Unificado Manual")
+                                     render_download_button(out_path, f"dl_unif_man_{int(time.time())}", "⬇️ Descargar Unificado Manual")
                      except Exception as e:
                          st.error(f"Error: {e}")
 
@@ -7418,9 +7429,19 @@ def render():
                             else:
                                 if isinstance(result, dict) and "message" in result:
                                     st.success(result["message"])
+                                    if "files" in result:
+                                        for f in result["files"]:
+                                            st.download_button(
+                                                label=f.get("label", f"📦 Descargar {f['name']}"),
+                                                data=f["data"],
+                                                file_name=f["name"],
+                                                key=f"dl_split_man_{f['name']}_{int(time.time())}"
+                                            )
+                                    else:
+                                        render_download_button(out_folder, "dl_split_man", "📦 Descargar Páginas Divididas (ZIP)")
                                 else:
                                     st.success(result)
-                                render_download_button(out_folder, "dl_split_man", "📦 Descargar Páginas Divididas (ZIP)")
+                                    render_download_button(out_folder, "dl_split_man", "📦 Descargar Páginas Divididas (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
