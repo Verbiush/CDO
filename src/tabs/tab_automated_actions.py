@@ -7299,12 +7299,15 @@ def render():
                     try:
                         with st.spinner("Unificando PDFs..."):
                             result = worker_unificar_por_carpeta(path_unif, "Unificado")
-                            st.success(result)
-                            out_file = os.path.join(path_unif, "Unificado.pdf")
-#                             render_download_button(out_file, f"dl_unif_pdf_{int(time.time())}", "⬇️ Descargar PDF Unificado")
-                            # if os.path.exists(out_file):
-                            #    with open(out_file, "rb") as f:
-                            #        st.download_button("⬇️ Descargar PDF Unificado", f, file_name="Unificado.pdf")
+                            if isinstance(result, dict) and "error" in result:
+                                st.error(result["error"])
+                            else:
+                                if isinstance(result, dict) and "message" in result:
+                                    st.success(result["message"])
+                                else:
+                                    st.success(result)
+                                out_file = os.path.join(path_unif, "Unificado.pdf")
+                                render_download_button(out_file, f"dl_unif_pdf_{int(time.time())}", "⬇️ Descargar PDF Unificado")
                     except Exception as e:
                         st.error(f"Error: {e}")
             
@@ -7313,12 +7316,15 @@ def render():
                     try:
                         with st.spinner("Unificando JPGs..."):
                             result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "JPG")
-                            st.success(result)
-                            out_file = os.path.join(path_unif, "Unificado.pdf")
-#                             render_download_button(out_file, f"dl_unif_jpg_{int(time.time())}", "⬇️ Descargar PDF (JPGs)")
-                            # if os.path.exists(out_file):
-                            #    with open(out_file, "rb") as f:
-                            #        st.download_button("⬇️ Descargar PDF (JPGs)", f, file_name="Unificado_JPG.pdf")
+                            if isinstance(result, dict) and "error" in result:
+                                st.error(result["error"])
+                            else:
+                                if isinstance(result, dict) and "message" in result:
+                                    st.success(result["message"])
+                                else:
+                                    st.success(result)
+                                out_file = os.path.join(path_unif, "Unificado.pdf")
+                                render_download_button(out_file, f"dl_unif_jpg_{int(time.time())}", "⬇️ Descargar PDF (JPGs)")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
@@ -7327,12 +7333,15 @@ def render():
                     try:
                         with st.spinner("Unificando PNGs..."):
                             result = worker_unificar_imagenes_por_carpeta_rec(path_unif, "Unificado.pdf", "PNG")
-                            st.success(result)
-                            out_file = os.path.join(path_unif, "Unificado.pdf")
-#                             render_download_button(out_file, f"dl_unif_png_{int(time.time())}", "⬇️ Descargar PDF (PNGs)")
-                            # if os.path.exists(out_file):
-                            #    with open(out_file, "rb") as f:
-                            #        st.download_button("⬇️ Descargar PDF (PNGs)", f, file_name="Unificado_PNG.pdf")
+                            if isinstance(result, dict) and "error" in result:
+                                st.error(result["error"])
+                            else:
+                                if isinstance(result, dict) and "message" in result:
+                                    st.success(result["message"])
+                                else:
+                                    st.success(result)
+                                out_file = os.path.join(path_unif, "Unificado.pdf")
+                                render_download_button(out_file, f"dl_unif_png_{int(time.time())}", "⬇️ Descargar PDF (PNGs)")
                     except Exception as e:
                         st.error(f"Error: {e}")
                 
@@ -7341,12 +7350,15 @@ def render():
                     try:
                         with st.spinner("Unificando DOCX..."):
                             result = worker_unificar_docx_por_carpeta(path_unif, "Unificado.docx")
-                            st.success(result)
-                            out_file = os.path.join(path_unif, "Unificado.docx")
-#                             render_download_button(out_file, f"dl_unif_docx_{int(time.time())}", "⬇️ Descargar DOCX Unificado")
-                            # if os.path.exists(out_file):
-                            #    with open(out_file, "rb") as f:
-                            #        st.download_button("⬇️ Descargar DOCX Unificado", f, file_name="Unificado.docx")
+                            if isinstance(result, dict) and "error" in result:
+                                st.error(result["error"])
+                            else:
+                                if isinstance(result, dict) and "message" in result:
+                                    st.success(result["message"])
+                                else:
+                                    st.success(result)
+                                out_file = os.path.join(path_unif, "Unificado.docx")
+                                render_download_button(out_file, f"dl_unif_docx_{int(time.time())}", "⬇️ Descargar DOCX Unificado")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -7356,11 +7368,16 @@ def render():
                     try:
                         with st.spinner("Dividiendo PDFs..."):
                             result = worker_dividir_pdfs_masivamente(path_unif)
-                            st.success(result)
-                            div_folder = os.path.join(path_unif, "Dividido")
-                            if os.path.exists(div_folder):
-#                                 render_download_button(div_folder, "dl_split_mass", "📦 Descargar Carpeta Dividido (ZIP)")
-                                pass
+                            if isinstance(result, dict) and "error" in result:
+                                st.error(result["error"])
+                            else:
+                                if isinstance(result, dict) and "message" in result:
+                                    st.success(result["message"])
+                                else:
+                                    st.success(result)
+                                div_folder = os.path.join(path_unif, "Dividido")
+                                if os.path.exists(div_folder):
+                                    render_download_button(div_folder, "dl_split_mass", "📦 Descargar Carpeta Dividido (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
@@ -7375,11 +7392,14 @@ def render():
                          with st.spinner("Unificando PDFs seleccionados..."):
                              out_path = os.path.join(st.session_state.get('current_path', '.'), "Unificado_Manual.pdf")
                              result = worker_unificar_pdfs_list(uploaded_pdfs, out_path)
-                             st.success(result)
-#                              render_download_button(out_path, f"dl_unif_man_{int(time.time())}", "⬇️ Descargar Unificado Manual")
-                            # if os.path.exists(out_path):
-                            #     with open(out_path, "rb") as f:
-                            #         st.download_button("⬇️ Descargar Unificado Manual", f, file_name="Unificado_Manual.pdf")
+                             if isinstance(result, dict) and "error" in result:
+                                 st.error(result["error"])
+                             else:
+                                 if isinstance(result, dict) and "message" in result:
+                                     st.success(result["message"])
+                                 else:
+                                     st.success(result)
+                                 render_download_button(out_path, f"dl_unif_man_{int(time.time())}", "⬇️ Descargar Unificado Manual")
                      except Exception as e:
                          st.error(f"Error: {e}")
 
@@ -7393,8 +7413,14 @@ def render():
                         with st.spinner("Dividiendo PDF..."):
                             out_folder = os.path.join(st.session_state.get('current_path', '.'), "Dividido")
                             result = worker_dividir_pdf_paginas(uploaded_split, out_folder)
-                            st.success(result)
-#                             render_download_button(out_folder, "dl_split_man", "📦 Descargar Páginas Divididas (ZIP)")
+                            if isinstance(result, dict) and "error" in result:
+                                st.error(result["error"])
+                            else:
+                                if isinstance(result, dict) and "message" in result:
+                                    st.success(result["message"])
+                                else:
+                                    st.success(result)
+                                render_download_button(out_folder, "dl_split_man", "📦 Descargar Páginas Divididas (ZIP)")
                     except Exception as e:
                         st.error(f"Error: {e}")
 
