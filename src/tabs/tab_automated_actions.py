@@ -1009,7 +1009,7 @@ def worker_dividir_pdf_paginas(input_pdf, output_folder=None, silent_mode=False)
             
         msg = f"PDF dividido en {len(doc)} páginas."
         
-        if is_temp:
+        if True: # Always return zip for manual web downloads to ensure it works
             mem_zip = io.BytesIO()
             with zipfile.ZipFile(mem_zip, "w", zipfile.ZIP_DEFLATED) as zf:
                 for root, dirs, files in os.walk(output_folder):
@@ -1018,8 +1018,10 @@ def worker_dividir_pdf_paginas(input_pdf, output_folder=None, silent_mode=False)
                         arcname = os.path.relpath(file_path, output_folder)
                         zf.write(file_path, arcname)
             
-            try: shutil.rmtree(output_folder, ignore_errors=True)
-            except: pass
+            # If it was temp, clean it up. If it wasn't temp, leave the files on disk but still return the zip.
+            if is_temp:
+                try: shutil.rmtree(output_folder, ignore_errors=True)
+                except: pass
             
             return {
                 "files": [{
@@ -1029,8 +1031,6 @@ def worker_dividir_pdf_paginas(input_pdf, output_folder=None, silent_mode=False)
                 }],
                 "message": msg
             }
-        else:
-            return {"message": f"{msg} Guardado en {output_folder}"}
 
     except Exception as e:
         return {"error": f"Error dividiendo PDF: {e}"}
