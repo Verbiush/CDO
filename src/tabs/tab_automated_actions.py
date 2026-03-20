@@ -2838,15 +2838,29 @@ def worker_analisis_carpetas(root_path, silent_mode=False):
     for root, dirs, files in os.walk(root_path):
         folder_name = os.path.basename(root)
         count = len(files)
-        size = sum(os.path.getsize(os.path.join(root, f)) for f in files)
+        
+        # Calculate size safely handling inaccessible/missing files
+        size = 0
+        for f in files:
+            try:
+                size += os.path.getsize(os.path.join(root, f))
+            except Exception:
+                pass
+                
         data_summary.append({"Carpeta": folder_name, "Archivos": count, "Peso (KB)": round(size/1024, 2), "Ruta": root})
         
         for f in files:
+            file_size = 0
+            try:
+                file_size = os.path.getsize(os.path.join(root, f))
+            except Exception:
+                pass
+                
             data_details.append({
                 "Carpeta Principal": folder_name,
                 "Ruta": os.path.join(root, f),
                 "Archivo": f,
-                "Peso (KB)": round(os.path.getsize(os.path.join(root, f))/1024, 2)
+                "Peso (KB)": round(file_size/1024, 2)
             })
     
     if not data_summary:
