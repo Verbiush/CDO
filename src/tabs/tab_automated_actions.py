@@ -1935,7 +1935,9 @@ def worker_anadir_sufijo_excel(excel_path, sheet_name, col_folder, col_suffix, r
              task_id = send_command(username, "bulk_rename", {
                  "path": root_path,
                  "items": items,
-                 "separator": "" # No separator, suffix string should contain it if needed or we just append
+                 "separator": "", # No separator, suffix string should contain it if needed or we just append
+                 "rename_folders": False, # Solo renombrar los archivos internos de la carpeta encontrada
+                 "rename_internal_files": True
              })
              
              if task_id:

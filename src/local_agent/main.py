@@ -1038,7 +1038,7 @@ def process_desconsolidate_json(file_path, dest_folder):
     # Stub implementation to prevent crashes
     return {"status": "error", "message": "Función desconsolidate_json no implementada en el Agente Local aún."}
 
-def process_bulk_rename(source_path, items, separator="_", item_type="both"):
+def process_bulk_rename(source_path, items, separator="_", item_type="both", rename_folders=True, rename_internal_files=True):
     count_renamed = 0
     errors = []
     
@@ -1077,8 +1077,9 @@ def process_bulk_rename(source_path, items, separator="_", item_type="both"):
             for folder_name in matching_folders:
                 folder_path = os.path.join(source_path, folder_name)
                 
+                new_folder_path = folder_path
                 # Check if folder name already has suffix
-                if not folder_name.endswith(f"{separator}{suffix_val}"):
+                if rename_folders and not folder_name.endswith(f"{separator}{suffix_val}"):
                     new_folder_name = f"{folder_name}{separator}{suffix_val}"
                     new_folder_path = os.path.join(source_path, new_folder_name)
                     
@@ -1089,13 +1090,14 @@ def process_bulk_rename(source_path, items, separator="_", item_type="both"):
                         errors.append(f"Error renombrando carpeta {folder_name}: {str(e)}")
                 
                 # Rename internal files
-                try:
-                    if os.path.exists(folder_path): # Might have been renamed
-                        target_path = folder_path 
-                    elif os.path.exists(new_folder_path):
-                        target_path = new_folder_path
-                    else:
-                        continue
+                if rename_internal_files:
+                    try:
+                        if os.path.exists(folder_path) and not rename_folders:
+                            target_path = folder_path 
+                        elif os.path.exists(new_folder_path):
+                            target_path = new_folder_path
+                        else:
+                            continue
                         
                     for filename in os.listdir(target_path):
                         file_full_path = os.path.join(target_path, filename)
@@ -1739,9 +1741,11 @@ class AgentWorker:
                 items = params.get("items", [])
                 separator = params.get("separator", "_")
                 item_type = params.get("item_type", "both")
+                rename_folders = params.get("rename_folders", True)
+                rename_internal_files = params.get("rename_internal_files", True)
                 
                 if path:
-                    res = process_bulk_rename(path, items, separator, item_type)
+                    res = process_bulk_rename(path, items, separator, item_type, rename_folders, rename_internal_files)
                     result["result"] = res
                 else:
                     result["status"] = "ERROR"
