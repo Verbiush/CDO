@@ -86,10 +86,10 @@ except ImportError:
     pass
 
 try:
-    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_file_selector
+    from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_file_selector, render_download_button
 except ImportError:
     try:
-        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_file_selector
+        from src.gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_file_selector, render_download_button
     except ImportError:
         def abrir_dialogo_carpeta_nativo(title="Seleccionar Carpeta", initial_dir=None):
             st.warning("Selector de carpeta nativo no disponible.")
