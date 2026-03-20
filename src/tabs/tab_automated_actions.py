@@ -6928,7 +6928,7 @@ def dialog_copiar_mapeo():
         default_path=default_path
     )
     
-    if st.button("Iniciar Copia"):
+    if st.button("Iniciar Copia", key="btn_init_copy_map_sub"):
         if uploaded and src_base and dst_base and col_src and col_dst:
             try:
                 uploaded.seek(0)
@@ -6987,7 +6987,7 @@ def dialog_copiar_raiz():
         default_path=default_path
     )
     
-    if st.button("Iniciar Copia"):
+    if st.button("Iniciar Copia", key="btn_init_copy_root_map"):
         if uploaded and root_src and root_dst and col_id and col_folder:
             try:
                 uploaded.seek(0)
