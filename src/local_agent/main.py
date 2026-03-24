@@ -1637,9 +1637,9 @@ class AgentWorker:
     def run_loop(self):
         while self.running:
             try:
-                # Poll for tasks
+                # Poll for tasks with increased timeout
                 auth = (self.username, self.password) if self.password else None
-                resp = requests.get(f"{self.task_url}?username={self.username}", auth=auth, timeout=5)
+                resp = requests.get(f"{self.task_url}?username={self.username}", auth=auth, timeout=15)
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get("tasks"):
