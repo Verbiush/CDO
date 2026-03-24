@@ -133,10 +133,11 @@ def render(tab_container):
                         if task_id:
                             with st.spinner("Esperando al agente..."):
                                 res = agent_client.wait_for_result(task_id)
-                                if res and res.get("status") == "success":
+                                # Consider missing "error" key or specific success status as successful
+                                if res and (res.get("status") == "success" or "error" not in res):
                                     st.success("✅ Navegador abierto en el Agente Local.")
                                 else:
-                                    st.error(f"Error del agente: {res.get('message') if res else 'Sin respuesta'}")
+                                    st.error(f"Error del agente: {res.get('error', res.get('message', 'Sin respuesta'))}")
                         else:
                             st.error("No se pudo conectar con el servidor para enviar la tarea.")
                     except Exception as e:
