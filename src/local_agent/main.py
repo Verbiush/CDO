@@ -2324,6 +2324,24 @@ class AgentWorker:
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
+                    
+            elif command == "launch_browser":
+                url = params.get("url", "https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
+                try:
+                    # Ensure bot_zeus can be imported
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    from src import bot_zeus
+                    success, msg = bot_zeus.abrir_navegador_inicial()
+                    if success:
+                        result["status"] = "success"
+                        result["result"] = {"message": msg}
+                    else:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": msg}
+                except Exception as e:
+                    self.log(f"Error abriendo navegador: {e}\n{traceback.format_exc()}")
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": str(e)}
 
             else:
                 result["status"] = "ERROR"
