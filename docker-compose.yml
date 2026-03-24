@@ -29,3 +29,14 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
     command: uvicorn src.server_api:app --host 0.0.0.0 --port 8000
+
+  fevrips-api:
+    image: fevripsacr.azurecr.io/minsalud.fevrips.apilocal:latest
+    container_name: fevrips-api
+    ports:
+      - "5000:5000"
+      - "5100:5100"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Docker
+      - ASPNETCORE_URLS=http://+:5000
+    restart: unless-stopped
