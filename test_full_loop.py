@@ -4,7 +4,7 @@ import json
 import sys
 
 # Configuration
-SERVER_URL = "http://3.15.237.186:8000"
+SERVER_URL = "http://18.118.37.215:8000"
 USERNAME = "admin"
 PASSWORD = "admin"
 

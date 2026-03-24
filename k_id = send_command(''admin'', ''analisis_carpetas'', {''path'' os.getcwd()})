@@ -1,0 +1,218 @@
+[1mdiff --git a/src/tabs/tab_automated_actions.py b/src/tabs/tab_automated_actions.py[m
+[1mindex 5a25f9d..4342fca 100644[m
+[1m--- a/src/tabs/tab_automated_actions.py[m
+[1m+++ b/src/tabs/tab_automated_actions.py[m
+[36m@@ -4,6 +4,17 @@[m [mimport time[m
+ import shutil[m
+ import pandas as pd[m
+ import json[m
+[32m+[m
+[32m+[m[32mdef _should_delegate(path_or_list):[m
+[32m+[m[32m    import os[m
+[32m+[m[32m    if not path_or_list: return False[m
+[32m+[m[32m    path = path_or_list[m
+[32m+[m[32m    if isinstance(path_or_list, list):[m
+[32m+[m[32m        path = path_or_list[0][m
+[32m+[m[32m    if isinstance(path, dict):[m
+[32m+[m[32m        path = path.get("Ruta completa", "")[m
+[32m+[m[32m    return not os.path.exists(path)[m
+[32m+[m
+ import re[m
+ import random[m
+ import math[m
+[36m@@ -2788,7 +2799,7 @@[m [mdef worker_txt_a_json_masivo(folder_path, silent_mode=False):[m
+ def worker_analisis_carpetas(root_path, silent_mode=False):[m
+     # --- Agent Delegation ---[m
+     is_native_mode = st.session_state.get('force_native_mode', True)[m
+[31m-    if is_native_mode and not silent_mode:[m
+[32m+[m[32m    if is_native_mode and not silent_mode and _should_delegate(root_path):[m
+         if not silent_mode: st.info(f"Delegando análisis de carpetas al Agente Local...")[m
+         try:[m
+             from src.agent_client import send_command, wait_for_result[m
+[36m@@ -2796,9 +2807,9 @@[m [mdef worker_analisis_carpetas(root_path, silent_mode=False):[m
+             task_id = send_command(username, "analisis_carpetas", {"path": root_path})[m
+             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}[m
+             [m
+[31m-            res = wait_for_result(username, task_id, timeout=300)[m
+[31m-            if res and res.get("status") == "COMPLETED":[m
+[31m-                return res.get("result")[m
+[32m+[m[32m            res = wait_for_result(task_id, timeout=300)[m
+[32m+[m[32m            if res and "error" not in res:[m
+[32m+[m[32m                return res[m
+             else:[m
+                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}[m
+         except Exception as e:[m
+[36m@@ -3925,7 +3936,7 @@[m [mdef worker_analisis_historia_clinica(file_list, silent_mode=False):[m
+     """[m
+     # --- Agent Delegation ---[m
+     is_native_mode = st.session_state.get('force_native_mode', True)[m
+[31m-    if is_native_mode and not silent_mode:[m
+[32m+[m[32m    if is_native_mode and not silent_mode and _should_delegate(file_list):[m
+         if not silent_mode: st.info(f"Delegando análisis HC al Agente Local...")[m
+         try:[m
+             from src.agent_client import send_command, wait_for_result[m
+[36m@@ -3933,9 +3944,9 @@[m [mdef worker_analisis_historia_clinica(file_list, silent_mode=False):[m
+             task_id = send_command(username, "analisis_hc", {"file_list": file_list})[m
+             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}[m
+             [m
+[31m-            res = wait_for_result(username, task_id, timeout=300)[m
+[31m-            if res and res.get("status") == "COMPLETED":[m
+[31m-                return res.get("result")[m
+[32m+[m[32m            res = wait_for_result(task_id, timeout=300)[m
+[32m+[m[32m            if res and "error" not in res:[m
+[32m+[m[32m                return res[m
+             else:[m
+                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}[m
+         except Exception as e:[m
+[36m@@ -4051,7 +4062,7 @@[m [mdef worker_leer_pdf_retefuente(file_list, silent_mode=False):[m
+     """[m
+     # --- Agent Delegation ---[m
+     is_native_mode = st.session_state.get('force_native_mode', True)[m
+[31m-    if is_native_mode and not silent_mode:[m
+[32m+[m[32m    if is_native_mode and not silent_mode and _should_delegate(file_list):[m
+         if not silent_mode: st.info(f"Delegando análisis Retefuente al Agente Local...")[m
+         try:[m
+             from src.agent_client import send_command, wait_for_result[m
+[36m@@ -4059,9 +4070,9 @@[m [mdef worker_leer_pdf_retefuente(file_list, silent_mode=False):[m
+             task_id = send_command(username, "analisis_rete", {"file_list": file_list})[m
+             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}[m
+             [m
+[31m-            res = wait_for_result(username, task_id, timeout=300)[m
+[31m-            if res and res.get("status") == "COMPLETED":[m
+[31m-                return res.get("result")[m
+[32m+[m[32m            res = wait_for_result(task_id, timeout=300)[m
+[32m+[m[32m            if res and "error" not in res:[m
+[32m+[m[32m                return res[m
+             else:[m
+                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}[m
+         except Exception as e:[m
+[36m@@ -4224,7 +4235,7 @@[m [mdef worker_analisis_emssanar(file_list, silent_mode=False):[m
+     """[m
+     # --- Agent Delegation ---[m
+     is_native_mode = st.session_state.get('force_native_mode', True)[m
+[31m-    if is_native_mode and not silent_mode:[m
+[32m+[m[32m    if is_native_mode and not silent_mode and _should_delegate(file_list):[m
+         if not silent_mode: st.info(f"Delegando análisis Emssanar al Agente Local...")[m
+         try:[m
+             from src.agent_client import send_command, wait_for_result[m
+[36m@@ -4232,9 +4243,9 @@[m [mdef worker_analisis_emssanar(file_list, silent_mode=False):[m
+             task_id = send_command(username, "analisis_emssanar", {"file_list": file_list})[m
+             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}[m
+             [m
+[31m-            res = wait_for_result(username, task_id, timeout=300)[m
+[31m-            if res and res.get("status") == "COMPLETED":[m
+[31m-                return res.get("result")[m
+[32m+[m[32m            res = wait_for_result(task_id, timeout=300)[m
+[32m+[m[32m            if res and "error" not in res:[m
+[32m+[m[32m                return res[m
+             else:[m
+                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}[m
+         except Exception as e:[m
+[36m@@ -4488,9 +4499,9 @@[m [mdef worker_analisis_fomag(file_list, silent_mode=False):[m
+             task_id = send_command(username, "analisis_fomag", {"file_list": file_list})[m
+             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}[m
+             [m
+[31m-            res = wait_for_result(username, task_id, timeout=300)[m
+[31m-            if res and res.get("status") == "COMPLETED":[m
+[31m-                return res.get("result")[m
+[32m+[m[32m            res = wait_for_result(task_id, timeout=300)[m
+[32m+[m[32m            if res and "error" not in res:[m
+[32m+[m[32m                return res[m
+             else:[m
+                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}[m
+         except Exception as e:[m
+[36m@@ -4794,7 +4805,7 @@[m [mdef worker_analisis_sos(file_list, silent_mode=False, use_ai=False, api_key=None[m
+     """[m
+     # --- Agent Delegation ---[m
+     is_native_mode = st.session_state.get('force_native_mode', True)[m
+[31m-    if is_native_mode and not silent_mode:[m
+[32m+[m[32m    if is_native_mode and not silent_mode and _should_delegate(file_list):[m
+         if not silent_mode: st.info(f"Delegando análisis SOS al Agente Local...")[m
+         try:[m
+             from src.agent_client import send_command, wait_for_result[m
+[36m@@ -4807,9 +4818,9 @@[m [mdef worker_analisis_sos(file_list, silent_mode=False, use_ai=False, api_key=None[m
+             task_id = send_command(username, "analisis_sos", payload)[m
+             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}[m
+             [m
+[31m-            res = wait_for_result(username, task_id, timeout=600) # Longer timeout for AI[m
+[31m-            if res and res.get("status") == "COMPLETED":[m
+[31m-                return res.get("result")[m
+[32m+[m[32m            res = wait_for_result(task_id, timeout=600) # Longer timeout for AI[m
+[32m+[m[32m            if res and "error" not in res:[m
+[32m+[m[32m                return res[m
+             else:[m
+                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}[m
+         except Exception as e:[m
+[36m@@ -4950,7 +4961,7 @@[m [mdef worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):[m
+     """[m
+     # --- Agent Delegation ---[m
+     is_native_mode = st.session_state.get('force_native_mode', True)[m
+[31m-    if is_native_mode and not silent_mode:[m
+[32m+[m[32m    if is_native_mode and not silent_mode and _should_delegate(file_list):[m
+         if not silent_mode: st.info(f"Delegando análisis Nueva EPS al Agente Local...")[m
+         try:[m
+             from src.agent_client import send_command, wait_for_result[m
+[36m@@ -4958,9 +4969,9 @@[m [mdef worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):[m
+             task_id = send_command(username, "analisis_neps", {"file_list": file_list})[m
+             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}[m
+             [m
+[31m-            res = wait_for_result(username, task_id, timeout=300)[m
+[31m-            if res and res.get("status") == "COMPLETED":[m
+[31m-                return res.get("result")[m
+[32m+[m[32m            res = wait_for_result(task_id, timeout=300)[m
+[32m+[m[32m            if res and "error" not in res:[m
+[32m+[m[32m                return res[m
+             else:[m
+                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}[m
+         except Exception as e:[m
+[36m@@ -5047,7 +5058,7 @@[m [mdef worker_analisis_cargue_sanitas(file_list, silent_mode=False):[m
+     """[m
+     # --- Agent Delegation ---[m
+     is_native_mode = st.session_state.get('force_native_mode', True)[m
+[31m-    if is_native_mode and not silent_mode:[m
+[32m+[m[32m    if is_native_mode and not silent_mode and _should_delegate(file_list):[m
+         if not silent_mode: st.info(f"Delegando análisis Sanitas al Agente Local...")[m
+         try:[m
+             from src.agent_client import send_command, wait_for_result[m
+[36m@@ -5055,9 +5066,9 @@[m [mdef worker_analisis_cargue_sanitas(file_list, silent_mode=False):[m
+             task_id = send_command(username, "analisis_sanitas", {"file_list": file_list})[m
+             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}[m
+             [m
+[31m-            res = wait_for_result(username, task_id, timeout=300)[m
+[31m-            if res and res.get("status") == "COMPLETED":[m
+[31m-                return res.get("result")[m
+[32m+[m[32m            res = wait_for_result(task_id, timeout=300)[m
+[32m+[m[32m            if res and "error" not in res:[m
+[32m+[m[32m                return res[m
+             else:[m
+                 return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}[m
+         except Exception as e:[m
+[36m@@ -7103,10 +7114,10 @@[m [mdef dialog_exportar_renombrado():[m
+                             })[m
+                             if write_task:[m
+                                 write_res = wait_for_result(write_task)[m
+[31m-                                if write_res and write_res.get("status") == "success":[m
+[32m+[m[32m                                if write_res and "error" not in write_res and not write_res.get("errors"):[m
+                                     st.success(f"Excel generado exitosamente en: {out_path}")[m
+                                 else:[m
+[31m-                                    st.error(f"Error al guardar Excel: {write_res.get('error', 'Desconocido')}")[m
+[32m+[m[32m                                    st.error(f"Error al guardar Excel: {write_res.get('error', write_res.get('errors', 'Desconocido')) if write_res else 'Sin respuesta'}")[m
+                             else:[m
+                                 st.error("No se pudo crear la tarea de guardado.")[m
+                     else:[m
+[36m@@ -7476,8 +7487,13 @@[m [mdef render():[m
+                 with st.spinner("Procesando..."):[m
+                     result = func(*args)[m
+                 [m
+[31m-                if result and isinstance(result, dict) and "files" in result:[m
+[31m-                    st.session_state[f"analysis_result_{key_prefix}"] = result[m
+[32m+[m[32m                if result and isinstance(result, dict):[m
+[32m+[m[32m                    if "error" in result:[m
+[32m+[m[32m                        st.error(f"Error en análisis: {result['error']}")[m
+[32m+[m[32m                    elif "files" in result:[m
+[32m+[m[32m                        st.session_state[f"analysis_result_{key_prefix}"] = result[m
+[32m+[m[32m                    else:[m
+[32m+[m[32m                         st.warning("El resultado no tiene el formato esperado para descarga directa.")[m
+                 elif result:[m
+                      st.warning("El resultado no tiene el formato esperado para descarga directa.")[m
+                 else:[m

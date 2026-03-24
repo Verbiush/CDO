@@ -1,7 +1,7 @@
 import requests
 import sys
 
-SERVER_IP = "3.15.237.186"
+SERVER_IP = "18.118.37.215"
 API_PORT = "8000"
 WEB_PORT = "8501"
 
@@ -17,7 +17,7 @@ def check_connection():
         response = requests.get(api_url, timeout=5)
         if response.status_code == 200:
             print("✅ CONEXIÓN EXITOSA: El puerto API (8000) responde correctamente.")
-            print("   -> Configure su agente con esta URL: http://3.15.237.186:8000")
+            print("   -> Configure su agente con esta URL: http://18.118.37.215:8000")
         else:
             print(f"⚠️  ADVERTENCIA: El servidor respondió con código {response.status_code}")
     except Exception as e:
