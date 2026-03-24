@@ -2117,6 +2117,8 @@ class AgentWorker:
                 base_path = params.get("base_path")
                 output_name = params.get("output_name", "Unificado")
                 if base_path:
+                    # Ensure src can be imported
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_unificar_por_carpeta
                         res = worker_unificar_por_carpeta(base_path, output_name, silent_mode=True)
@@ -2133,6 +2135,8 @@ class AgentWorker:
                 output_name = params.get("output_name", "Unificado.pdf")
                 img_type = params.get("img_type", "JPG")
                 if base_path:
+                    # Ensure src can be imported
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_unificar_imagenes_por_carpeta_rec
                         res = worker_unificar_imagenes_por_carpeta_rec(base_path, output_name, img_type, silent_mode=True)
@@ -2148,6 +2152,8 @@ class AgentWorker:
                 base_path = params.get("base_path")
                 output_name = params.get("output_name", "Unificado")
                 if base_path:
+                    # Ensure src can be imported
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_unificar_docx_por_carpeta
                         res = worker_unificar_docx_por_carpeta(base_path, output_name, silent_mode=True)
@@ -2162,6 +2168,8 @@ class AgentWorker:
             elif command == "split_pdf_massive":
                 base_path = params.get("base_path")
                 if base_path:
+                    # Ensure src can be imported
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_dividir_pdfs_masivamente
                         res = worker_dividir_pdfs_masivamente(base_path, silent_mode=True)
