@@ -162,10 +162,12 @@ def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=','):
                 
                 if isinstance(res, dict) and "error" in res:
                      return False, res["error"]
-                
+                # New shape from agent: {"ok": bool, "message": "..." }
+                if isinstance(res, dict) and "ok" in res and "message" in res:
+                    return res["ok"], res["message"]
+                # Backward compatibility if agent returns list [ok, msg]
                 if isinstance(res, list) and len(res) >= 2:
                     return res[0], res[1]
-                
                 return False, f"Respuesta inesperada del agente: {res}"
             else:
                 return False, "No se pudo conectar con el Agente."

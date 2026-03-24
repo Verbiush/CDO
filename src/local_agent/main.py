@@ -2191,7 +2191,7 @@ class AgentWorker:
                     try:
                         from src.tabs.tab_conversion import worker_convertir_archivo
                         ok, msg = worker_convertir_archivo(file_path, ctype, output_folder=out_folder, sep=sep)
-                        result["result"] = [ok, msg]
+                        result["result"] = {"ok": ok, "message": msg}
                     except Exception as e:
                         result["status"] = "ERROR"
                         result["result"] = {"error": str(e)}
