@@ -455,7 +455,6 @@ def render(container=None):
                     timestamp = int(time.time())
                     actual_output_folder = os.path.join(os.getcwd(), "temp_downloads", f"ind_{timestamp}")
                     os.makedirs(actual_output_folder, exist_ok=True)
-                    actual_output_folder = output_folder
 
                     try:
                         # Handle Uploaded File
