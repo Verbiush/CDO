@@ -33,6 +33,17 @@ try:
 except ImportError:
     Converter = None
 
+def _valid_exts_for(conv_type_code):
+    v = []
+    if conv_type_code.startswith("PDF"): v = [".pdf"]
+    elif conv_type_code.startswith("JPG"): v = [".jpg", ".jpeg"]
+    elif conv_type_code.startswith("DOCX"): v = [".docx"]
+    elif conv_type_code.startswith("PNG"): v = [".png"]
+    elif conv_type_code == "XLS2XLSX": v = [".xls"]
+    elif conv_type_code.startswith("XLSX"): v = [".xlsx", ".xls"]
+    elif conv_type_code == "PDF_GRAY": v = [".pdf"]
+    return v
+
 try:
     from docx2pdf import convert as convert_docx_to_pdf
     HAS_DOCX2PDF = True
@@ -432,6 +443,12 @@ def render(container=None):
                     # Create temp file immediately to have a path if needed, or handle in button
                     # We will handle in button to avoid creating temp files unnecessarily
                     file_to_process = uploaded_file
+                    # Validate extension matches conversion type
+                    valid_exts = _valid_exts_for(conv_type_code)
+                    ext = os.path.splitext(uploaded_file.name)[1].lower()
+                    if valid_exts and ext not in valid_exts:
+                        st.error("El archivo subido no corresponde al tipo de conversión seleccionado.")
+                        file_to_process = None
             else:
                 # Carpeta Actual
                 # Permitir seleccionar una carpeta diferente como origen
@@ -499,6 +516,13 @@ def render(container=None):
                     actual_input_path = ""
                     actual_output_folder = output_folder
                     
+                    # For uploaded files, force web-mode processing and use temp output
+                    if is_uploaded:
+                        st.session_state["conv_force_web_mode"] = True
+                        timestamp = int(time.time())
+                        actual_output_folder = os.path.join(os.getcwd(), "temp_downloads", f"ind_{timestamp}")
+                        os.makedirs(actual_output_folder, exist_ok=True)
+                    
                     if not os.path.exists(actual_output_folder):
                         try:
                             os.makedirs(actual_output_folder)
@@ -525,7 +549,7 @@ def render(container=None):
                         if ok:
                             st.success(f"✅ {msg}")
                             if is_uploaded:
-                                st.info(f"Archivo guardado en: {actual_output_folder}")
+                                st.info(f"Archivo convertido listo para descargar.")
                             
                             # --- Download Logic ---
                             filename = os.path.basename(actual_input_path)
@@ -553,13 +577,12 @@ def render(container=None):
                                 
                                 if os.path.exists(target_file_path):
                                     # Use standardized download button with cleanup
-#                                     render_download_button(
-#                                         target_file_path, 
-#                                         f"dl_ind_file_{int(time.time())}", 
-#                                         f"📥 Descargar {out_file_name}", 
-#                                         cleanup=not is_native
-#                                     )
-                                    pass
+                                    render_download_button(
+                                        target_file_path, 
+                                        f"dl_ind_file_{int(time.time())}", 
+                                        f"📥 Descargar {out_file_name}", 
+                                        cleanup=True
+                                    )
                             
                             elif conv_type_code == "PDF2JPG":
                                 # Find generated JPGs
@@ -579,16 +602,15 @@ def render(container=None):
                                             for jpg in jpgs:
                                                 zf.write(jpg, os.path.basename(jpg))
                                         
-#                                         render_download_button(
-#                                             zip_path, 
-#                                             "dl_ind_jpgs", 
-#                                             "📦 Descargar Imágenes (ZIP)", 
-#                                             cleanup=not is_native
-#                                         )
-                                        pass
+                                        render_download_button(
+                                            zip_path, 
+                                            "dl_ind_jpgs", 
+                                            "📦 Descargar Imágenes (ZIP)", 
+                                            cleanup=True
+                                        )
                                         
                                         # Cleanup temp output folder containing raw JPGs
-                                        if not is_native and "temp_downloads" in actual_output_folder:
+                                        if "temp_downloads" in actual_output_folder:
                                             try:
                                                 shutil.rmtree(actual_output_folder, ignore_errors=True)
                                             except:
@@ -605,6 +627,8 @@ def render(container=None):
                     finally:
                         if temp_dir_obj:
                             temp_dir_obj.cleanup()
+                        if "conv_force_web_mode" in st.session_state:
+                            del st.session_state["conv_force_web_mode"]
 
         # --- TAB 2: MASSIVE ---
         with tab_mass:
