@@ -152,9 +152,9 @@ def _pdf_escala_grises(input_path, output_path):
     doc_final.save(output_path, garbage=compression, deflate=True)
     doc_final.close()
 
-def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=','):
+def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=',', force_local=False):
     is_native = st.session_state.get("force_native_mode", True)
-    if _os_env.environ.get("CDO_AGENT_MODE") == "1":
+    if _os_env.environ.get("CDO_AGENT_MODE") == "1" or force_local:
         is_native = False
     
     if is_native:
@@ -469,7 +469,7 @@ def render(container=None):
 
                         # Execute
                         with st.spinner("Procesando..."):
-                            ok, msg = worker_convertir_archivo(actual_input_path, conv_type_code, actual_output_folder, sep=sep)
+                            ok, msg = worker_convertir_archivo(actual_input_path, conv_type_code, actual_output_folder, sep=sep, force_local=is_uploaded)
                         
                         if ok:
                             st.info("Archivo convertido listo para descargar.")
