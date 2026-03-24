@@ -281,6 +281,36 @@ def dialog_generar_cuv():
             st.error("URL de API no configurada")
             return
             
+        # --- AUTO LOGIN IF TOKEN IS EMPTY ---
+        if not token:
+            st.info("🔄 Obteniendo token de autenticación automáticamente...")
+            try:
+                login_payload = {
+                    "tipo": "CC",
+                    "numero": "31996431",
+                    "clave": "Oportunidad2026*",
+                    "nit": "900438792",
+                    "tipoUsuario": "RE"
+                }
+                login_url = default_auth_url
+                r = requests.post(login_url, json=login_payload, timeout=10)
+                if r.status_code == 200:
+                    resp_json = r.json()
+                    token = resp_json.get("token") or resp_json.get("Token")
+                    if token:
+                        st.session_state.temp_token = token
+                        st.success("✅ Token obtenido exitosamente.")
+                    else:
+                        st.error("Error: No se recibió un token en la respuesta de autenticación.")
+                        return
+                else:
+                    st.error(f"Error de Autenticación automática ({r.status_code}): {r.text}")
+                    return
+            except Exception as e:
+                st.error(f"Error conectando al servicio de autenticación: {e}")
+                return
+        # ------------------------------------
+            
         # Lógica de procesamiento masivo
         path_input = target_cuv_path
         
