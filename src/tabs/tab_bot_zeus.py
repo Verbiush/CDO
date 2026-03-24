@@ -142,7 +142,11 @@ def render(tab_container):
                                      # but the browser likely opened.
                                      st.success("✅ Comando enviado al Agente Local. Verifique su pantalla.")
                                 else:
-                                    st.error(f"Error del agente: {res.get('error', res.get('message', 'Sin respuesta'))}")
+                                    err_txt = res.get('error', res.get('message', 'Sin respuesta')) if isinstance(res, dict) else 'Sin respuesta'
+                                    if isinstance(err_txt, str) and 'timeout waiting for agent response' in err_txt.lower():
+                                        st.success("✅ Comando enviado al Agente Local. Verifique su pantalla.")
+                                    else:
+                                        st.error(f"Error del agente: {err_txt}")
                         else:
                             st.error("No se pudo conectar con el servidor para enviar la tarea.")
                     except Exception as e:
