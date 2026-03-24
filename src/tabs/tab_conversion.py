@@ -413,6 +413,7 @@ def render(container=None):
             file_to_process = None
             is_uploaded = False
             temp_dir_obj = None
+            current_path_default = st.session_state.get("current_path", os.getcwd())
 
             if origin_mode == "Subir":
                 uploaded_file = st.file_uploader(f"Subir Archivo para {conv_type_label}", key="ind_uploader")
@@ -424,7 +425,6 @@ def render(container=None):
             else:
                 # Carpeta Actual
                 # Permitir seleccionar una carpeta diferente como origen
-                current_path_default = st.session_state.get("current_path", os.getcwd())
                 
                 current_path = render_path_selector(
                     label="Carpeta Origen (Individual)",
