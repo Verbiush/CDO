@@ -2328,16 +2328,19 @@ class AgentWorker:
             elif command == "launch_browser":
                 url = params.get("url", "https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
                 try:
-                    # Ensure bot_zeus can be imported
+                    # Ensure bot_zeus can be imported and launch asynchronously
                     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-                    from src import bot_zeus
-                    success, msg = bot_zeus.abrir_navegador_inicial()
-                    if success:
-                        result["status"] = "success"
-                        result["result"] = {"message": msg}
-                    else:
-                        result["status"] = "ERROR"
-                        result["result"] = {"error": msg}
+                    
+                    def _open_browser():
+                        try:
+                            from src import bot_zeus
+                            bot_zeus.abrir_navegador_inicial()
+                        except Exception as e_inner:
+                            self.log(f"Error abriendo navegador (hilo): {e_inner}\n{traceback.format_exc()}")
+                    
+                    threading.Thread(target=_open_browser, daemon=True).start()
+                    result["status"] = "success"
+                    result["result"] = {"message": "Navegador lanzado en el Agente Local."}
                 except Exception as e:
                     self.log(f"Error abriendo navegador: {e}\n{traceback.format_exc()}")
                     result["status"] = "ERROR"
