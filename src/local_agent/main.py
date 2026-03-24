@@ -2189,6 +2189,7 @@ class AgentWorker:
                 if file_path and ctype:
                     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
+                        os.environ["CDO_AGENT_MODE"] = "1"
                         from src.tabs.tab_conversion import worker_convertir_archivo
                         ok, msg = worker_convertir_archivo(file_path, ctype, output_folder=out_folder, sep=sep)
                         result["result"] = {"ok": ok, "message": msg}
@@ -2207,6 +2208,7 @@ class AgentWorker:
                 if folder_path and ctype:
                     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
+                        os.environ["CDO_AGENT_MODE"] = "1"
                         from src.tabs.tab_conversion import worker_convertir_masivo
                         res = worker_convertir_masivo(folder_path, ctype, output_folder=out_folder, sep=sep, return_zip=False)
                         if isinstance(res, tuple):

@@ -6,6 +6,7 @@ import fitz  # PyMuPDF
 from PIL import Image
 import tempfile
 import pandas as pd
+import os as _os_env
 
 try:
     from gui_utils import abrir_dialogo_carpeta_nativo, update_path_key, render_path_selector, render_download_button
@@ -142,6 +143,8 @@ def _pdf_escala_grises(input_path, output_path):
 
 def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=','):
     is_native = st.session_state.get("force_native_mode", True)
+    if _os_env.environ.get("CDO_AGENT_MODE") == "1":
+        is_native = False
     
     if is_native:
         try:
@@ -231,6 +234,9 @@ def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=','):
 
 def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', return_zip=False):
     is_native = st.session_state.get("force_native_mode", True)
+    if _os_env.environ.get("CDO_AGENT_MODE") == "1":
+        is_native = False
+    _bare = _os_env.environ.get("CDO_AGENT_MODE") == "1"
     
     if is_native:
         try:
@@ -309,10 +315,11 @@ def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', retu
              return {"count": 0, "message": "La carpeta está vacía.", "error": True}
         return 0, "La carpeta está vacía (no se encontraron archivos)."
 
-    progress_bar = st.progress(0, text="Convirtiendo...")
+    progress_bar = None if _bare else st.progress(0, text="Convirtiendo...")
     
     for i, full_path in enumerate(files_to_process):
-        if i % 5 == 0: progress_bar.progress(min(i/total, 1.0), text=f"Procesando {i}/{total}")
+        if progress_bar and i % 5 == 0:
+            progress_bar.progress(min(i/total, 1.0), text=f"Procesando {i}/{total}")
         
         f = os.path.basename(full_path)
         f_lower = f.lower()
@@ -334,7 +341,8 @@ def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', retu
             if ok: count += 1
             else: print(f"Error convirtiendo {f}: {msg}")
             
-    progress_bar.progress(1.0, text="Finalizado.")
+    if progress_bar:
+        progress_bar.progress(1.0, text="Finalizado.")
     
     if return_zip:
         import io
