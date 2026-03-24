@@ -459,9 +459,8 @@ def render(container=None):
                     try:
                         # Handle Uploaded File
                         if is_uploaded:
-                            # Create a temp dir that persists only for this block
-                            temp_dir_obj = tempfile.TemporaryDirectory()
-                            temp_path = os.path.join(temp_dir_obj.name, file_to_process.name)
+                            # Save in actual_output_folder so it's shared between frontend and backend containers
+                            temp_path = os.path.join(actual_output_folder, file_to_process.name)
                             with open(temp_path, "wb") as f:
                                 f.write(file_to_process.getbuffer())
                             actual_input_path = temp_path
