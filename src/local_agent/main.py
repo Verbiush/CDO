@@ -2122,7 +2122,7 @@ class AgentWorker:
                     try:
                         from src.tabs.tab_automated_actions import worker_unificar_por_carpeta
                         res = worker_unificar_por_carpeta(base_path, output_name, silent_mode=True)
-                        result["result"] = res
+                        result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
                         result["status"] = "ERROR"
                         result["result"] = {"error": str(e)}
@@ -2140,7 +2140,7 @@ class AgentWorker:
                     try:
                         from src.tabs.tab_automated_actions import worker_unificar_imagenes_por_carpeta_rec
                         res = worker_unificar_imagenes_por_carpeta_rec(base_path, output_name, img_type, silent_mode=True)
-                        result["result"] = res
+                        result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
                         result["status"] = "ERROR"
                         result["result"] = {"error": str(e)}
@@ -2157,7 +2157,7 @@ class AgentWorker:
                     try:
                         from src.tabs.tab_automated_actions import worker_unificar_docx_por_carpeta
                         res = worker_unificar_docx_por_carpeta(base_path, output_name, silent_mode=True)
-                        result["result"] = res
+                        result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
                         result["status"] = "ERROR"
                         result["result"] = {"error": str(e)}
@@ -2173,7 +2173,7 @@ class AgentWorker:
                     try:
                         from src.tabs.tab_automated_actions import worker_dividir_pdfs_masivamente
                         res = worker_dividir_pdfs_masivamente(base_path, silent_mode=True)
-                        result["result"] = res
+                        result["result"] = _serialize_analysis_result(res)
                     except Exception as e:
                         result["status"] = "ERROR"
                         result["result"] = {"error": str(e)}
