@@ -427,108 +427,35 @@ def render(container=None):
                 sep_map = {"Coma (,)": ",", "Punto y coma (;)": ";", "Pipe (|)": "|"}
                 sep = sep_map[sep_label]
 
-            # 2. Origen
-            st.write("**Origen:**")
-            origin_mode = st.radio("Origen", ["Subir", "Carpeta Actual"], label_visibility="collapsed", horizontal=True, key="ind_origin_mode")
-
+            # 2. Subir archivo (Único modo)
+            uploaded_file = st.file_uploader(f"Subir Archivo para {conv_type_label}", key="ind_uploader")
             file_to_process = None
             is_uploaded = False
             temp_dir_obj = None
-            current_path_default = st.session_state.get("current_path", os.getcwd())
+            if uploaded_file:
+                is_uploaded = True
+                file_to_process = uploaded_file
+                valid_exts = _valid_exts_for(conv_type_code)
+                ext = os.path.splitext(uploaded_file.name)[1].lower()
+                if valid_exts and ext not in valid_exts:
+                    st.error("El archivo subido no corresponde al tipo de conversión seleccionado.")
+                    file_to_process = None
 
-            if origin_mode == "Subir":
-                uploaded_file = st.file_uploader(f"Subir Archivo para {conv_type_label}", key="ind_uploader")
-                if uploaded_file:
-                    is_uploaded = True
-                    # Create temp file immediately to have a path if needed, or handle in button
-                    # We will handle in button to avoid creating temp files unnecessarily
-                    file_to_process = uploaded_file
-                    # Validate extension matches conversion type
-                    valid_exts = _valid_exts_for(conv_type_code)
-                    ext = os.path.splitext(uploaded_file.name)[1].lower()
-                    if valid_exts and ext not in valid_exts:
-                        st.error("El archivo subido no corresponde al tipo de conversión seleccionado.")
-                        file_to_process = None
-            else:
-                # Carpeta Actual
-                # Permitir seleccionar una carpeta diferente como origen
-                
-                current_path = render_path_selector(
-                    label="Carpeta Origen (Individual)",
-                    key="conv_ind_source_path",
-                    default_path=current_path_default
-                )
-                
-                if not current_path:
-                    st.info("📂 Seleccione una carpeta para ver los archivos.")
-                    files = []
-                else:
-                    st.info(f"📁 Buscando archivos en: {current_path}")
-                    
-                    # Filter files based on conversion type
-                    valid_exts = []
-                    if conv_type_code.startswith("PDF"): valid_exts = [".pdf"]
-                    elif conv_type_code.startswith("JPG"): valid_exts = [".jpg", ".jpeg"]
-                    elif conv_type_code.startswith("DOCX"): valid_exts = [".docx"]
-                    elif conv_type_code.startswith("PNG"): valid_exts = [".png"]
-                    elif conv_type_code.startswith("TXT"): valid_exts = [".txt"]
-                    elif conv_type_code == "XLS2XLSX": valid_exts = [".xls"]
-                    elif conv_type_code.startswith("XLSX"): valid_exts = [".xlsx", ".xls"]
-
-                    try:
-                        files = [f for f in os.listdir(current_path) if any(f.lower().endswith(ext) for ext in valid_exts)]
-                    except Exception:
-                        files = []
-                
-                if files:
-                    selected_file = st.selectbox("Seleccionar Archivo:", files, key="ind_file_select")
-                    file_to_process = os.path.join(current_path, selected_file)
-                elif current_path:
-                    st.warning(f"No se encontraron archivos compatibles con {conv_type_label} en la carpeta seleccionada.")
-
-            # 3. Output Folder
-            st.markdown("### 3. Carpeta de Salida")
-            
-            is_native = st.session_state.get("force_native_mode", True)
-            if is_native:
-                output_folder = render_path_selector(
-                    label="Carpeta Destino",
-                    key="conv_ind_out",
-                    default_path=current_path_default
-                )
-            else:
-                # En modo Web, usamos una carpeta temporal automática
-                timestamp = int(time.time())
-                output_folder = os.path.join(os.getcwd(), "temp_downloads", f"out_{timestamp}")
-                os.makedirs(output_folder, exist_ok=True)
-                st.info(f"📂 Procesando en entorno temporal seguro.")
+            # 3. Resultado (se muestra botón de descarga tras convertir)
+            st.markdown("### 3. Resultado")
 
 
             # 4. Action
             st.write("")
             if st.button("Ejecutar Conversión", key="btn_exec_ind"):
                 if not file_to_process:
-                    st.error("⚠️ Seleccione o suba un archivo para procesar.")
-                elif not output_folder:
                     st.error("⚠️ Seleccione una carpeta de destino.")
                 else:
                     # Prepare paths
-                    actual_input_path = ""
+                    timestamp = int(time.time())
+                    actual_output_folder = os.path.join(os.getcwd(), "temp_downloads", f"ind_{timestamp}")
+                    os.makedirs(actual_output_folder, exist_ok=True)
                     actual_output_folder = output_folder
-                    
-                    # For uploaded files, force web-mode processing and use temp output
-                    if is_uploaded:
-                        st.session_state["conv_force_web_mode"] = True
-                        timestamp = int(time.time())
-                        actual_output_folder = os.path.join(os.getcwd(), "temp_downloads", f"ind_{timestamp}")
-                        os.makedirs(actual_output_folder, exist_ok=True)
-                    
-                    if not os.path.exists(actual_output_folder):
-                        try:
-                            os.makedirs(actual_output_folder)
-                        except:
-                            st.error(f"No se pudo crear carpeta destino: {actual_output_folder}")
-                            st.stop()
 
                     try:
                         # Handle Uploaded File
@@ -547,14 +474,12 @@ def render(container=None):
                             ok, msg = worker_convertir_archivo(actual_input_path, conv_type_code, actual_output_folder, sep=sep)
                         
                         if ok:
-                            st.success(f"✅ {msg}")
-                            if is_uploaded:
+                            st.info("Archivo convertido listo para descargar.")
                                 st.info(f"Archivo convertido listo para descargar.")
                             
                             # --- Download Logic ---
                             filename = os.path.basename(actual_input_path)
                             name_no_ext = os.path.splitext(filename)[0]
-                            out_file_name = None
                             
                             if conv_type_code == "PDF2DOCX": out_file_name = f"{name_no_ext}.docx"
                             elif conv_type_code == "JPG2PDF": out_file_name = f"{name_no_ext}.pdf"
@@ -618,12 +543,7 @@ def render(container=None):
                                                 key="dl_ind_jpgs"
                                             )
                                         
-                                        # Cleanup temp output folder containing raw JPGs
-                                        if "temp_downloads" in actual_output_folder:
-                                            try:
-                                                shutil.rmtree(actual_output_folder, ignore_errors=True)
-                                            except:
-                                                pass
+                                        # No borramos la carpeta temporal aún para permitir descargas repetidas
                                     except Exception as e:
                                         st.error(f"Error preparando ZIP: {e}")
                             # ----------------------
@@ -636,8 +556,6 @@ def render(container=None):
                     finally:
                         if temp_dir_obj:
                             temp_dir_obj.cleanup()
-                        if "conv_force_web_mode" in st.session_state:
-                            del st.session_state["conv_force_web_mode"]
 
         # --- TAB 2: MASSIVE ---
         with tab_mass:
