@@ -2181,6 +2181,49 @@ class AgentWorker:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (base_path)"}
 
+            elif command == "convert_file":
+                file_path = params.get("file_path")
+                ctype = params.get("type")
+                out_folder = params.get("output_folder")
+                sep = params.get("sep", ",")
+                if file_path and ctype:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    try:
+                        from src.tabs.tab_conversion import worker_convertir_archivo
+                        ok, msg = worker_convertir_archivo(file_path, ctype, output_folder=out_folder, sep=sep)
+                        result["result"] = [ok, msg]
+                    except Exception as e:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": str(e)}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (file_path, type)"}
+
+            elif command == "convert_bulk":
+                folder_path = params.get("folder_path")
+                ctype = params.get("type")
+                out_folder = params.get("output_folder")
+                sep = params.get("sep", ",")
+                if folder_path and ctype:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    try:
+                        from src.tabs.tab_conversion import worker_convertir_masivo
+                        res = worker_convertir_masivo(folder_path, ctype, output_folder=out_folder, sep=sep, return_zip=False)
+                        if isinstance(res, tuple):
+                            count, msg = res
+                            result["result"] = {"count": count, "message": msg, "errors": []}
+                        elif isinstance(res, dict):
+                            # Already in dict form
+                            result["result"] = {k: v for k, v in res.items() if k in ("count", "message", "errors")}
+                        else:
+                            result["result"] = {"count": 0, "message": f"Respuesta inesperada: {res}", "errors": []}
+                    except Exception as e:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": str(e)}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (folder_path, type)"}
+
             elif command == "analisis_carpetas":
                 path = params.get("path")
                 if path:
