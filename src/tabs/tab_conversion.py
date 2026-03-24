@@ -576,13 +576,20 @@ def render(container=None):
                                     target_file_path = actual_input_path
                                 
                                 if os.path.exists(target_file_path):
-                                    # Use standardized download button with cleanup
-                                    render_download_button(
-                                        target_file_path, 
-                                        f"dl_ind_file_{int(time.time())}", 
-                                        f"📥 Descargar {out_file_name}", 
-                                        cleanup=True
-                                    )
+                                    mime = "application/octet-stream"
+                                    if target_file_path.lower().endswith(".pdf"): mime = "application/pdf"
+                                    elif target_file_path.lower().endswith(".docx"): mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                    elif target_file_path.lower().endswith(".jpg") or target_file_path.lower().endswith(".jpeg"): mime = "image/jpeg"
+                                    elif target_file_path.lower().endswith(".json"): mime = "application/json"
+                                    elif target_file_path.lower().endswith(".txt"): mime = "text/plain"
+                                    with open(target_file_path, "rb") as f:
+                                        st.download_button(
+                                            "📥 Descargar archivo convertido",
+                                            data=f.read(),
+                                            file_name=os.path.basename(target_file_path),
+                                            mime=mime,
+                                            key=f"dl_ind_file_{int(time.time())}"
+                                        )
                             
                             elif conv_type_code == "PDF2JPG":
                                 # Find generated JPGs
@@ -602,12 +609,14 @@ def render(container=None):
                                             for jpg in jpgs:
                                                 zf.write(jpg, os.path.basename(jpg))
                                         
-                                        render_download_button(
-                                            zip_path, 
-                                            "dl_ind_jpgs", 
-                                            "📦 Descargar Imágenes (ZIP)", 
-                                            cleanup=True
-                                        )
+                                        with open(zip_path, "rb") as f:
+                                            st.download_button(
+                                                "📦 Descargar Imágenes (ZIP)",
+                                                data=f.read(),
+                                                file_name=os.path.basename(zip_path),
+                                                mime="application/zip",
+                                                key="dl_ind_jpgs"
+                                            )
                                         
                                         # Cleanup temp output folder containing raw JPGs
                                         if "temp_downloads" in actual_output_folder:
