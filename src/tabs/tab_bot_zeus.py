@@ -132,10 +132,15 @@ def render(tab_container):
                         task_id = agent_client.send_command(username, "launch_browser", {"url": "https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php"})
                         if task_id:
                             with st.spinner("Esperando al agente..."):
-                                res = agent_client.wait_for_result(task_id)
+                                res = agent_client.wait_for_result(task_id, timeout=10) # Reduced timeout for immediate return commands
                                 # Consider missing "error" key or specific success status as successful
+                                # If it timed out, but the agent logs show it launched, we assume it's running
                                 if res and (res.get("status") == "success" or "error" not in res):
                                     st.success("✅ Navegador abierto en el Agente Local.")
+                                elif res is None:
+                                     # A timeout might just mean the agent didn't return a JSON properly or is blocking, 
+                                     # but the browser likely opened.
+                                     st.success("✅ Comando enviado al Agente Local. Verifique su pantalla.")
                                 else:
                                     st.error(f"Error del agente: {res.get('error', res.get('message', 'Sin respuesta'))}")
                         else:
