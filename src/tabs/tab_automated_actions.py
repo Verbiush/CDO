@@ -469,7 +469,13 @@ def worker_mover_por_coincidencia(root_path, silent_mode=False, return_zip=False
     return {"message": msg}
 
 def worker_consolidar_subcarpetas(root_path, silent_mode=False, return_zip=False):
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = False
+    if not os.environ.get("CDO_AGENT_MODE") == "1":
+        try:
+            is_native_mode = st.session_state.get('force_native_mode', True)
+        except Exception:
+            pass
+
     if is_native_mode:
         try:
             from src.agent_client import send_command, wait_for_result
