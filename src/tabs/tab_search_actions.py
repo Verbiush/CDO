@@ -404,6 +404,9 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
         
         # 1. Renombrado completo (Prioridad)
         if full and new_name:
+            # If the user checks "Renombrado completo" and provides a new name,
+            # that exact new name will be applied to the file, ignoring its old name,
+            # but keeping it in the exact same folder.
             final_name = new_name
         else:
             # 2. Sustitución
@@ -433,6 +436,10 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
             current_num += 1
         
         new_filename = f"{final_name}{ext}"
+        
+        # We ensure folder is correctly normalized from the old_path
+        folder = os.path.dirname(os.path.normpath(old_path))
+        
         # Always build new_path by replacing just the filename part of old_path
         new_path = os.path.join(folder, new_filename)
         
