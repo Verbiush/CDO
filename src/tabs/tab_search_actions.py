@@ -437,14 +437,16 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
         
         new_filename = f"{final_name}{ext}"
         
-        # We ensure folder is correctly normalized from the old_path
-        folder = os.path.dirname(os.path.normpath(old_path))
+        # In Windows environments, os.path.dirname might not correctly split paths if they contain mixed slashes.
+        # We MUST normalize the old_path first before trying to extract the directory name.
+        old_path_norm = os.path.normpath(old_path)
+        folder = os.path.dirname(old_path_norm)
         
         # Always build new_path by replacing just the filename part of old_path
         new_path = os.path.join(folder, new_filename)
         
-        # Normalize paths
-        old_path = os.path.normpath(old_path)
+        # Normalize both paths for safe execution
+        old_path = old_path_norm
         new_path = os.path.normpath(new_path)
         
         if new_path != old_path:
