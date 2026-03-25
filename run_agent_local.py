@@ -8,7 +8,7 @@ import time
 import signal
 
 # Configuration
-SERVER_IP = "18.118.37.215"
+SERVER_IP = "3.138.135.181"
 SERVER_PORT = "8000"
 SERVER_URL = f"http://{SERVER_IP}:{SERVER_PORT}"
 USERNAME = "admin"
@@ -22,7 +22,7 @@ def setup_agent():
     """
     Configura el agente: pregunta al usuario por la IP del servidor y la guarda.
     """
-    DEFAULT_SERVER_IP = "18.118.37.215" # AWS
+    DEFAULT_SERVER_IP = "3.138.135.181" # AWS
     
     # Intentar usar la carpeta local del proyecto si AppData falla
     try:
@@ -48,7 +48,7 @@ def setup_agent():
             pass
 
     # Force new IP since it changed in AWS
-    server_ip = "18.118.37.215"
+    server_ip = "3.138.135.181"
     print(f"Dirección del servidor actual: {server_ip}")
     
     # En modo desatendido o si ya existe config, podemos saltar la pregunta con un timeout o argumento

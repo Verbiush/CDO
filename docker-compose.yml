@@ -4,6 +4,7 @@ services:
   frontend:
     build: .
     container_name: cdo_frontend
+    restart: always
     ports:
       - "8501:8501"
     volumes:
@@ -22,6 +23,7 @@ services:
   backend:
     build: .
     container_name: cdo_backend
+    restart: always
     ports:
       - "8000:8000"
     volumes:

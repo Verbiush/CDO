@@ -2472,19 +2472,19 @@ class AgentGUI:
 
         ttk.Label(frame, text="URL Tareas:").grid(row=2, column=0, sticky=tk.W)
         # Fix: Use correct AWS endpoint (port 8000, /tasks/poll)
-        default_task_url = "http://18.118.37.215:8000/tasks/poll"
+        default_task_url = "http://3.138.135.181:8000/tasks/poll"
         # Heuristic: if loaded config has "localhost" or "8501" or "/api/", replace with correct default
         loaded_task_url = self.config.get("task_url", default_task_url)
-        if "localhost" in loaded_task_url or "8501" in loaded_task_url or "/api/" in loaded_task_url or "3.142.164.128" in loaded_task_url or "3.15.237.186" in loaded_task_url:
+        if "localhost" in loaded_task_url or "8501" in loaded_task_url or "/api/" in loaded_task_url or "3.142.164.128" in loaded_task_url or "3.15.237.186" in loaded_task_url or "18.118.37.215" in loaded_task_url:
              loaded_task_url = default_task_url
              
         self.url_task_var = tk.StringVar(value=loaded_task_url)
         ttk.Entry(frame, textvariable=self.url_task_var).grid(row=2, column=1, sticky=tk.EW)
         
         ttk.Label(frame, text="URL Resultados:").grid(row=3, column=0, sticky=tk.W)
-        default_res_url = "http://18.118.37.215:8000/tasks"
+        default_res_url = "http://3.138.135.181:8000/tasks"
         loaded_res_url = self.config.get("result_url", default_res_url)
-        if "localhost" in loaded_res_url or "8501" in loaded_res_url or "/api/" in loaded_res_url or "3.142.164.128" in loaded_res_url or "3.15.237.186" in loaded_res_url:
+        if "localhost" in loaded_res_url or "8501" in loaded_res_url or "/api/" in loaded_res_url or "3.142.164.128" in loaded_res_url or "3.15.237.186" in loaded_res_url or "18.118.37.215" in loaded_res_url:
              loaded_res_url = default_res_url
              
         self.url_res_var = tk.StringVar(value=loaded_res_url)

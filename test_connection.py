@@ -1,7 +1,7 @@
 import requests
 import sys
 
-url = "http://18.118.37.215:8000/tasks/poll"
+url = "http://3.138.135.181:8000/tasks/poll"
 username = "admin"
 password = "admin"
 
