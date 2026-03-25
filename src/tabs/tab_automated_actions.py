@@ -1832,6 +1832,11 @@ def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False, 
                 # This implies 'curr' contains subfolder structure, but 'new' only contains the filename.
                 
                 old_full_path = os.path.join(folder_path, curr)
+                # Fix: In Windows, the Excel might contain backslashes but python joins with forward slashes 
+                # or vice-versa, causing dirname to fail if the separator isn't recognized.
+                # Let's normalize the path first.
+                old_full_path = os.path.normpath(old_full_path)
+                
                 # Ensure the new file stays in the exact same subfolder as the old one
                 old_dir = os.path.dirname(old_full_path)
                 new_full_path = os.path.join(old_dir, os.path.basename(new))
@@ -1872,6 +1877,8 @@ def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False, 
             new = item["new_name"]
             
             curr_path = os.path.join(folder_path, curr)
+            curr_path = os.path.normpath(curr_path)
+            
             if os.path.exists(curr_path):
                 if "." not in new:
                     _, ext = os.path.splitext(curr)
