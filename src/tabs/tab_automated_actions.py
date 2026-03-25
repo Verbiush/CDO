@@ -469,6 +469,35 @@ def worker_mover_por_coincidencia(root_path, silent_mode=False, return_zip=False
     return {"message": msg}
 
 def worker_consolidar_subcarpetas(root_path, silent_mode=False, return_zip=False):
+    is_native_mode = st.session_state.get('force_native_mode', True)
+    if is_native_mode:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "default")
+            
+            if not silent_mode:
+                st.info("Enviando tarea al Agente Local...")
+            
+            task_id = send_command(username, "consolidar_subcarpetas", {"root_path": root_path})
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Agente Local procesando (Consolidando)..."):
+                        res = wait_for_result(task_id, timeout=300)
+                else:
+                    res = wait_for_result(task_id, timeout=300)
+                
+                if isinstance(res, dict):
+                    if "error" in res:
+                        return {"error": f"Error del Agente: {res['error']}"}
+                    return {"message": res.get("message", "Operación completada por el agente.")}
+                return {"error": "Respuesta inesperada del agente."}
+            else:
+                return {"error": "No se pudo conectar con el Agente Local."}
+        except ImportError:
+            return {"error": "No se pudo importar cliente del agente."}
+        except Exception as e:
+            return {"error": f"Error comunicando con el agente: {e}"}
+
     if not silent_mode: st.info(f"Consolidando subcarpetas en: {root_path}")
     
     try:

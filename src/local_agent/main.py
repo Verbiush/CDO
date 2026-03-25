@@ -2113,6 +2113,24 @@ class AgentWorker:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros (items, target_folder)"}
 
+            elif command == "consolidar_subcarpetas":
+                root_path = params.get("root_path")
+                if root_path:
+                    # Ensure src can be imported
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    try:
+                        from src.tabs.tab_automated_actions import worker_consolidar_subcarpetas
+                        # Force local execution mode within agent
+                        os.environ["CDO_AGENT_MODE"] = "1"
+                        res = worker_consolidar_subcarpetas(root_path, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": str(e)}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (root_path)"}
+
             elif command == "unify_pdf_folder":
                 base_path = params.get("base_path")
                 output_name = params.get("output_name", "Unificado")
