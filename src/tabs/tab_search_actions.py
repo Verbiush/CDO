@@ -396,11 +396,17 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
         if not is_native and not os.path.exists(old_path): continue
         if is_native and not old_path: continue
         
-        folder = os.path.dirname(old_path)
-        filename = os.path.basename(old_path)
+        # FIX para Docker (Linux) vs Windows Agent:
+        # Asegurarnos de que las barras invertidas de Windows se traten como separadores
+        # al usar os.path en el frontend (que corre en Linux).
+        old_path_norm = old_path.replace("\\", "/")
+        
+        folder = os.path.dirname(old_path_norm)
+        filename = os.path.basename(old_path_norm)
         name_part, ext = os.path.splitext(filename)
         
         final_name = name_part
+
         
         # 1. Renombrado completo (Prioridad)
         if full and new_name:
@@ -439,20 +445,22 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
         
         # In Windows environments, os.path.dirname might not correctly split paths if they contain mixed slashes.
         # We MUST normalize the old_path first before trying to extract the directory name.
-        old_path_norm = os.path.normpath(old_path)
-        folder = os.path.dirname(old_path_norm)
+        # Using replace('\\', '/') to ensure it works properly on Linux frontend
+        old_path_for_join = old_path.replace("\\", "/")
+        folder = os.path.dirname(old_path_for_join)
         
         # Always build new_path by replacing just the filename part of old_path
         new_path = os.path.join(folder, new_filename)
         
-        # Normalize both paths for safe execution
-        old_path = old_path_norm
-        new_path = os.path.normpath(new_path)
+        # Keep paths with their original format or normalize for Windows if needed
+        # We replace back to Windows style slashes for the agent, or just leave as is since Windows accepts both
+        new_path = new_path.replace("/", "\\")
+        old_path_to_send = old_path.replace("/", "\\")
         
-        if new_path != old_path:
+        if new_path != old_path_to_send:
             if is_native:
                 batch_renames.append({
-                    "old_path": old_path,
+                    "old_path": old_path_to_send,
                     "new_path": new_path,
                     "item": item
                 })
