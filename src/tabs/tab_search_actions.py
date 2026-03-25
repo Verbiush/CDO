@@ -1167,6 +1167,8 @@ def dialogo_modificar_nombres():
                 activar_num, inicio_num,
                 silent_mode=False
             )
+            st.session_state.active_action_dialog = None
+            st.rerun()
             
     with col_cancel:
         if st.button("❌ Cancelar", use_container_width=True):
@@ -1197,6 +1199,8 @@ def dialogo_editar_texto():
                 st.warning("Debes ingresar el texto a buscar.")
             else:
                 worker_editar_texto(st.session_state.get("search_results", []), search_text, replace_text, silent_mode=False)
+                st.session_state.active_action_dialog = None
+                st.rerun()
             
     with col_cancel:
         if st.button("❌ Cerrar", use_container_width=True):
@@ -1234,6 +1238,8 @@ def dialogo_copiar_lista():
                 st.warning("Selecciona una carpeta destino.")
             else:
                 worker_copiar_lista(st.session_state.get("search_results", []), dest, silent_mode=False)
+                st.session_state.active_action_dialog = None
+                st.rerun()
             
     with col_cancel:
         if st.button("❌ Cerrar", use_container_width=True, key="btn_close_copy"):
@@ -1273,6 +1279,8 @@ def dialogo_mover_lista():
                 st.warning("Selecciona una carpeta destino.")
             else:
                 worker_mover_lista(st.session_state.get("search_results", []), target_move_path, silent_mode=False)
+                st.session_state.active_action_dialog = None
+                st.rerun()
 
     with col_cancel:
         if st.button("❌ Cerrar", use_container_width=True, key="btn_close_move"):
@@ -1309,6 +1317,8 @@ def dialogo_confirmar_eliminar():
     with col_confirm:
         if st.button("🗑️ Sí, eliminar", type="primary", use_container_width=True):
             worker_eliminar_lista(results, force_delete=force_delete, silent_mode=False)
+            st.session_state.active_action_dialog = None
+            st.rerun()
             
     with col_cancel:
         if st.button("Cancelar", use_container_width=True):
@@ -1351,6 +1361,8 @@ def dialogo_comprimir_zip():
             full_zip_path += ".zip"
             
         worker_comprimir_zip(st.session_state.get("search_results", []), full_zip_path, silent_mode=False)
+        st.session_state.active_action_dialog = None
+        st.rerun()
         
     if st.button("❌ Cerrar", key="btn_close_zip"):
         st.session_state.active_action_dialog = None
@@ -1371,6 +1383,8 @@ def dialogo_comprimir_individual():
     with col_ok:
         if st.button("🚀 Comprimir Individualmente"):
              worker_comprimir_individual(st.session_state.get("search_results", []), silent_mode=False)
+             st.session_state.active_action_dialog = None
+             st.rerun()
     
     with col_cancel:
         if st.button("❌ Cerrar", key="btn_close_ind"):
@@ -1551,18 +1565,25 @@ def render(container):
     if active_dialog:
         if active_dialog == "Modificar nombre":
             dialogo_modificar_nombres()
+            st.session_state.active_action_dialog = None
         elif active_dialog == "Editar texto":
             dialogo_editar_texto()
+            st.session_state.active_action_dialog = None
         elif active_dialog == "Copiar a carpeta":
             dialogo_copiar_lista()
+            st.session_state.active_action_dialog = None
         elif active_dialog == "Mover a carpeta":
             dialogo_mover_lista()
+            st.session_state.active_action_dialog = None
         elif active_dialog == "Comprimir en ZIP":
             dialogo_comprimir_zip()
+            st.session_state.active_action_dialog = None
         elif active_dialog == "Comprimir individualmente":
             dialogo_comprimir_individual()
+            st.session_state.active_action_dialog = None
         elif active_dialog == "Eliminar":
             dialogo_confirmar_eliminar()
+            st.session_state.active_action_dialog = None
         else:
             funcion_no_implementada(f"Acción: {active_dialog}")
             st.session_state.active_action_dialog = None
