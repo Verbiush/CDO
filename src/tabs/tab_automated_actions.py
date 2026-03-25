@@ -1824,9 +1824,21 @@ def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False, 
                 if "." not in new:
                     _, ext = os.path.splitext(curr)
                     new += ext
+                    
+                # Fix: Instead of assuming the file is directly in folder_path,
+                # we should allow curr to be a relative path from folder_path if the 
+                # export function provided it that way. 
+                # However, the user states "LOS RENOMBRE PERO LOS ENVIO A ESA RUTA RECUERDA QUE DEBEN QUEDAR EN LA MISMA CARPETA CONTENEDORA"
+                # This implies 'curr' contains subfolder structure, but 'new' only contains the filename.
+                
+                old_full_path = os.path.join(folder_path, curr)
+                # Ensure the new file stays in the exact same subfolder as the old one
+                old_dir = os.path.dirname(old_full_path)
+                new_full_path = os.path.join(old_dir, os.path.basename(new))
+                
                 files_to_rename.append({
-                    "old_path": os.path.join(folder_path, curr),
-                    "new_path": os.path.join(folder_path, new)
+                    "old_path": old_full_path,
+                    "new_path": new_full_path
                 })
 
             task_id = send_command(username, "rename_files", {
@@ -1858,13 +1870,18 @@ def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False, 
         for item in records:
             curr = item["current_name"]
             new = item["new_name"]
+            
             curr_path = os.path.join(folder_path, curr)
             if os.path.exists(curr_path):
                 if "." not in new:
                     _, ext = os.path.splitext(curr)
                     new += ext
+                
+                old_dir = os.path.dirname(curr_path)
+                new_path = os.path.join(old_dir, os.path.basename(new))
+                
                 try:
-                    os.rename(curr_path, os.path.join(folder_path, new))
+                    os.rename(curr_path, new_path)
                     count += 1
                 except: pass
         
