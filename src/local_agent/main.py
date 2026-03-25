@@ -2223,12 +2223,13 @@ class AgentWorker:
                 ctype = params.get("type")
                 out_folder = params.get("output_folder")
                 sep = params.get("sep", ",")
+                save_in_same_dir = params.get("save_in_same_dir", False)
                 if folder_path and ctype:
                     sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         os.environ["CDO_AGENT_MODE"] = "1"
                         from src.tabs.tab_conversion import worker_convertir_masivo
-                        res = worker_convertir_masivo(folder_path, ctype, output_folder=out_folder, sep=sep, return_zip=False)
+                        res = worker_convertir_masivo(folder_path, ctype, output_folder=out_folder, sep=sep, return_zip=False, save_in_same_dir=save_in_same_dir)
                         if isinstance(res, tuple):
                             count, msg = res
                             result["result"] = {"count": count, "message": msg, "errors": []}

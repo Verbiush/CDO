@@ -243,10 +243,13 @@ def worker_convertir_archivo(file_path, tipo, output_folder=None, sep=',', force
     except Exception as e:
         return False, str(e)
 
-def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', return_zip=False):
+def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', return_zip=False, save_in_same_dir=False):
+    import time
+    
     is_native = st.session_state.get("force_native_mode", True)
     if _os_env.environ.get("CDO_AGENT_MODE") == "1":
         is_native = False
+        
     _bare = _os_env.environ.get("CDO_AGENT_MODE") == "1"
     
     if is_native:
@@ -258,7 +261,8 @@ def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', retu
                 "folder_path": folder_path,
                 "type": tipo,
                 "output_folder": output_folder,
-                "sep": sep
+                "sep": sep,
+                "save_in_same_dir": save_in_same_dir
             })
             
             if task_id:
@@ -347,8 +351,11 @@ def worker_convertir_masivo(folder_path, tipo, output_folder=None, sep=',', retu
         elif tipo == "PDF_GRAY" and f_lower.endswith(".pdf"): process = True
         
         if process:
+            # If output_folder is None or save_in_same_dir is True, save in the same directory as the original file
+            current_output_folder = output_folder if output_folder and not save_in_same_dir else os.path.dirname(full_path)
+            
             # Pass output_folder to individual worker
-            ok, msg = worker_convertir_archivo(full_path, tipo, output_folder=output_folder, sep=sep)
+            ok, msg = worker_convertir_archivo(full_path, tipo, output_folder=current_output_folder, sep=sep)
             if ok: count += 1
             else: print(f"Error convirtiendo {f}: {msg}")
             
@@ -581,30 +588,40 @@ def render(container=None):
             st.markdown("### Carpeta de Salida")
             is_native = st.session_state.get("force_native_mode", True)
             
-            if is_native:
-                out_path = render_path_selector(
-                    label="Carpeta Destino",
-                    key="conv_mass_out",
-                    default_path=st.session_state.get("current_path")
-                )
+            # Opción para guardar en el mismo directorio original o uno diferente
+            save_in_same_dir = st.checkbox("Guardar en el mismo directorio original (Mantiene estructura)", value=True, key="mass_save_same_dir")
+            
+            out_path = ""
+            if not save_in_same_dir:
+                if is_native:
+                    out_path = render_path_selector(
+                        label="Carpeta Destino",
+                        key="conv_mass_out",
+                        default_path=st.session_state.get("current_path")
+                    )
+                else:
+                    # Web Mode: Use temp folder
+                    timestamp = int(time.time())
+                    out_path = os.path.join(os.getcwd(), "temp_downloads", f"mass_{timestamp}")
+                    os.makedirs(out_path, exist_ok=True)
+                    st.info(f"📂 Procesando en entorno temporal: {out_path}")
             else:
-                # Web Mode: Use temp folder
-                timestamp = int(time.time())
-                out_path = os.path.join(os.getcwd(), "temp_downloads", f"mass_{timestamp}")
-                os.makedirs(out_path, exist_ok=True)
-                st.info(f"📂 Procesando en entorno temporal: {out_path}")
+                 # Si se guarda en el mismo directorio, el out_path puede ser nulo o ignorado por el worker
+                 st.info("Los archivos convertidos se guardarán en la misma carpeta que sus originales.")
+                 out_path = None
 
             # Execute
             st.write("")
             if st.button("🚀 Ejecutar Conversión Masiva", key="btn_exec_mass"):
-                if not out_path:
-                    st.error("⚠️ Seleccione una carpeta de salida.")
-                elif source_path and (is_native or os.path.exists(source_path)):
-                    count, msg = worker_convertir_masivo(source_path, conv_type_mass, output_folder=out_path, sep=sep_mass)
-                    if count > 0:
-                        st.success(msg)
-#                         render_download_button(out_path, "dl_mass_conv", "📦 Descargar Archivos Convertidos (ZIP)", cleanup=not is_native)
-                    else:
-                        st.warning(msg)
+                if source_path:
+                    try:
+                        with st.spinner("Procesando conversión masiva..."):
+                            count, msg = worker_convertir_masivo(source_path, conv_type_mass, output_folder=out_path, sep=sep_mass)
+                            if count > 0:
+                                st.success(msg)
+                            else:
+                                st.warning(msg)
+                    except Exception as e:
+                        st.error(f"Error: {e}")
                 else:
-                    st.error("La carpeta objetivo no es válida.")
+                    st.error("Seleccione una carpeta de origen.")
