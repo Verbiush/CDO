@@ -433,7 +433,12 @@ def procesar_renombrado(results, full, new_name, sust, find_txt, repl_txt, clean
             current_num += 1
         
         new_filename = f"{final_name}{ext}"
+        # Always build new_path by replacing just the filename part of old_path
         new_path = os.path.join(folder, new_filename)
+        
+        # Normalize paths
+        old_path = os.path.normpath(old_path)
+        new_path = os.path.normpath(new_path)
         
         if new_path != old_path:
             if is_native:
