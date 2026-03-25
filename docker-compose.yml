@@ -40,5 +40,5 @@ services:
       - "5100:5100"
     environment:
       - ASPNETCORE_ENVIRONMENT=Docker
-      - ASPNETCORE_URLS=http://+:5000
-    restart: unless-stopped
+      - ASPNETCORE_URLS=http://0.0.0.0:5000
+    restart: always

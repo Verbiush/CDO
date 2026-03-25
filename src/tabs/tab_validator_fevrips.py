@@ -340,7 +340,7 @@ def dialog_generar_cuv():
                         "base_path": path_input,
                         "api_url": api_url,
                         "token": token,
-                        "verify_ssl": verify_ssl if 'verify_ssl' in locals() else True
+                        "verify_ssl": True
                     }
                     # Ajuste de verify_ssl si api_url es localhost (aunque el agente lo maneja, lo pasamos explícito)
                     if api_url.startswith("https://localhost") or api_url.startswith("https://127.0.0.1"):
