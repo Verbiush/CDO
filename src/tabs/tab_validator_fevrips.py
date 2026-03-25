@@ -479,6 +479,9 @@ def dialog_generar_cuv():
         df_res = pd.DataFrame(results)
         st.dataframe(df_res)
 
+    if st.button("Cerrar"):
+        st.session_state.active_fevrips_dialog = None
+        st.rerun()
 
 def render(container=None):
     if container is None:
@@ -498,9 +501,14 @@ def render(container=None):
             st.markdown('<div class="group-title-left">Acciones</div>', unsafe_allow_html=True)
             
             if st.button("🆔 Generar CUV (Masivo)", use_container_width=True):
-                 dialog_generar_cuv()
+                 st.session_state.active_fevrips_dialog = "generar_cuv"
+                 st.rerun()
                  
             st.markdown('</div>', unsafe_allow_html=True)
             
         with col_val_2:
             st.info("ℹ️ Asegúrese de que el servicio Docker FEVRIPS esté en ejecución si utiliza el modo local.")
+
+    active_dialog = st.session_state.get("active_fevrips_dialog")
+    if active_dialog == "generar_cuv":
+        dialog_generar_cuv()
