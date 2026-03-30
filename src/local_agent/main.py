@@ -981,6 +981,34 @@ def process_distribute_files(content_b64, paths):
     print(f"DEBUG: Distribución finalizada. Éxitos: {count_distributed}, Errores: {len(errors)}")
     return {"count": count_distributed, "errors": errors}
 
+def process_copiar_archivo_a_subcarpetas(archivo, carpeta_base):
+    try:
+        subcarpetas = [os.path.join(carpeta_base, d) for d in os.listdir(carpeta_base) if os.path.isdir(os.path.join(carpeta_base, d))]
+    except Exception as e:
+        return {"error": f"Error al leer la carpeta destino: {str(e)}"}
+
+    if not subcarpetas:
+        return {"message": "No se encontraron subcarpetas en la ruta destino."}
+
+    copiados = 0
+    conflictos = 0
+    errores = 0
+    nombre_archivo = os.path.basename(archivo)
+    
+    for subcarpeta in subcarpetas:
+        destino_final = os.path.join(subcarpeta, nombre_archivo)
+        if os.path.exists(destino_final):
+            conflictos += 1
+            continue
+        try:
+            import shutil
+            shutil.copy2(archivo, destino_final)
+            copiados += 1
+        except Exception:
+            errores += 1
+            
+    return {"message": f"Copia completada. Copiados: {copiados}. Conflictos: {conflictos}. Errores: {errores}."}
+
 def process_download_files(tasks):
     count_downloaded = 0
     errors = []
@@ -1886,6 +1914,18 @@ class AgentWorker:
                 else:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Faltan parámetros (content_b64, paths)"}
+
+            elif command == "copiar_archivo_a_subcarpetas":
+                archivo = params.get("archivo")
+                carpeta_base = params.get("carpeta_base")
+                
+                if archivo and carpeta_base:
+                    self.log(f"Copiando archivo a subcarpetas: {archivo}")
+                    res = process_copiar_archivo_a_subcarpetas(archivo, carpeta_base)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (archivo, carpeta_base)"}
 
             elif command == "download_files":
                 tasks = params.get("tasks", [])

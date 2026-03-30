@@ -7043,6 +7043,104 @@ def dialog_crear_carpetas_excel():
         st.session_state.active_auto_dialog = None
         st.rerun()
 
+def worker_copiar_archivo_a_subcarpetas(archivo_a_copiar, carpeta_destino_base, silent_mode=False):
+    # Agent integration
+    is_native = st.session_state.get("force_native_mode", True)
+    if is_native and _should_delegate(carpeta_destino_base) and agent_client:
+        try:
+            username = st.session_state.get("username", "default")
+            task_id = agent_client.send_command(username, "copiar_archivo_a_subcarpetas", {
+                "archivo": archivo_a_copiar,
+                "carpeta_base": carpeta_destino_base
+            })
+            if task_id:
+                if not silent_mode:
+                    with st.spinner("Copiando archivo vía Agente..."):
+                        res = agent_client.wait_for_result(task_id, timeout=600)
+                else:
+                    res = agent_client.wait_for_result(task_id, timeout=600)
+                if res and isinstance(res, dict) and "message" in res:
+                    return res["message"]
+                elif res and isinstance(res, dict) and "error" in res:
+                    return f"Error: {res['error']}"
+        except Exception as e:
+            pass
+
+    try:
+        subcarpetas = [os.path.join(carpeta_destino_base, d) for d in os.listdir(carpeta_destino_base) if os.path.isdir(os.path.join(carpeta_destino_base, d))]
+    except Exception as e:
+        return f"Error al leer la carpeta destino: {e}"
+
+    if not subcarpetas:
+        return "No se encontraron subcarpetas en la ruta destino."
+
+    copiados = 0
+    conflictos = 0
+    errores = 0
+    nombre_archivo = os.path.basename(archivo_a_copiar)
+
+    if not silent_mode:
+        progress_bar = st.progress(0, text="Iniciando copia...")
+    
+    total = len(subcarpetas)
+    for i, subcarpeta in enumerate(subcarpetas):
+        if not silent_mode:
+            progress_bar.progress(min((i + 1) / total, 1.0), text=f"Copiando a {os.path.basename(subcarpeta)}...")
+        
+        destino_final = os.path.join(subcarpeta, nombre_archivo)
+        if os.path.exists(destino_final):
+            conflictos += 1
+            continue
+        try:
+            shutil.copy2(archivo_a_copiar, destino_final)
+            copiados += 1
+        except Exception as e:
+            errores += 1
+
+    if not silent_mode:
+        progress_bar.progress(1.0, text="Copia completada.")
+        
+    return f"Copia completada. Copiados: {copiados}. Conflictos: {conflictos}. Errores: {errores}."
+
+@st.dialog("Copiar Archivo a Subcarpetas")
+def dialog_copiar_archivo_a_subcarpetas():
+    st.write("Copia un único archivo a todas las subcarpetas de una carpeta destino.")
+    
+    # Modo Validación
+    if not st.session_state.get("force_native_mode", True):
+        st.warning("⚠️ Modo Web: Las rutas deben estar accesibles por el servidor.")
+
+    default_path = st.session_state.get("current_path", os.getcwd())
+    
+    file_path = render_path_selector(
+        key="copy_sub_file",
+        label="Archivo a Copiar",
+        default_path=default_path
+    )
+    
+    target_path = render_path_selector(
+        key="copy_sub_target",
+        label="Carpeta Destino (que contiene subcarpetas)",
+        default_path=default_path
+    )
+    
+    if st.button("🚀 Copiar", key="btn_init_copy_sub"):
+        if file_path and target_path:
+            if not os.path.isfile(file_path):
+                st.warning("El origen debe ser un archivo.")
+            elif not os.path.isdir(target_path):
+                st.warning("El destino debe ser una carpeta.")
+            else:
+                with st.spinner("Copiando archivo..."):
+                    result = worker_copiar_archivo_a_subcarpetas(file_path, target_path)
+                    st.success(result)
+                    st.session_state.active_auto_dialog = None
+                    st.rerun()
+
+    if st.button("❌ Cerrar", key="btn_close_copy_sub"):
+        st.session_state.active_auto_dialog = None
+        st.rerun()
+
 @st.dialog("Copiar Mapeo Subcarpetas")
 def dialog_copiar_mapeo():
     st.write("Copia archivos entre carpetas basándose en un mapeo Excel.")
@@ -7752,6 +7850,10 @@ def render():
 
 
         with col_o2:
+            if st.button("📤 Copiar Archivo a Subcarpetas", key="btn_org_copy_sub_new"):
+                st.session_state.active_auto_dialog = "copiar_mapeo_sub"
+                st.rerun()
+                
             if st.button("🗺️ Copiar Archivos (Mapeo Sub)", key="btn_org_map_sub_new"):
                 st.session_state.active_auto_dialog = "copiar_mapeo_subcarpetas"
                 st.rerun()
