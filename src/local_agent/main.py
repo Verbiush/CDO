@@ -1697,7 +1697,7 @@ class AgentWorker:
                 old_val = params.get("old_val")
                 new_val = params.get("new_val")
                 
-                if folder and old_val and new_val:
+                if folder and old_val is not None and new_val is not None:
                     res = process_update_cups(folder, old_val, new_val)
                     result["result"] = res
                 else:
@@ -1707,9 +1707,9 @@ class AgentWorker:
             elif command == "update_key":
                 folder = params.get("path")
                 key_target = params.get("key")
-                new_value = params.get("value")
+                new_value = params.get("value", params.get("val"))
                 
-                if folder and key_target and new_value:
+                if folder and key_target and new_value is not None:
                     res = process_update_key(folder, key_target, new_value)
                     result["result"] = res
                 else:
