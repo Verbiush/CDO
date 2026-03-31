@@ -1124,49 +1124,6 @@ def render(container=None):
                     st.warning("Seleccione una carpeta.")
 
             st.divider()
-            
-            if is_native:
-                st.subheader("Validación FEVRIPS (Agente Local)")
-                st.markdown("Valida JSONs usando el Agente Local y la API FEVRIPS (sin subir archivos a la nube).")
-                
-                path_val = render_path_selector("Carpeta a Validar", key="path_rips_val_agent", omit_checkbox=True)
-                api_url_val = st.text_input("URL API FEVRIPS", value="https://localhost:9443/api/v1/validar", key="api_url_val_agent")
-                token_val = st.text_input("Token (Opcional)", type="password", key="token_val_agent")
-                
-                if st.button("Validar JSONs (Agente)", key="btn_validate_agent"):
-                    if path_val:
-                        try:
-                            from src.agent_client import send_command, wait_for_result
-                            username = st.session_state.get("username", "default")
-                            
-                            st.info("Enviando tarea de validación al Agente Local...")
-                            task_id = send_command(username, "validate_rips", {
-                                "base_path": path_val,
-                                "api_url": api_url_val,
-                                "token": token_val,
-                                "verify_ssl": False 
-                            })
-                            
-                            if task_id:
-                                with st.spinner("Validando... Esto puede tomar tiempo."):
-                                    res = wait_for_result(task_id, timeout=600)
-                                    
-                                if "error" in res:
-                                    st.error(res["error"])
-                                else:
-                                    st.success(f"Validación completada. Procesados: {res.get('processed', 0)}")
-                                    if res.get("results"):
-                                        st.dataframe(pd.DataFrame(res["results"]))
-                                    if res.get("generated_files"):
-                                        st.info(f"Archivos generados: {len(res['generated_files'])}")
-                            else:
-                                st.error("No se pudo conectar con el Agente.")
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-                    else:
-                        st.warning("Seleccione una carpeta.")
-            else:
-                st.info("Para validación FEVRIPS completa (Estructura, Reglas, CUV), use la pestaña dedicada 'Validación FEVRIPS'.")
 
         with tab_ops[4]:
             st.subheader("Cambio de Tecnología (finalidadTecnologiaSalud)")

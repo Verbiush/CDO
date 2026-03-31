@@ -9,7 +9,8 @@ def close_auto_dialog():
     keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or k.endswith("_up") or "uploader" in k]
     for k in keys_to_clear:
         del st.session_state[k]
-    close_auto_dialog()
+    st.session_state.active_auto_dialog = None
+    st.rerun()
 
 def _should_delegate(path_or_list):
     import os
