@@ -12,6 +12,12 @@ except ImportError:
 
 
 
+@st.cache_data(show_spinner=False, max_entries=5)
+def _load_excel(file_bytes):
+    import pandas as pd
+    import io
+    return pd.read_excel(io.BytesIO(file_bytes))
+
 def render(container=None):
     if container is None:
         container = st.container()
@@ -71,7 +77,8 @@ def render(container=None):
             uploaded_file = st.file_uploader("Seleccione archivo Excel (.xlsx)", type=["xlsx"], key="up_user_val")
             
             if uploaded_file:
-                df = pd.read_excel(uploaded_file)
+                file_bytes = uploaded_file.getvalue()
+                df = _load_excel(file_bytes)
                 st.write("Vista previa:", df.head())
                 
                 cols = df.columns.tolist()

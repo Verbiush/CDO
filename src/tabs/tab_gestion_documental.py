@@ -489,6 +489,14 @@ def worker_descargar_historias_ovida(records, download_path, resolved_paths, ret
     finally:
         if driver: driver.quit()
 
+@st.cache_data(show_spinner=False, max_entries=10)
+def _get_excel_preview(file_bytes, sheet_name=0, nrows=None):
+    import pandas as pd
+    import io
+    if nrows:
+        return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, nrows=nrows)
+    return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name)
+
 def render():
     st.markdown("## 📂 Gestión Documental (Relacional)")
     
@@ -556,7 +564,8 @@ def render():
         
         if uploaded_file:
             try:
-                df = pd.read_excel(uploaded_file)
+                file_bytes = uploaded_file.getvalue()
+                df = _get_excel_preview(file_bytes)
                 # Normalize columns
                 df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
                 

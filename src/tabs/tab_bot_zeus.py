@@ -19,6 +19,21 @@ except ImportError:
     except ImportError:
         render_path_selector = None
 
+@st.cache_data(show_spinner=False, max_entries=5)
+def _get_excel_sheet_names(file_bytes):
+    import pandas as pd
+    import io
+    xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    return xls.sheet_names
+
+@st.cache_data(show_spinner=False, max_entries=10)
+def _get_excel_preview(file_bytes, sheet_name, nrows=None):
+    import pandas as pd
+    import io
+    if nrows:
+        return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, nrows=nrows)
+    return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name)
+
 def render(tab_container):
     """
     Renderiza el contenido de la pestaña 'Bot Zeus Salud'.
@@ -207,10 +222,12 @@ def render(tab_container):
         
             if uploaded_bot:
                 try:
-                    xl_bot = pd.ExcelFile(uploaded_bot)
-                    sheet_bot = st.selectbox("Seleccione la Hoja", xl_bot.sheet_names, key="bot_sheet_sel")
+                    import io
+                    file_bytes = uploaded_bot.getvalue()
+                    sheet_names = _get_excel_sheet_names(file_bytes)
+                    sheet_bot = st.selectbox("Seleccione la Hoja", sheet_names, key="bot_sheet_sel")
                     
-                    df_bot = pd.read_excel(uploaded_bot, sheet_name=sheet_bot)
+                    df_bot = _get_excel_preview(file_bytes, sheet_bot)
                     st.dataframe(df_bot.head(3), height=100)
                     excel_cols = df_bot.columns.tolist()
                     st.success(f"✅ {len(df_bot)} registros cargados.")

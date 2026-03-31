@@ -5,6 +5,20 @@ import shutil
 import pandas as pd
 import json
 
+
+@st.cache_data(show_spinner=False, max_entries=5)
+def _get_excel_sheet_names(file_bytes):
+    import pandas as pd
+    import io
+    xls = pd.ExcelFile(io.BytesIO(file_bytes))
+    return xls.sheet_names
+
+@st.cache_data(show_spinner=False, max_entries=10)
+def _get_excel_preview(file_bytes, sheet_name, nrows=5):
+    import pandas as pd
+    import io
+    return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, nrows=nrows)
+
 def close_auto_dialog():
     keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or k.endswith("_up") or "uploader" in k]
     for k in keys_to_clear:
@@ -3870,9 +3884,10 @@ def dialog_sufijo():
     uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key="up_analisis_auth")
     if uploaded:
         try:
-            xl = pd.ExcelFile(uploaded)
-            sheet = st.selectbox("Seleccione la Hoja", xl.sheet_names, key="suf_sheet")
-            df_preview = pd.read_excel(uploaded, sheet_name=sheet, nrows=1)
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet = st.selectbox("Seleccione la Hoja", sheet_names, key="suf_sheet")
+            df_preview = _get_excel_preview(file_bytes, sheet, nrows=1)
             cols = df_preview.columns.tolist()
             
             col_folder = st.selectbox("Columna Nombre Carpeta", cols, index=0, key="suf_col_folder")
@@ -3920,12 +3935,11 @@ def dialog_renombrar_mapeo_excel():
     
     if uploaded:
         try:
-            if hasattr(uploaded, 'seek'):
-                uploaded.seek(0)
-            xls = pd.ExcelFile(uploaded)
-            sheet = st.selectbox("Nombre Hoja", xls.sheet_names, key="ren_map_sheet")
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet = st.selectbox("Nombre Hoja", sheet_names, key="ren_map_sheet")
             if sheet:
-                df_preview = pd.read_excel(uploaded, sheet_name=sheet, nrows=5)
+                df_preview = _get_excel_preview(file_bytes, sheet, nrows=5)
                 c1, c2 = st.columns(2)
                 col_src = c1.selectbox("Columna Nombre Actual", df_preview.columns, key="ren_map_src")
                 col_dst = c2.selectbox("Columna Nombre Nuevo", df_preview.columns, key="ren_map_dst")
@@ -3971,9 +3985,9 @@ def dialog_modif_docx_completo():
     
     if uploaded:
         try:
-            uploaded.seek(0)
-            xls = pd.ExcelFile(uploaded)
-            sheet = st.selectbox("Nombre Hoja", xls.sheet_names, key="mod_full_sheet")
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet = st.selectbox("Nombre Hoja", sheet_names, key="mod_full_sheet")
             use_filter = st.checkbox("Usar filtros de Excel (solo filas visibles)", value=False, key="mod_full_filter")
         except Exception as e:
             st.error(f"Error: {e}")
@@ -5690,9 +5704,10 @@ def dialog_descargar_firmas():
     
     if uploaded:
         try:
-            xl = pd.ExcelFile(uploaded)
-            sheet_name = st.selectbox("Seleccione la Hoja", xl.sheet_names, key="firmas_sheet_sel")
-            df_preview = pd.read_excel(uploaded, sheet_name=sheet_name, nrows=1)
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet_name = st.selectbox("Seleccione la Hoja", sheet_names, key="firmas_sheet_sel")
+            df_preview = _get_excel_preview(file_bytes, sheet_name, nrows=1)
             cols = df_preview.columns.tolist()
         except Exception as e:
             st.error(f"Error leyendo Excel: {e}")
@@ -5742,9 +5757,10 @@ def dialog_descargar_historias_ovida():
     
     if uploaded:
         try:
-            xl = pd.ExcelFile(uploaded)
-            sheet_name = st.selectbox("Seleccione la Hoja", xl.sheet_names, key="ovida_sheet_sel")
-            df_preview = pd.read_excel(uploaded, sheet_name=sheet_name, nrows=1)
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet_name = st.selectbox("Seleccione la Hoja", sheet_names, key="ovida_sheet_sel")
+            df_preview = _get_excel_preview(file_bytes, sheet_name, nrows=1)
             cols = df_preview.columns.tolist()
         except Exception as e:
             st.error(f"Error leyendo Excel: {e}")
@@ -6626,9 +6642,10 @@ def dialog_crear_firma():
         if uploaded:
             try:
                 if hasattr(uploaded, 'seek'): uploaded.seek(0)
-                xl = pd.ExcelFile(uploaded)
-                sheet = st.selectbox("Hoja:", xl.sheet_names, key="sheet_firma")
-                df_prev = xl.parse(sheet_name=sheet, nrows=1)
+                file_bytes = uploaded.getvalue()
+                sheet_names = _get_excel_sheet_names(file_bytes)
+                sheet = st.selectbox("Hoja:", sheet_names, key="sheet_firma")
+                df_prev = _get_excel_preview(file_bytes, sheet, nrows=1)
                 cols = df_prev.columns.tolist()
                 
                 c1, c2 = st.columns(2)
@@ -6712,11 +6729,11 @@ def dialog_autorizacion_docx():
     
     if uploaded:
         try:
-            uploaded.seek(0)
-            xls = pd.ExcelFile(uploaded)
-            sheet = st.selectbox("Hoja", xls.sheet_names, key="auth_sheet")
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet = st.selectbox("Hoja", sheet_names, key="auth_sheet")
             if sheet:
-                df_preview = pd.read_excel(uploaded, sheet_name=sheet, nrows=5)
+                df_preview = _get_excel_preview(file_bytes, sheet, nrows=5)
                 c1, c2 = st.columns(2)
                 col_folder = c1.selectbox("Columna Carpeta", df_preview.columns, key="auth_col_folder")
                 col_auth = c2.selectbox("Columna Autorización", df_preview.columns, key="auth_col_val")
@@ -6763,11 +6780,11 @@ def dialog_regimen_docx():
     
     if uploaded:
         try:
-            uploaded.seek(0)
-            xls = pd.ExcelFile(uploaded)
-            sheet = st.selectbox("Hoja", xls.sheet_names, key="reg_sheet")
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet = st.selectbox("Hoja", sheet_names, key="reg_sheet")
             if sheet:
-                df_preview = pd.read_excel(uploaded, sheet_name=sheet, nrows=5)
+                df_preview = _get_excel_preview(file_bytes, sheet, nrows=5)
                 c1, c2 = st.columns(2)
                 col_folder = c1.selectbox("Columna Carpeta", df_preview.columns, key="reg_col_folder")
                 col_reg = c2.selectbox("Columna Régimen", df_preview.columns, key="reg_col_val")
@@ -6919,11 +6936,11 @@ def dialog_distribuir_base():
     
     if uploaded_excel:
         try:
-            uploaded_excel.seek(0)
-            xls = pd.ExcelFile(uploaded_excel)
-            sheet = st.selectbox("Hoja", xls.sheet_names, key="dist_base_sheet")
+            file_bytes = uploaded_excel.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet = st.selectbox("Hoja", sheet_names, key="dist_base_sheet")
             if sheet:
-                df_preview = pd.read_excel(uploaded_excel, sheet_name=sheet, nrows=5)
+                df_preview = _get_excel_preview(file_bytes, sheet, nrows=5)
                 col_folder = st.selectbox("Columna Nombre Carpeta", df_preview.columns, key="dist_base_col")
         except Exception as e:
             st.error(f"Error Excel: {e}")
@@ -6988,11 +7005,11 @@ def dialog_crear_carpetas_excel():
     
     if uploaded:
         try:
-            uploaded.seek(0)
-            xls = pd.ExcelFile(uploaded)
-            sheet = st.selectbox("Hoja", xls.sheet_names, key="create_fold_sheet")
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet = st.selectbox("Hoja", sheet_names, key="create_fold_sheet")
             if sheet:
-                df_preview = pd.read_excel(uploaded, sheet_name=sheet, nrows=5)
+                df_preview = _get_excel_preview(file_bytes, sheet, nrows=5)
                 col_name = st.selectbox("Nombre Columna Carpetas", df_preview.columns, key="create_fold_col")
                 use_filter = st.checkbox("Usar filtros de Excel (solo filas visibles)", value=False, key="create_fold_filter")
         except Exception as e:
@@ -7131,11 +7148,11 @@ def dialog_copiar_mapeo():
     
     if uploaded:
         try:
-            uploaded.seek(0)
-            xls = pd.ExcelFile(uploaded)
-            sheet = st.selectbox("Hoja", xls.sheet_names, key="copy_map_sheet")
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet = st.selectbox("Hoja", sheet_names, key="copy_map_sheet")
             if sheet:
-                df_preview = pd.read_excel(uploaded, sheet_name=sheet, nrows=5)
+                df_preview = _get_excel_preview(file_bytes, sheet, nrows=5)
                 c1, c2 = st.columns(2)
                 col_src = c1.selectbox("Columna Origen", df_preview.columns, key="copy_map_src")
                 col_dst = c2.selectbox("Columna Destino", df_preview.columns, key="copy_map_dst")
@@ -7194,11 +7211,11 @@ def dialog_copiar_raiz():
     
     if uploaded:
         try:
-            uploaded.seek(0)
-            xls = pd.ExcelFile(uploaded)
-            sheet = st.selectbox("Hoja", xls.sheet_names, key="copy_root_sheet")
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet = st.selectbox("Hoja", sheet_names, key="copy_root_sheet")
             if sheet:
-                df_preview = pd.read_excel(uploaded, sheet_name=sheet, nrows=5)
+                df_preview = _get_excel_preview(file_bytes, sheet, nrows=5)
                 c1, c2 = st.columns(2)
                 col_id = c1.selectbox("Columna ID/Nombre Archivo", df_preview.columns, key="copy_root_id")
                 col_folder = c2.selectbox("Columna Carpeta Destino", df_preview.columns, key="copy_root_folder")
