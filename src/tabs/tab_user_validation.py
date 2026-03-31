@@ -68,7 +68,7 @@ def render(container=None):
         # --- TAB 2: MASIVA ---
         with tab2:
             st.markdown("#### Cargar Excel con Cédulas")
-            uploaded_file = st.file_uploader("Seleccione archivo Excel (.xlsx)", type=["xlsx"])
+            uploaded_file = st.file_uploader("Seleccione archivo Excel (.xlsx)", type=["xlsx"], key="up_user_val")
             
             if uploaded_file:
                 df = pd.read_excel(uploaded_file)

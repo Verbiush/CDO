@@ -5,6 +5,12 @@ import shutil
 import pandas as pd
 import json
 
+def close_auto_dialog():
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or k.endswith("_up") or "uploader" in k]
+    for k in keys_to_clear:
+        del st.session_state[k]
+    close_auto_dialog()
+
 def _should_delegate(path_or_list):
     import os
     if not path_or_list: return False
@@ -3830,7 +3836,7 @@ def worker_adres_web_massive(df, col_cedula, col_tipo_doc=None, default_tipo_doc
 @st.dialog("Importar Excel para Renombrado")
 def dialog_importar_excel():
     st.write("### Renombrar archivos usando Excel")
-    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"])
+    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key="up_historia")
     if uploaded:
         default_path = st.session_state.get("current_path", os.getcwd())
         target_path = render_path_selector("Carpeta donde aplicar cambios", "ren_excel_folder", default_path=default_path)
@@ -3842,8 +3848,7 @@ def dialog_importar_excel():
                     uploaded.seek(0)
                     result = worker_aplicar_renombrado_excel(uploaded, folder)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(folder, "dl_ren_excel", "📦 Descargar Carpeta Modificada (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -3851,8 +3856,7 @@ def dialog_importar_excel():
                 st.error(f"Error: {e}")
 
     if st.button("Cerrar", key="btn_close_importar_excel"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Añadir Sufijo desde Excel")
 def dialog_sufijo():
@@ -3862,7 +3866,7 @@ def dialog_sufijo():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"])
+    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key="up_analisis_auth")
     if uploaded:
         try:
             xl = pd.ExcelFile(uploaded)
@@ -3887,8 +3891,7 @@ def dialog_sufijo():
                         # Run synchronously
                         result = worker_anadir_sufijo_excel(uploaded, sheet, col_folder, col_suffix, folder, use_filter)
                         st.success(result)
-                        st.session_state.active_auto_dialog = None
-                        st.rerun()
+                        close_auto_dialog()
 #                         render_download_button(folder, "dl_sufijo", "📦 Descargar Resultados (ZIP)")
                         # time.sleep(2)
                         # st.rerun()
@@ -3898,8 +3901,7 @@ def dialog_sufijo():
             st.error(f"Error leyendo Excel: {e}")
 
     if st.button("Cerrar", key="btn_close_sufijo"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Renombrar por Mapeo Excel")
 def dialog_renombrar_mapeo_excel():
@@ -3908,7 +3910,7 @@ def dialog_renombrar_mapeo_excel():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"])
+    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key="up_analisis_sanitas")
     
     sheet = None
     col_src = None
@@ -3944,8 +3946,7 @@ def dialog_renombrar_mapeo_excel():
                         uploaded.seek(0)
                     result = worker_renombrar_mapeo_excel(uploaded, sheet, col_src, col_dst, use_filter, folder)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(folder, "dl_ren_map", "📦 Descargar Carpeta Modificada (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -3953,8 +3954,7 @@ def dialog_renombrar_mapeo_excel():
                 st.error(f"Error: {e}")
 
     if st.button("Cerrar", key="btn_close_ren_map"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Modificar DOCX Completo")
 def dialog_modif_docx_completo():
@@ -3963,7 +3963,7 @@ def dialog_modif_docx_completo():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    uploaded = st.file_uploader("Subir Excel de Datos", type=["xlsx"])
+    uploaded = st.file_uploader("Subir Excel de Datos", type=["xlsx"], key="up_mod_docx_full")
     
     sheet = None
     use_filter = False
@@ -3990,8 +3990,7 @@ def dialog_modif_docx_completo():
                     uploaded.seek(0)
                     result = worker_modificar_docx_completo(uploaded, sheet, folder, use_filter)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(folder, "dl_mod_docx_full", "📦 Descargar Carpeta Modificada (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -3999,8 +3998,7 @@ def dialog_modif_docx_completo():
                 st.error(f"Error: {e}")
 
     if st.button("Cerrar", key="btn_close_mod_full"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Insertar Firma en DOCX (Masivo)")
 def dialog_insertar_firma_docx():
@@ -4027,8 +4025,7 @@ def dialog_insertar_firma_docx():
                 with st.spinner("Insertando firmas..."):
                     result = worker_firmar_docx_con_imagen_masivo(base_path, docx_name, sig_name)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(base_path, "dl_sign_docx", "📦 Descargar Destino (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -4038,8 +4035,7 @@ def dialog_insertar_firma_docx():
             st.error("Complete todos los campos.")
 
     if st.button("Cerrar", key="btn_close_ins_firma"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Generar CUV (FEVRIPS)")
 def dialog_generar_cuv():
@@ -4055,7 +4051,7 @@ def dialog_rips_limpieza_json():
 @st.dialog("RIPS: Actualizar Clave")
 def dialog_rips_update_key():
     st.write("### Actualizar Clave en JSON")
-    uploaded_files = st.file_uploader("Seleccionar archivos JSON", type=["json"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Seleccionar archivos JSON", type=["json"], accept_multiple_files=True, key="up_json_analysis")
     key_to_update = st.text_input("Clave a buscar")
     new_value = st.text_input("Nuevo valor")
     if uploaded_files and key_to_update and st.button("Actualizar Clave"):
@@ -5721,8 +5717,7 @@ def dialog_descargar_firmas():
                     uploaded.seek(0)
                     result = worker_descargar_firmas(uploaded, sheet_name, col_id, col_folder, root_path)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
                     # render_download_button(root_path, "dl_sigs_root", "📦 Descargar Firmas (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -5732,8 +5727,7 @@ def dialog_descargar_firmas():
             st.error("Complete todos los campos.")
 
     if st.button("Cerrar", key="btn_close_desc_firmas"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Descargar Historias OVIDA")
 def dialog_descargar_historias_ovida():
@@ -5786,8 +5780,7 @@ def dialog_descargar_historias_ovida():
                 with st.spinner("Descargando historias de OVIDA..."):
                     result = worker_descargar_historias_ovida(uploaded, sheet_name, col_estudio, col_ingreso, col_egreso, col_carpeta, download_path)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(download_path, "dl_ovida_root", "📦 Descargar Historias (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -5797,8 +5790,7 @@ def dialog_descargar_historias_ovida():
             st.error("Complete todos los campos.")
 
     if st.button("Cerrar", key="btn_close_desc_ovida"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 def worker_organizar_facturas_por_pdf_avanzado(carpeta_destinos, carpeta_origen, silent_mode=False):
     try:
@@ -6580,7 +6572,7 @@ def dialog_crear_firma():
     
     font_path = None
     if option == "Subir fuente":
-        uploaded_font = st.file_uploader("Fuente TTF:", type=["ttf", "otf"])
+        uploaded_font = st.file_uploader("Fuente TTF:", type=["ttf", "otf"], key="up_font_firma")
         if uploaded_font:
             with open("temp_font.ttf", "wb") as f:
                 f.write(uploaded_font.getbuffer())
@@ -6619,8 +6611,7 @@ def dialog_crear_firma():
                     with st.spinner("Generando firmas..."):
                         result = worker_crear_firma_nombre(current_path, font_path, size, humanize)
                         st.success(result)
-                        st.session_state.active_auto_dialog = None
-                        st.rerun()
+                        close_auto_dialog()
                         # render_download_button(current_path, "dl_firma_folder", "📦 Descargar Firmas (ZIP)")
                 except Exception as e:
                     st.error(f"Error: {e}")
@@ -6653,8 +6644,7 @@ def dialog_crear_firma():
                             with st.spinner("Generando firmas..."):
                                 result = worker_crear_firma_excel(current_path, font_path, size, file_bytes, sheet, col_folder, col_full_name, humanize)
                                 st.success(result)
-                                st.session_state.active_auto_dialog = None
-                                st.rerun()
+                                close_auto_dialog()
                                 # render_download_button(current_path, "dl_firma_excel", "📦 Descargar Resultados (ZIP)")
                             # st.rerun()
                         except Exception as e:
@@ -6665,8 +6655,7 @@ def dialog_crear_firma():
                 st.error(f"Error leyendo Excel: {e}")
 
     if st.button("Cerrar", key="btn_close_crear_firma"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Organización FEOV Avanzada")
 def dialog_organizar_feov_avanzado():
@@ -6696,8 +6685,7 @@ def dialog_organizar_feov_avanzado():
                 with st.spinner("Organizando facturas..."):
                     result = worker_organizar_facturas_por_pdf_avanzado(path_dest, path_orig)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(path_dest, "dl_feov_adv", "📦 Descargar Destino (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -6705,8 +6693,7 @@ def dialog_organizar_feov_avanzado():
             st.error("Seleccione ambas carpetas.")
 
     if st.button("Cerrar", key="btn_close_feov_adv"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Autorización DOCX desde Excel")
 def dialog_autorizacion_docx():
@@ -6751,15 +6738,13 @@ def dialog_autorizacion_docx():
                 with st.spinner("Modificando DOCX..."):
                     result = worker_autorizacion_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_auth, use_filter)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(base_path, "dl_auth_docx", "📦 Descargar DOCX Modificados (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
 
     if st.button("Cerrar", key="btn_close_auth_docx"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Régimen DOCX desde Excel")
 def dialog_regimen_docx():
@@ -6804,15 +6789,13 @@ def dialog_regimen_docx():
                 with st.spinner("Modificando Régimen..."):
                     result = worker_regimen_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_reg, use_filter)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(base_path, "dl_reg_docx", "📦 Descargar DOCX Modificados (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
 
     if st.button("Cerrar", key="btn_close_reg_docx"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 def worker_distribuir_base_archivo(file_source, is_upload_bytes, excel_bytes, sheet_name, col_folder, base_path):
     try:
@@ -6979,16 +6962,14 @@ def dialog_distribuir_base():
                         base_dest_path
                     )
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
             st.warning("Complete todos los campos.")
 
     if st.button("Cerrar", key="btn_close_dist_base"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Crear Carpetas desde Excel")
 def dialog_crear_carpetas_excel():
@@ -7031,8 +7012,7 @@ def dialog_crear_carpetas_excel():
                 with st.spinner("Creando carpetas..."):
                     result = worker_crear_carpetas_excel_avanzado(file_bytes, sheet, col_name, base_path, use_filter)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(base_path, "dl_create_fold_excel", "📦 Descargar Estructura (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -7040,8 +7020,7 @@ def dialog_crear_carpetas_excel():
                 st.error(f"Error: {e}")
 
     if st.button("Cerrar", key="btn_close_cr_fold"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 def worker_copiar_archivo_a_subcarpetas(archivo_a_copiar, carpeta_destino_base, silent_mode=False):
     # Agent integration
@@ -7134,12 +7113,10 @@ def dialog_copiar_archivo_a_subcarpetas():
                 with st.spinner("Copiando archivo..."):
                     result = worker_copiar_archivo_a_subcarpetas(file_path, target_path)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 
     if st.button("❌ Cerrar", key="btn_close_copy_sub"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Copiar Mapeo Subcarpetas")
 def dialog_copiar_mapeo():
@@ -7189,8 +7166,7 @@ def dialog_copiar_mapeo():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_mapeo_subcarpetas(file_bytes, sheet, col_src, col_dst, src_base, dst_base, use_filter)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(dst_base, "dl_copy_map_sub", "📦 Descargar Destino (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -7198,8 +7174,7 @@ def dialog_copiar_mapeo():
                 st.error(f"Error: {e}")
 
     if st.button("Cerrar", key="btn_close_cop_map"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Copiar desde Raíz (Mapeo)")
 def dialog_copiar_raiz():
@@ -7254,8 +7229,7 @@ def dialog_copiar_raiz():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_archivos_desde_raiz_mapeo(file_bytes, sheet, col_id, col_folder, root_src, root_dst, use_filter)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(root_dst, "dl_copy_root_map", "📦 Descargar Destino (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -7263,8 +7237,7 @@ def dialog_copiar_raiz():
                 st.error(f"Error: {e}")
 
     if st.button("Cerrar", key="btn_close_cop_raiz"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("RIPS Eventos Masivos")
 def dialog_rips_masivos():
@@ -7301,7 +7274,7 @@ def dialog_rips_masivos():
                 except Exception as e:
                     st.error(f"Error: {e}")
     else:
-        file_src = st.file_uploader("Excel Eventos", type=["xlsx"])
+        file_src = st.file_uploader("Excel Eventos", type=["xlsx"], key="up_excel_eventos")
         
         default_path = st.session_state.get("current_path", os.getcwd())
         folder_dst = render_path_selector(
@@ -7409,23 +7382,20 @@ def dialog_exportar_renombrado():
                                 write_res = wait_for_result(write_task)
                                 if write_res and "error" not in write_res and not write_res.get("errors"):
                                     st.success(f"Excel generado exitosamente en: {out_path}")
-                                    st.session_state.active_auto_dialog = None
-                                    st.rerun()
+                                    close_auto_dialog()
                                 else:
                                     st.error("Error guardando el archivo.")
                     else:
                         df.to_excel(out_path, index=False)
                         st.success(f"Excel generado en: {out_path}")
-                        st.session_state.active_auto_dialog = None
-                        st.rerun()
+                        close_auto_dialog()
                 else:
                     st.warning("No se encontraron archivos en la carpeta.")
             except Exception as e:
                 st.error(f"Error: {e}")
 
     if st.button("Cerrar"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Aplicar Renombrado (Excel)")
 def dialog_aplicar_renombrado():
@@ -7435,7 +7405,7 @@ def dialog_aplicar_renombrado():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    excel_file = st.file_uploader("Archivo Excel", type=["xlsx"])
+    excel_file = st.file_uploader("Archivo Excel", type=["xlsx"], key="up_excel_unificar")
     
     c1, c2 = st.columns([0.8, 0.2])
     
@@ -7454,16 +7424,14 @@ def dialog_aplicar_renombrado():
                 with st.spinner("Renombrando archivos..."):
                     result = worker_aplicar_renombrado_excel(excel_file, folder)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
             st.error("Seleccione archivo Excel y carpeta.")
 
     if st.button("Cerrar", key="btn_close_app_ren"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Copiar Archivo a Subcarpetas")
 def dialog_copiar_archivo_a_subcarpetas():
@@ -7495,8 +7463,7 @@ def dialog_copiar_archivo_a_subcarpetas():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_archivo_a_subcarpetas(t_path, dest_base_path)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(dest_base_path, "dl_copy_sub", "📦 Descargar Destino (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -7504,8 +7471,7 @@ def dialog_copiar_archivo_a_subcarpetas():
             st.error("Seleccione archivo y carpeta destino.")
 
     if st.button("Cerrar", key="btn_close_cop_sub"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 @st.dialog("Organizar Facturas (FEOV)")
 def dialog_organizar_feov():
@@ -7536,8 +7502,7 @@ def dialog_organizar_feov():
                 with st.spinner("Organizando facturas..."):
                     result = worker_organizar_facturas_feov(source_path, target_path)
                     st.success(result)
-                    st.session_state.active_auto_dialog = None
-                    st.rerun()
+                    close_auto_dialog()
 #                     render_download_button(target_path, "dl_feov", "📦 Descargar Facturas Organizadas (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -7547,8 +7512,7 @@ def dialog_organizar_feov():
             st.warning("Seleccione ambas carpetas.")
 
     if st.button("Cerrar", key="btn_close_org_feov"):
-        st.session_state.active_auto_dialog = None
-        st.rerun()
+        close_auto_dialog()
 
 # --- RENDER MAIN TAB ---
 

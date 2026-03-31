@@ -9,6 +9,14 @@ import zipfile
 import tempfile
 import io
 
+def close_action_dialog():
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or k.endswith("_up") or "uploader" in k]
+    for k in keys_to_clear:
+        del st.session_state[k]
+    close_action_dialog()
+
+
+
 try:
     import agent_client
 except ImportError:
@@ -1189,13 +1197,11 @@ def dialogo_modificar_nombres():
                 activar_num, inicio_num,
                 silent_mode=False
             )
-            st.session_state.active_action_dialog = None
-            st.rerun()
+            close_action_dialog()
             
     with col_cancel:
         if st.button("❌ Cancelar", use_container_width=True):
-            st.session_state.active_action_dialog = None
-            st.rerun()
+            close_action_dialog()
 
 @st.dialog("Editar Texto en Archivos")
 def dialogo_editar_texto():
@@ -1221,13 +1227,11 @@ def dialogo_editar_texto():
                 st.warning("Debes ingresar el texto a buscar.")
             else:
                 worker_editar_texto(st.session_state.get("search_results", []), search_text, replace_text, silent_mode=False)
-                st.session_state.active_action_dialog = None
-                st.rerun()
+                close_action_dialog()
             
     with col_cancel:
         if st.button("❌ Cerrar", use_container_width=True):
-            st.session_state.active_action_dialog = None
-            st.rerun()
+            close_action_dialog()
 
 @st.dialog("Copiar Archivos de Lista")
 def dialogo_copiar_lista():
@@ -1260,13 +1264,11 @@ def dialogo_copiar_lista():
                 st.warning("Selecciona una carpeta destino.")
             else:
                 worker_copiar_lista(st.session_state.get("search_results", []), dest, silent_mode=False)
-                st.session_state.active_action_dialog = None
-                st.rerun()
+                close_action_dialog()
             
     with col_cancel:
         if st.button("❌ Cerrar", use_container_width=True, key="btn_close_copy"):
-            st.session_state.active_action_dialog = None
-            st.rerun()
+            close_action_dialog()
 
 @st.dialog("Mover Archivos de Lista")
 def dialogo_mover_lista():
@@ -1301,13 +1303,11 @@ def dialogo_mover_lista():
                 st.warning("Selecciona una carpeta destino.")
             else:
                 worker_mover_lista(st.session_state.get("search_results", []), target_move_path, silent_mode=False)
-                st.session_state.active_action_dialog = None
-                st.rerun()
+                close_action_dialog()
 
     with col_cancel:
         if st.button("❌ Cerrar", use_container_width=True, key="btn_close_move"):
-            st.session_state.active_action_dialog = None
-            st.rerun()
+            close_action_dialog()
 
 
 @st.dialog("Confirmar Eliminación")
@@ -1339,13 +1339,11 @@ def dialogo_confirmar_eliminar():
     with col_confirm:
         if st.button("🗑️ Sí, eliminar", type="primary", use_container_width=True):
             worker_eliminar_lista(results, force_delete=force_delete, silent_mode=False)
-            st.session_state.active_action_dialog = None
-            st.rerun()
+            close_action_dialog()
             
     with col_cancel:
         if st.button("Cancelar", use_container_width=True):
-            st.session_state.active_action_dialog = None
-            st.rerun()
+            close_action_dialog()
 
 @st.dialog("Comprimir en ZIP")
 def dialogo_comprimir_zip():
@@ -1383,12 +1381,10 @@ def dialogo_comprimir_zip():
             full_zip_path += ".zip"
             
         worker_comprimir_zip(st.session_state.get("search_results", []), full_zip_path, silent_mode=False)
-        st.session_state.active_action_dialog = None
-        st.rerun()
+        close_action_dialog()
         
     if st.button("❌ Cerrar", key="btn_close_zip"):
-        st.session_state.active_action_dialog = None
-        st.rerun()
+        close_action_dialog()
 
 @st.dialog("Comprimir Individualmente")
 def dialogo_comprimir_individual():
@@ -1405,13 +1401,11 @@ def dialogo_comprimir_individual():
     with col_ok:
         if st.button("🚀 Comprimir Individualmente"):
              worker_comprimir_individual(st.session_state.get("search_results", []), silent_mode=False)
-             st.session_state.active_action_dialog = None
-             st.rerun()
+             close_action_dialog()
     
     with col_cancel:
         if st.button("❌ Cerrar", key="btn_close_ind"):
-            st.session_state.active_action_dialog = None
-            st.rerun()
+            close_action_dialog()
 
 # --- RENDER FUNCTION ---
 

@@ -108,7 +108,7 @@ def render(tab_container):
             file_context = None
     
             if context_option == "Subir Archivo":
-                uploaded_file = st.file_uploader("Sube un archivo (PDF, DOCX, TXT)", type=["pdf", "docx", "txt", "csv", "json", "xml"])
+                uploaded_file = st.file_uploader("Sube un archivo (PDF, DOCX, TXT)", type=["pdf", "docx", "txt", "csv", "json", "xml"], key="up_ai_assist")
                 if uploaded_file:
                     # Guardar temporalmente para extraer texto
                     try:
