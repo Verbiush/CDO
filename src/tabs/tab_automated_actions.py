@@ -7922,6 +7922,7 @@ def render():
                         st.error(f"Error en análisis: {result['error']}")
                     elif "files" in result:
                         st.session_state[f"analysis_result_{key_prefix}"] = result
+                        st.session_state["last_run"] = int(time.time())
                     else:
                          st.warning("El resultado no tiene el formato esperado para descarga directa.")
                 elif result:
@@ -7946,16 +7947,18 @@ def render():
                     elif isinstance(data, str):
                         try:
                             import base64
+                            import binascii
                             data = base64.b64decode(data, validate=True)
                         except Exception:
-                            pass
+                            # Not base64, assume raw text
+                            data = data.encode('utf-8')
                     
                     st.download_button(
                         label=f["label"] if "label" in f else f"📥 Descargar {f['name']}",
                         data=data,
                         file_name=f["name"],
                         mime=f.get("mime", "application/octet-stream"),
-                        key=f"{key_prefix}_dl_{i}"
+                        key=f"{key_prefix}_dl_{i}_{st.session_state.get('last_run', 0)}"
                     )
 
         with col_a1:
