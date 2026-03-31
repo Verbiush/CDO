@@ -10,10 +10,12 @@ import tempfile
 import io
 
 def close_action_dialog():
-    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or k.endswith("_up") or "uploader" in k]
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up")]
     for k in keys_to_clear:
-        del st.session_state[k]
-    close_action_dialog()
+        if k in st.session_state:
+            del st.session_state[k]
+    st.session_state.active_action_dialog = None
+    st.rerun()
 
 
 

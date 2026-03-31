@@ -20,9 +20,12 @@ def _get_excel_preview(file_bytes, sheet_name, nrows=5):
     return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, nrows=nrows)
 
 def close_auto_dialog():
-    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or k.endswith("_up") or "uploader" in k]
+    # Only clear uploaders starting with "up_" or specific known keys to avoid breaking session
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up")]
     for k in keys_to_clear:
-        del st.session_state[k]
+        if k in st.session_state:
+            del st.session_state[k]
+    
     st.session_state.active_auto_dialog = None
     st.rerun()
 
