@@ -6971,7 +6971,8 @@ def dialog_distribuir_base():
     if st.button("🚀 Distribuir"):
         if uploaded_excel and sheet and col_folder and file_to_distribute and base_dest_path:
             try:
-                uploaded_excel.seek(0)
+                if hasattr(uploaded_excel, 'seek'):
+                    uploaded_excel.seek(0)
                 excel_bytes = uploaded_excel.getvalue()
                 
                 with st.spinner("Distribuyendo archivo..."):
@@ -7029,7 +7030,8 @@ def dialog_crear_carpetas_excel():
     if st.button("Crear Carpetas"):
         if uploaded and base_path and col_name:
             try:
-                uploaded.seek(0)
+                if hasattr(uploaded, 'seek'):
+                    uploaded.seek(0)
                 file_bytes = uploaded.getvalue()
                 with st.spinner("Creando carpetas..."):
                     result = worker_crear_carpetas_excel_avanzado(file_bytes, sheet, col_name, base_path, use_filter)
