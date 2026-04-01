@@ -14,7 +14,9 @@ def close_action_dialog():
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
-    st.session_state.active_action_dialog = None
+    
+    if "active_action_dialog" in st.session_state:
+        del st.session_state["active_action_dialog"]
     st.rerun()
 
 

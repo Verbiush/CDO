@@ -26,7 +26,8 @@ def close_auto_dialog():
         if k in st.session_state:
             del st.session_state[k]
     
-    st.session_state.active_auto_dialog = None
+    if "active_auto_dialog" in st.session_state:
+        del st.session_state["active_auto_dialog"]
     st.rerun()
 
 def _should_delegate(path_or_list):
@@ -8112,6 +8113,7 @@ def render():
         elif active_auto_dialog == "insertar_firma_docx":
             dialog_insertar_firma_docx()
         else:
-            st.session_state.active_auto_dialog = None
+            if "active_auto_dialog" in st.session_state:
+                del st.session_state["active_auto_dialog"]
 
 
