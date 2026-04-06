@@ -456,7 +456,8 @@ def dialog_generar_cuv():
             try:
                 # Prepare a clean download folder
                 timestamp = int(time.time())
-                temp_dir = os.path.join("temp_downloads", f"fevrips_results_{timestamp}")
+                session_id = st.session_state.get("session_id", "default")
+                temp_dir = os.path.join("temp_downloads", f"fevrips_results_{session_id}_{timestamp}")
                 os.makedirs(temp_dir, exist_ok=True)
                 
                 # Copy generated files

@@ -128,7 +128,8 @@ def render(tab_container):
                 # Web Mode: Use temp folder
                 if "bot_download_dir" not in st.session_state or not st.session_state.bot_download_dir.startswith(os.path.join(os.getcwd(), "temp_downloads")):
                     timestamp = int(time.time())
-                    temp_dl = os.path.join(os.getcwd(), "temp_downloads", f"bot_session_{timestamp}")
+                    session_id = st.session_state.get("session_id", "default")
+                    temp_dl = os.path.join(os.getcwd(), "temp_downloads", f"bot_session_{session_id}_{timestamp}")
                     os.makedirs(temp_dl, exist_ok=True)
                     st.session_state.bot_download_dir = temp_dl
                 

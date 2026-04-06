@@ -740,7 +740,8 @@ def render():
         
         # In Web Mode, if no ZIP uploaded, create a temp dir to start fresh
         if not is_native and (not base_path or not os.path.exists(base_path)):
-             temp_base = os.path.join(os.getcwd(), "temp_downloads", f"struct_{int(time.time())}")
+             session_id = st.session_state.get("session_id", "default")
+             temp_base = os.path.join(os.getcwd(), "temp_downloads", f"struct_{session_id}_{int(time.time())}")
              if "temp_struct_path" not in st.session_state:
                  os.makedirs(temp_base, exist_ok=True)
                  st.session_state.temp_struct_path = temp_base
@@ -1046,7 +1047,8 @@ def render():
                 )
                 
                 if not is_native and (not base_dest or not os.path.exists(base_dest)):
-                     temp_mov = os.path.join(os.getcwd(), "temp_downloads", f"mov_{int(time.time())}")
+                     session_id = st.session_state.get("session_id", "default")
+                     temp_mov = os.path.join(os.getcwd(), "temp_downloads", f"mov_{session_id}_{int(time.time())}")
                      if "temp_mov_path" not in st.session_state:
                          os.makedirs(temp_mov, exist_ok=True)
                          st.session_state.temp_mov_path = temp_mov
@@ -1269,7 +1271,8 @@ def render():
         )
 
         if not is_native and (not base_path_content or not os.path.exists(base_path_content)):
-             temp_content = os.path.join(os.getcwd(), "temp_downloads", f"content_{int(time.time())}")
+             session_id = st.session_state.get("session_id", "default")
+             temp_content = os.path.join(os.getcwd(), "temp_downloads", f"content_{session_id}_{int(time.time())}")
              if "temp_content_path" not in st.session_state:
                  os.makedirs(temp_content, exist_ok=True)
                  st.session_state.temp_content_path = temp_content

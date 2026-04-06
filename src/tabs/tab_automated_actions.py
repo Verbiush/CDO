@@ -21,7 +21,7 @@ def _get_excel_preview(file_bytes, sheet_name, nrows=5):
 
 def close_auto_dialog():
     # Only clear uploaders starting with "up_" or specific known keys to avoid breaking session
-    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up")]
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up") or k in ("excel_firma", "dist_base_excel", "copy_sub_file", "col1_pdf_man", "col1_split_man")]
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
@@ -880,7 +880,8 @@ def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_fo
 
         if not target_folder:
             is_temp = True
-            target_folder = os.path.join(os.getcwd(), "temp_downloads", f"carpetas_{int(time.time())}")
+            session_id = st.session_state.get("session_id", "default")
+            target_folder = os.path.join(os.getcwd(), "temp_downloads", f"carpetas_{session_id}_{int(time.time())}")
             
         # Only create folder on server if NOT native mode or if it IS temp
         if not is_native_mode or is_temp:
@@ -1052,7 +1053,8 @@ def worker_dividir_pdf_paginas(input_pdf, output_folder=None, silent_mode=False)
         is_temp = False
         if not output_folder:
             is_temp = True
-            output_folder = os.path.join(os.getcwd(), "temp_downloads", f"split_{int(time.time())}")
+            session_id = st.session_state.get("session_id", "default")
+            output_folder = os.path.join(os.getcwd(), "temp_downloads", f"split_{session_id}_{int(time.time())}")
             
         os.makedirs(output_folder, exist_ok=True)
         
@@ -3592,7 +3594,8 @@ def worker_descargar_historias_hospitalizacion_ovida(uploaded_file, sheet_name, 
         is_temp = False
         if not save_path:
             is_temp = True
-            save_path = os.path.join(os.getcwd(), "temp_downloads", f"ovida_{int(time.time())}")
+            session_id = st.session_state.get("session_id", "default")
+            save_path = os.path.join(os.getcwd(), "temp_downloads", f"ovida_{session_id}_{int(time.time())}")
             # En server mode creamos la carpeta. En native mode, el agente lo hará (o usaremos ruta temporal allá si se implementara)
             if not is_native_mode:
                 os.makedirs(save_path, exist_ok=True)
@@ -5311,7 +5314,8 @@ def worker_descargar_firmas(uploaded_file, sheet_name, col_id, col_folder, root_
         is_temp = False
         if not root_path:
             is_temp = True
-            root_path = os.path.join(os.getcwd(), "temp_downloads", f"firmas_{int(time.time())}")
+            session_id = st.session_state.get("session_id", "default")
+            root_path = os.path.join(os.getcwd(), "temp_downloads", f"firmas_{session_id}_{int(time.time())}")
         
         # Collect tasks
         tasks = []
@@ -5436,7 +5440,8 @@ def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col
     is_temp = False
     if not download_path:
         is_temp = True
-        download_path = os.path.join(os.getcwd(), "temp_downloads", f"ovida_{int(time.time())}")
+        session_id = st.session_state.get("session_id", "default")
+        download_path = os.path.join(os.getcwd(), "temp_downloads", f"ovida_{session_id}_{int(time.time())}")
     
     # --- NATIVE MODE CHECK ---
     is_native_mode = st.session_state.get('force_native_mode', True)

@@ -281,6 +281,10 @@ def save_user_prefs(data):
         return False
 
 # --- AUTHENTICATION ---
+import uuid
+if "session_id" not in st.session_state:
+    st.session_state.session_id = uuid.uuid4().hex
+
 if "logged_in" not in st.session_state:
     # Try to load from prefs first
     prefs = load_user_prefs()

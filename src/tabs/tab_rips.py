@@ -893,7 +893,8 @@ def render(container=None):
                                         st.success("✅ Conversión completada exitosamente.")
                                         
                                         # Save to temp file for consistent download behavior
-                                        temp_dir = os.path.join("temp_downloads", f"rips_flat_{int(time.time())}")
+                                        session_id = st.session_state.get("session_id", "default")
+                                        temp_dir = os.path.join("temp_downloads", f"rips_flat_{session_id}_{int(time.time())}")
                                         os.makedirs(temp_dir, exist_ok=True)
                                         out_file = os.path.join(temp_dir, "RIPS_Consolidado_NuevaRes.xlsx")
                                         
@@ -929,7 +930,8 @@ def render(container=None):
                         st.success("Conversión exitosa.")
                         
                         file_name = f"{os.path.splitext(uploaded_json.name)[0]}.xlsx"
-                        temp_dir = os.path.join("temp_downloads", f"json_xlsx_{int(time.time())}")
+                        session_id = st.session_state.get("session_id", "default")
+                        temp_dir = os.path.join("temp_downloads", f"json_xlsx_{session_id}_{int(time.time())}")
                         os.makedirs(temp_dir, exist_ok=True)
                         out_file = os.path.join(temp_dir, file_name)
                         
@@ -962,7 +964,8 @@ def render(container=None):
                                     st.success("Conversión exitosa.")
                                     
                                     file_name = f"{os.path.splitext(os.path.basename(target_file))[0]}.json"
-                                    temp_dir = os.path.join("temp_downloads", f"xlsx_json_{int(time.time())}")
+                                    session_id = st.session_state.get("session_id", "default")
+                                    temp_dir = os.path.join("temp_downloads", f"xlsx_json_{session_id}_{int(time.time())}")
                                     os.makedirs(temp_dir, exist_ok=True)
                                     out_file = os.path.join(temp_dir, file_name)
                                     
@@ -987,7 +990,8 @@ def render(container=None):
                         elif xlsx_data:
                             st.success(msg)
                             
-                            temp_dir = os.path.join("temp_downloads", f"consol_xlsx_{int(time.time())}")
+                            session_id = st.session_state.get("session_id", "default")
+                            temp_dir = os.path.join("temp_downloads", f"consol_xlsx_{session_id}_{int(time.time())}")
                             os.makedirs(temp_dir, exist_ok=True)
                             out_file = os.path.join(temp_dir, "RIPS_Consolidado.xlsx")
                             
@@ -1038,7 +1042,8 @@ def render(container=None):
                         if uploaded_consol:
                             # Create a persistent temp directory for output
                             timestamp = int(time.time())
-                            path_desconsol = os.path.join("temp_downloads", f"desconsol_{timestamp}")
+                            session_id = st.session_state.get("session_id", "default")
+                            path_desconsol = os.path.join("temp_downloads", f"desconsol_{session_id}_{timestamp}")
                             os.makedirs(path_desconsol, exist_ok=True)
                             
                             ok, msg = worker_desconsolidar_xlsx_json(uploaded_consol, path_desconsol)
@@ -1142,7 +1147,8 @@ def render(container=None):
                         
                         if count_changes > 0:
                             # Guardar el JSON actualizado en una carpeta temporal para descarga
-                            temp_dir = os.path.join("temp_downloads", f"json_update_{int(time.time())}")
+                            session_id = st.session_state.get("session_id", "default")
+                            temp_dir = os.path.join("temp_downloads", f"json_update_{session_id}_{int(time.time())}")
                             os.makedirs(temp_dir, exist_ok=True)
                             temp_file_path = os.path.join(temp_dir, f"update_{f_json.name}")
                             

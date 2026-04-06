@@ -193,7 +193,7 @@ def extract_uploaded_zip(uploaded_file):
 
     # Safe filename
     safe_name = "".join([c for c in uploaded_file.name if c.isalnum() or c in ('-', '_', '.')])
-    extract_dir = os.path.join(os.getcwd(), "temp_uploads", f"{timestamp}_{safe_name}")
+    extract_dir = os.path.join(os.getcwd(), "temp_uploads", f"{session_id}_{timestamp}_{safe_name}")
     
     if os.path.exists(extract_dir):
         # Already extracted? 
@@ -526,9 +526,10 @@ def render_file_selector(label, key, default_path=None, help_text=None, file_typ
         if uploaded:
             # Save to temp
             try:
+                session_id = getattr(st.session_state, "session_id", "default_session")
                 timestamp = int(time.time())
                 safe_name = "".join([c for c in uploaded.name if c.isalnum() or c in ('-', '_', '.')])
-                temp_dir = os.path.join(os.getcwd(), "temp_uploads", f"{timestamp}_file")
+                temp_dir = os.path.join(os.getcwd(), "temp_uploads", f"{session_id}_{timestamp}_file")
                 os.makedirs(temp_dir, exist_ok=True)
                 file_path = os.path.join(temp_dir, safe_name)
                 

@@ -460,7 +460,8 @@ def render(container=None):
                 else:
                     # Prepare paths
                     timestamp = int(time.time())
-                    actual_output_folder = os.path.join(os.getcwd(), "temp_downloads", f"ind_{timestamp}")
+                    session_id = st.session_state.get("session_id", "default")
+                    actual_output_folder = os.path.join(os.getcwd(), "temp_downloads", f"ind_{session_id}_{timestamp}")
                     os.makedirs(actual_output_folder, exist_ok=True)
 
                     try:
@@ -531,9 +532,10 @@ def render(container=None):
                                     try:
                                         import zipfile
                                         timestamp = int(time.time())
+                                        session_id = st.session_state.get("session_id", "default")
                                         temp_dl_dir = "temp_downloads"
                                         os.makedirs(temp_dl_dir, exist_ok=True)
-                                        zip_path = os.path.join(temp_dl_dir, f"{name_no_ext}_images_{timestamp}.zip")
+                                        zip_path = os.path.join(temp_dl_dir, f"{name_no_ext}_{session_id}_images_{timestamp}.zip")
                                         
                                         with zipfile.ZipFile(zip_path, "w") as zf:
                                             for jpg in jpgs:
@@ -602,7 +604,8 @@ def render(container=None):
                 else:
                     # Web Mode: Use temp folder
                     timestamp = int(time.time())
-                    out_path = os.path.join(os.getcwd(), "temp_downloads", f"mass_{timestamp}")
+                    session_id = st.session_state.get("session_id", "default")
+                    out_path = os.path.join(os.getcwd(), "temp_downloads", f"mass_{session_id}_{timestamp}")
                     os.makedirs(out_path, exist_ok=True)
                     st.info(f"📂 Procesando en entorno temporal: {out_path}")
             else:
