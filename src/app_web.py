@@ -1,4 +1,28 @@
 import streamlit as st
+import os
+import time
+import shutil
+
+# --- AUTO CLEANUP TEMPORARY FILES (BACKGROUND) ---
+# Se ejecuta al cargar la aplicación para limpiar basura antigua de otras sesiones
+def auto_cleanup_temp_dirs(max_age_minutes=60):
+    now = time.time()
+    for folder in ["temp_uploads", "temp_downloads"]:
+        if os.path.exists(folder):
+            for item in os.listdir(folder):
+                item_path = os.path.join(folder, item)
+                try:
+                    # If older than max_age_minutes
+                    if os.path.getmtime(item_path) < now - (max_age_minutes * 60):
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path, ignore_errors=True)
+                        else:
+                            os.remove(item_path)
+                except Exception:
+                    pass
+
+# Limpiar archivos más antiguos de 60 minutos silenciosamente al iniciar
+auto_cleanup_temp_dirs(60)
 
 # --- CONFIGURACIÓN INICIAL DEL ESTADO ---
 # En AWS queremos que se comporte como la APP NATIVA (usando el Agente para diálogos)
@@ -533,12 +557,29 @@ else:
                     
                     # Cleanup temp folders
                     import shutil
+                    import time
                     try:
-                        shutil.rmtree("temp_uploads", ignore_errors=True)
-                        shutil.rmtree("temp_downloads", ignore_errors=True)
+                        # Prevent deletion of recent files (e.g. less than 5 min old) to avoid breaking active sessions
+                        now = time.time()
+                        def clean_old_files(folder_path):
+                            if os.path.exists(folder_path):
+                                for item in os.listdir(folder_path):
+                                    item_path = os.path.join(folder_path, item)
+                                    try:
+                                        if os.path.getmtime(item_path) < now - 300: # 5 minutes old
+                                            if os.path.isdir(item_path):
+                                                shutil.rmtree(item_path)
+                                            else:
+                                                os.remove(item_path)
+                                    except Exception as e:
+                                        print(f"Error borrando {item_path}: {e}")
+                        
+                        clean_old_files("temp_uploads")
+                        clean_old_files("temp_downloads")
+                        
                         os.makedirs("temp_uploads", exist_ok=True)
                         os.makedirs("temp_downloads", exist_ok=True)
-                        st.success("Caché y archivos temporales limpiados exitosamente.")
+                        st.success("Caché y archivos temporales antiguos limpiados exitosamente.")
                     except Exception as e:
                         st.error(f"Error limpiando archivos temporales: {e}")
 
