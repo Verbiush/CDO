@@ -13,7 +13,7 @@ $launcherPath = Join-Path $agentDir "launcher.py"
 
 # 1. Install Dependencies
 Write-Host "Installing Python dependencies..."
-pip install requests urllib3 selenium webdriver-manager pandas
+pip install requests urllib3 selenium webdriver-manager pandas PyMuPDF pdf2docx docx2pdf python-docx Pillow openpyxl PyPDF2 pdfplumber xlsxwriter
 
 # 2. Create Launcher Script (Wrapper to run main.py)
 $agentScript = @"

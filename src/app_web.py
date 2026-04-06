@@ -156,8 +156,20 @@ def create_cdo_agent_zip():
         ("local_agent/main.py", "src/local_agent/main.py"),
         ("local_agent/cert_gen.py", "src/local_agent/cert_gen.py"),
         ("local_agent/README.md", "src/local_agent/README.md"),
-        ("bot_zeus.py", "src/bot_zeus.py")
+        ("bot_zeus.py", "src/bot_zeus.py"),
+        ("gui_utils.py", "src/gui_utils.py"),
+        ("agent_client.py", "src/agent_client.py")
     ]
+    
+    # Add all files in tabs and modules
+    for folder in ["tabs", "modules"]:
+        folder_path = os.path.join(base_dir, folder)
+        if os.path.exists(folder_path):
+            for root, _, files in os.walk(folder_path):
+                for f in files:
+                    if f.endswith(".py"):
+                        rel_path = os.path.relpath(os.path.join(root, f), base_dir)
+                        files_to_zip.append((rel_path, f"src/{rel_path}".replace("\\", "/")))
     
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as z:
         for src_rel, archive_path in files_to_zip:

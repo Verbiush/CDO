@@ -77,7 +77,12 @@ def build_installer():
         "--hidden-import=fitz",
         "--hidden-import=PyPDF2",
         "--hidden-import=pdfplumber",
-        "--hidden-import=xlsxwriter"
+        "--hidden-import=xlsxwriter",
+        "--hidden-import=src.tabs.tab_conversion",
+        "--hidden-import=src.tabs.tab_automated_actions",
+        "--hidden-import=src.modules.analisis_sos",
+        "--hidden-import=src.gui_utils",
+        "--exclude-module=streamlit"
     ]
     
     # Add parent directory (src) to paths so bot_zeus.py can be found

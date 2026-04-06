@@ -35,6 +35,25 @@ import pandas as pd
 import io
 import logging
 
+# MOCK STREAMLIT FOR LOCAL AGENT TO AVOID IMPORT ERRORS FROM TABS
+import sys
+try:
+    import streamlit as st
+except ImportError:
+    class MockSt:
+        def progress(self, *args, **kwargs):
+            class _Prog:
+                def progress(self, *a, **k): pass
+                def empty(self): pass
+            return _Prog()
+        def __getattr__(self, name):
+            def _dummy(*args, **kwargs): return None
+            return _dummy
+        @property
+        def session_state(self):
+            return {}
+    sys.modules['streamlit'] = MockSt()
+
 # Configure logging
 logging.basicConfig(
     filename='agent_debug.log',

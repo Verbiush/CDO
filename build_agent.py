@@ -33,6 +33,11 @@ args = [
     '--hidden-import=modules.registraduria_validator',
     '--hidden-import=modules.adres_validator',
     '--hidden-import=win32timezone', # Often needed for datetime
+    '--hidden-import=src.tabs.tab_conversion',
+    '--hidden-import=src.tabs.tab_automated_actions',
+    '--hidden-import=src.modules.analisis_sos',
+    '--hidden-import=src.gui_utils',
+    '--exclude-module=streamlit'
 ]
 
 # Run PyInstaller
