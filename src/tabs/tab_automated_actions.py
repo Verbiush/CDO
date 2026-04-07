@@ -68,7 +68,9 @@ if agent_client_path not in sys.path:
     sys.path.append(agent_client_path)
 
 try:
-    from agent_client import send_command, wait_for_result
+    import agent_client
+    send_command = agent_client.send_command
+    wait_for_result = agent_client.wait_for_result
 except ImportError:
     try:
         from src.agent_client import send_command, wait_for_result

@@ -2327,6 +2327,7 @@ class AgentWorker:
                 files = _expand_file_list(files_param)
                 use_ai = params.get("use_ai", False)
                 if files:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.modules.analisis_sos import worker_analisis_sos
                         res = worker_analisis_sos(files, use_ai=use_ai, silent_mode=True)
@@ -2356,6 +2357,7 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_historia_clinica
                         res = worker_analisis_historia_clinica(files, silent_mode=True)
@@ -2372,6 +2374,7 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_autorizacion_nueva_eps
                         res = worker_analisis_autorizacion_nueva_eps(files, silent_mode=True)
@@ -2388,6 +2391,7 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_cargue_sanitas
                         res = worker_analisis_cargue_sanitas(files, silent_mode=True)
@@ -2404,6 +2408,7 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_leer_pdf_retefuente
                         res = worker_leer_pdf_retefuente(files, silent_mode=True)
@@ -2420,6 +2425,7 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_emssanar
                         res = worker_analisis_emssanar(files, silent_mode=True)
@@ -2436,6 +2442,7 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_fomag
                         res = worker_analisis_fomag(files, silent_mode=True)
