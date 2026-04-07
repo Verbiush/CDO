@@ -21,7 +21,7 @@ def _get_excel_preview(file_bytes, sheet_name, nrows=5):
 
 def close_auto_dialog():
     # Only clear uploaders starting with "up_" or specific known keys to avoid breaking session
-    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up") or k in ("excel_firma", "dist_base_excel", "copy_sub_file", "col1_pdf_man", "col1_split_man")]
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up") or k in ("excel_firma", "dist_base_excel", "copy_sub_file", "col1_pdf_man", "col1_split_man", "firmas_up", "ovida_up")]
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
@@ -5359,15 +5359,14 @@ def worker_descargar_firmas(uploaded_file, sheet_name, col_id, col_folder, root_
 
         if is_native:
             # Agent Mode
-            import agent_client
-            if not agent_client:
+            if send_command is None:
                  return "Error: Módulo agent_client no disponible."
             
             username = st.session_state.get("username", "default")
             
             print(f"DEBUG: Enviando {len(tasks)} descargas al agente. Primer destino: {preview_dest}")
             
-            task_id = agent_client.send_command(username, "download_files", {
+            task_id = send_command(username, "download_files", {
                 "tasks": tasks
             })
             
@@ -5744,16 +5743,17 @@ def dialog_descargar_firmas():
                     uploaded.seek(0)
                     result = worker_descargar_firmas(uploaded, sheet_name, col_id, col_folder, root_path)
                     st.success(result)
-                    close_auto_dialog()
-                    # render_download_button(root_path, "dl_sigs_root", "📦 Descargar Firmas (ZIP)")
-                    # time.sleep(2)
-                    # st.rerun()
+                    
+                    # Store a flag in session state to signal close on next render
+                    st.session_state["pending_close_firmas"] = True
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
             st.error("Complete todos los campos.")
 
-    if st.button("Cerrar", key="btn_close_desc_firmas"):
+    if st.button("Cerrar", key="btn_close_desc_firmas") or st.session_state.get("pending_close_firmas"):
+        if "pending_close_firmas" in st.session_state:
+            del st.session_state["pending_close_firmas"]
         close_auto_dialog()
 
 @st.dialog("Descargar Historias OVIDA")
@@ -5807,17 +5807,34 @@ def dialog_descargar_historias_ovida():
             try:
                 with st.spinner("Descargando historias de OVIDA..."):
                     result = worker_descargar_historias_ovida(uploaded, sheet_name, col_estudio, col_ingreso, col_egreso, col_carpeta, download_path)
-                    st.success(result)
-                    close_auto_dialog()
-#                     render_download_button(download_path, "dl_ovida_root", "📦 Descargar Historias (ZIP)")
-                    # time.sleep(2)
-                    # st.rerun()
+                    
+                    if isinstance(result, dict):
+                        if "error" in result:
+                            st.error(result["error"])
+                        else:
+                            st.success(result.get("message", "Finalizado con éxito."))
+                            st.session_state["pending_close_ovida"] = True
+                            
+                            if "files" in result and result["files"]:
+                                for f in result["files"]:
+                                    st.download_button(
+                                        label=f["label"],
+                                        data=f["data"],
+                                        file_name=f["name"],
+                                        mime="application/zip",
+                                        key=f"dl_ovida_{int(time.time())}"
+                                    )
+                    else:
+                        st.success(result)
+                        st.session_state["pending_close_ovida"] = True
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
             st.error("Complete todos los campos.")
 
-    if st.button("Cerrar", key="btn_close_desc_ovida"):
+    if st.button("Cerrar", key="btn_close_desc_ovida") or st.session_state.get("pending_close_ovida"):
+        if "pending_close_ovida" in st.session_state:
+            del st.session_state["pending_close_ovida"]
         close_auto_dialog()
 
 def worker_organizar_facturas_por_pdf_avanzado(carpeta_destinos, carpeta_origen, silent_mode=False):
