@@ -20,6 +20,10 @@ def _get_excel_preview(file_bytes, sheet_name, nrows=5):
     return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, nrows=nrows)
 
 def open_auto_dialog(dialog_name):
+    import uuid
+    # Generate a unique session ID for dialog instances to completely bypass Streamlit cache conflicts
+    st.session_state["dialog_instance_id"] = str(uuid.uuid4())[:8]
+    
     # Clear all uploader keys before opening a new dialog to prevent "infinite spinner" issues
     keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up") or k in ("excel_firma", "dist_base_excel", "dist_base_file_up", "copy_sub_file", "col1_pdf_man", "col1_split_man", "firmas_up", "ovida_up", "auth_up", "reg_up", "create_fold_up", "copy_map_up", "copy_root_up", "rips_json_ind", "rips_xlsx_consol", "tech_json_ind")]
     for k in keys_to_clear:
@@ -27,6 +31,11 @@ def open_auto_dialog(dialog_name):
             del st.session_state[k]
     st.session_state["active_auto_dialog"] = dialog_name
     st.rerun()
+
+def get_uploader_key(base_key):
+    """Returns a unique key for the uploader using the current dialog instance ID to prevent state locking."""
+    instance_id = st.session_state.get("dialog_instance_id", "default")
+    return f"{base_key}_{instance_id}"
 
 def close_auto_dialog():
     # Only clear uploaders starting with "up_" or specific known keys to avoid breaking session
@@ -3869,7 +3878,7 @@ def worker_adres_web_massive(df, col_cedula, col_tipo_doc=None, default_tipo_doc
 @st.dialog("Importar Excel para Renombrado")
 def dialog_importar_excel():
     st.write("### Renombrar archivos usando Excel")
-    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key="up_historia")
+    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key=get_uploader_key("up_historia"))
     if uploaded:
         default_path = st.session_state.get("current_path", os.getcwd())
         target_path = render_path_selector("Carpeta donde aplicar cambios", "ren_excel_folder", default_path=default_path)
@@ -3899,7 +3908,7 @@ def dialog_sufijo():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key="up_analisis_auth")
+    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key=get_uploader_key("up_analisis_auth"))
     if uploaded:
         try:
             file_bytes = uploaded.getvalue()
@@ -3944,7 +3953,7 @@ def dialog_renombrar_mapeo_excel():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key="up_analisis_sanitas")
+    uploaded = st.file_uploader("Subir Excel", type=["xlsx", "xls"], key=get_uploader_key("up_analisis_sanitas"))
     
     sheet = None
     col_src = None
@@ -3996,7 +4005,7 @@ def dialog_modif_docx_completo():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    uploaded = st.file_uploader("Subir Excel de Datos", type=["xlsx"], key="up_mod_docx_full")
+    uploaded = st.file_uploader("Subir Excel de Datos", type=["xlsx"], key=get_uploader_key("up_mod_docx_full"))
     
     sheet = None
     use_filter = False
@@ -4084,7 +4093,7 @@ def dialog_rips_limpieza_json():
 @st.dialog("RIPS: Actualizar Clave")
 def dialog_rips_update_key():
     st.write("### Actualizar Clave en JSON")
-    uploaded_files = st.file_uploader("Seleccionar archivos JSON", type=["json"], accept_multiple_files=True, key="up_json_analysis")
+    uploaded_files = st.file_uploader("Seleccionar archivos JSON", type=["json"], accept_multiple_files=True, key=get_uploader_key("up_json_analysis"))
     key_to_update = st.text_input("Clave a buscar")
     new_value = st.text_input("Nuevo valor")
     if uploaded_files and key_to_update and st.button("Actualizar Clave"):
@@ -5716,7 +5725,7 @@ def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col
 def dialog_descargar_firmas():
     st.write("Cargue un Excel con IDs de firma y nombres de carpeta.")
     
-    uploaded = st.file_uploader("Archivo Excel", type=["xlsx", "xls"], key="firmas_up")
+    uploaded = st.file_uploader("Archivo Excel", type=["xlsx", "xls"], key=get_uploader_key("firmas_up"))
     
     sheet_name = "Hoja1"
     cols = []
@@ -6626,7 +6635,7 @@ def dialog_crear_firma():
     
     font_path = None
     if option == "Subir fuente":
-        uploaded_font = st.file_uploader("Fuente TTF:", type=["ttf", "otf"], key="up_font_firma")
+        uploaded_font = st.file_uploader("Fuente TTF:", type=["ttf", "otf"], key=get_uploader_key("up_font_firma"))
         if uploaded_font:
             with open("temp_font.ttf", "wb") as f:
                 f.write(uploaded_font.getbuffer())
@@ -6674,7 +6683,7 @@ def dialog_crear_firma():
 
     with tab2:
         st.write("Usa nombres extraídos de una COLUMNA ÚNICA (detecta 1er Nombre + 1er Apellido).")
-        uploaded = st.file_uploader("Excel:", type=["xlsx", "xls"], key="excel_firma")
+        uploaded = st.file_uploader("Excel:", type=["xlsx", "xls"], key=get_uploader_key("excel_firma"))
         
         if uploaded:
             try:
@@ -6758,7 +6767,7 @@ def dialog_autorizacion_docx():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    uploaded = st.file_uploader("Excel", type=["xlsx"], key="auth_up")
+    uploaded = st.file_uploader("Excel", type=["xlsx"], key=get_uploader_key("auth_up"))
     sheet = None
     col_folder = None
     col_auth = None
@@ -6809,7 +6818,7 @@ def dialog_regimen_docx():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    uploaded = st.file_uploader("Excel", type=["xlsx"], key="reg_up")
+    uploaded = st.file_uploader("Excel", type=["xlsx"], key=get_uploader_key("reg_up"))
     sheet = None
     col_folder = None
     col_reg = None
@@ -6987,7 +6996,7 @@ def dialog_distribuir_base():
     st.write("Archivo a Distribuir:")
     
     # Siempre usar file_uploader para permitir cargar cualquier archivo desde el PC
-    file_to_distribute = st.file_uploader("Cargar Archivo a Distribuir", key="dist_base_file_up")
+    file_to_distribute = st.file_uploader("Cargar Archivo a Distribuir", key=get_uploader_key("dist_base_file_up"))
     is_upload_bytes = True if file_to_distribute else False
 
     # 3. Carpeta Destino Base
@@ -7035,7 +7044,7 @@ def dialog_crear_carpetas_excel():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
 
-    uploaded = st.file_uploader("Excel", type=["xlsx", "xls"], key="create_fold_up")
+    uploaded = st.file_uploader("Excel", type=["xlsx", "xls"], key=get_uploader_key("create_fold_up"))
     
     sheet = None
     col_name = None
@@ -7178,7 +7187,7 @@ def dialog_copiar_archivo_a_subcarpetas():
 @st.dialog("Copiar Mapeo Subcarpetas")
 def dialog_copiar_mapeo():
     st.write("Copia archivos entre carpetas basándose en un mapeo Excel.")
-    uploaded = st.file_uploader("Excel", type=["xlsx", "xls"], key="copy_map_up")
+    uploaded = st.file_uploader("Excel", type=["xlsx", "xls"], key=get_uploader_key("copy_map_up"))
     
     sheet = None
     col_src = None
@@ -7241,7 +7250,7 @@ def dialog_copiar_raiz():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
 
-    uploaded = st.file_uploader("Excel", type=["xlsx", "xls"], key="copy_root_up")
+    uploaded = st.file_uploader("Excel", type=["xlsx", "xls"], key=get_uploader_key("copy_root_up"))
     
     sheet = None
     col_id = None
@@ -7331,7 +7340,7 @@ def dialog_rips_masivos():
                 except Exception as e:
                     st.error(f"Error: {e}")
     else:
-        file_src = st.file_uploader("Excel Eventos", type=["xlsx"], key="up_excel_eventos")
+        file_src = st.file_uploader("Excel Eventos", type=["xlsx"], key=get_uploader_key("up_excel_eventos"))
         
         default_path = st.session_state.get("current_path", os.getcwd())
         folder_dst = render_path_selector(
@@ -7462,7 +7471,7 @@ def dialog_aplicar_renombrado():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
         
-    excel_file = st.file_uploader("Archivo Excel", type=["xlsx"], key="up_excel_unificar")
+    excel_file = st.file_uploader("Archivo Excel", type=["xlsx"], key=get_uploader_key("up_excel_unificar"))
     
     c1, c2 = st.columns([0.8, 0.2])
     
@@ -7498,7 +7507,7 @@ def dialog_copiar_archivo_a_subcarpetas():
     if not st.session_state.get("force_native_mode", True):
         st.warning("⚠️ Modo Web: La selección de carpetas nativa no está disponible.")
 
-    file_to_copy = st.file_uploader("Archivo a Copiar", key="copy_sub_file")
+    file_to_copy = st.file_uploader("Archivo a Copiar", key=get_uploader_key("copy_sub_file"))
     
     c1, c2 = st.columns([0.8, 0.2])
     
