@@ -19,9 +19,18 @@ def _get_excel_preview(file_bytes, sheet_name, nrows=5):
     import io
     return pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name, nrows=nrows)
 
+def open_auto_dialog(dialog_name):
+    # Clear all uploader keys before opening a new dialog to prevent "infinite spinner" issues
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up") or k in ("excel_firma", "dist_base_excel", "dist_base_file_up", "copy_sub_file", "col1_pdf_man", "col1_split_man", "firmas_up", "ovida_up", "auth_up", "reg_up", "create_fold_up", "copy_map_up", "copy_root_up", "rips_json_ind", "rips_xlsx_consol", "tech_json_ind")]
+    for k in keys_to_clear:
+        if k in st.session_state:
+            del st.session_state[k]
+    st.session_state["active_auto_dialog"] = dialog_name
+    st.rerun()
+
 def close_auto_dialog():
     # Only clear uploaders starting with "up_" or specific known keys to avoid breaking session
-    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up") or k in ("excel_firma", "dist_base_excel", "copy_sub_file", "col1_pdf_man", "col1_split_man", "firmas_up", "ovida_up")]
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up") or k in ("excel_firma", "dist_base_excel", "dist_base_file_up", "copy_sub_file", "col1_pdf_man", "col1_split_man", "firmas_up", "ovida_up", "auth_up", "reg_up", "create_fold_up", "copy_map_up", "copy_root_up", "rips_json_ind", "rips_xlsx_consol", "tech_json_ind")]
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
@@ -7846,8 +7855,7 @@ def render():
         col_o1, col_o2 = st.columns(2)
         with col_o1:
             if st.button("📥 Organizar Facturas (FEOV)", key="btn_org_feov_new"):
-                st.session_state.active_auto_dialog = "organizar_feov"
-                st.rerun()
+                open_auto_dialog("organizar_feov")
                 
             if st.button("📂➡️📁 Mover por Coincidencia", key="btn_org_move"):
                 if path_org:
@@ -7863,16 +7871,13 @@ def render():
 
         with col_o2:
             if st.button("📤 Copiar Archivo a Subcarpetas", key="btn_org_copy_sub_new"):
-                st.session_state.active_auto_dialog = "copiar_mapeo_sub"
-                st.rerun()
+                open_auto_dialog("copiar_mapeo_sub")
                 
             if st.button("🗺️ Copiar Archivos (Mapeo Sub)", key="btn_org_map_sub_new"):
-                st.session_state.active_auto_dialog = "copiar_mapeo_subcarpetas"
-                st.rerun()
+                open_auto_dialog("copiar_mapeo_subcarpetas")
                 
             if st.button("📜 Copiar Archivos Raíz (Mapeo)", key="btn_org_map_root_new"):
-                st.session_state.active_auto_dialog = "copiar_mapeo_raiz"
-                st.rerun()
+                open_auto_dialog("copiar_mapeo_raiz")
                 
             if st.button("📤 Consolidar Subcarpetas", key="btn_org_consol"):
                 if path_org:
@@ -7891,29 +7896,23 @@ def render():
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             if st.button("📤 Exportar para renombrar", key="btn_mod_exp_new"):
-                st.session_state.active_auto_dialog = "exportar_nombres"
-                st.rerun()
+                open_auto_dialog("exportar_nombres")
                 
             if st.button("📥 Aplicar renombrado Excel", key="btn_mod_app_new"):
-                st.session_state.active_auto_dialog = "aplicar_nombres"
-                st.rerun()
+                open_auto_dialog("aplicar_nombres")
                 
             if st.button("🏷️ Añadir Sufijo desde Excel", key="btn_mod_suf_new"):
-                st.session_state.active_auto_dialog = "sufijo_archivos"
-                st.rerun()
+                open_auto_dialog("sufijo_archivos")
 
             if st.button("📝 Renombrar Masivo por Mapeo Excel", key="btn_mod_map_new"):
-                st.session_state.active_auto_dialog = "renombrar_excel"
-                st.rerun()
+                open_auto_dialog("renombrar_excel")
                 
         with col_m2:
             if st.button("✍️ Modif. DOCX Completo", key="btn_mod_full_new"):
-                st.session_state.active_auto_dialog = "modif_docx"
-                st.rerun()
+                open_auto_dialog("modif_docx")
                 
             if st.button("🖋️ Firmar DOCX con Imagen", key="btn_mod_sign_new"):
-                st.session_state.active_auto_dialog = "insertar_firma_docx"
-                st.rerun()
+                open_auto_dialog("insertar_firma_docx")
 
     # --- TAB 4: Análisis ---
     with tab_an:
@@ -8077,27 +8076,22 @@ def render():
         with col_c1:
             st.subheader("Creación")
             if st.button("📂 Crear Carpetas (Excel)", key="btn_cr_folders"):
-                st.session_state.active_auto_dialog = "crear_carpetas"
-                st.rerun()
+                open_auto_dialog("crear_carpetas")
                 
             if st.button("⬇️ Descargar Firmas", key="btn_cr_sigs"):
-                st.session_state.active_auto_dialog = "descargar_firmas"
-                st.rerun()
+                open_auto_dialog("descargar_firmas")
                 
             if st.button("⬇️ Descargar Hist. OVIDA", key="btn_cr_ovida"):
-                st.session_state.active_auto_dialog = "descargar_ovida"
-                st.rerun()
+                open_auto_dialog("descargar_ovida")
                 
             if st.button("✒️ Crear Firma Digital", key="btn_cr_dig_sig"):
-                st.session_state.active_auto_dialog = "crear_firma"
-                st.rerun()
+                open_auto_dialog("crear_firma")
 
         with col_c2:
             st.subheader("Distribución / Otros")
             
             if st.button("📂 Distribuir Base", key="btn_dist_base"):
-                st.session_state.active_auto_dialog = "distribuir_base"
-                st.rerun()
+                open_auto_dialog("distribuir_base")
 
     # Move dialog triggers to the root scope to avoid "Only one dialog" exception
     active_auto_dialog = st.session_state.get("active_auto_dialog")
