@@ -5,16 +5,17 @@ import pandas as pd
 import io
 import time
 import shutil
+import zipfile
 
 try:
-    from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, render_download_button, extract_uploaded_zip
+    from src.gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, extract_uploaded_zip
 except ImportError:
     try:
-        from gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, render_download_button, extract_uploaded_zip
+        from gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, extract_uploaded_zip
     except ImportError:
         try:
             # Try relative import if we are in a package
-            from ..gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, render_download_button, extract_uploaded_zip
+            from ..gui_utils import abrir_dialogo_carpeta_nativo, render_path_selector, extract_uploaded_zip
         except ImportError:
             abrir_dialogo_carpeta_nativo = None
             # Fallback implementation if import fails
@@ -22,11 +23,20 @@ except ImportError:
         st.warning("Componente de selección de rutas no disponible. Usando entrada de texto simple.")
         return st.text_input(label, value=default_path or "", key=key, help=help_text)
 
-    def render_download_button(folder_path, key, label="📦 Descargar ZIP"):
-        pass
-
     def extract_uploaded_zip(uploaded_file):
         return None
+
+def create_zip_from_folder(folder_path):
+    """Crea un archivo ZIP en memoria a partir de una carpeta."""
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, folder_path)
+                zip_file.write(file_path, arcname)
+    zip_buffer.seek(0)
+    return zip_buffer.getvalue()
 
 # Ensure render_path_selector is callable (defensive check for potential import issues)
 if not callable(render_path_selector):
@@ -938,7 +948,13 @@ def render(container=None):
                         with open(out_file, "wb") as f:
                             f.write(xlsx_data)
                             
-#                         render_download_button(out_file, f"dl_json_xlsx_{int(time.time())}", "📥 Descargar Excel", cleanup=not is_native)
+                        st.download_button(
+                            label="📥 Descargar Excel",
+                            data=xlsx_data,
+                            file_name=file_name,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key=f"dl_json_xlsx_{int(time.time())}"
+                        )
                     else:
                         st.error(f"Error: {err}")
 
@@ -972,7 +988,13 @@ def render(container=None):
                                     with open(out_file, "w", encoding="utf-8") as f:
                                         f.write(json_data)
                                         
-#                                     render_download_button(out_file, f"dl_xlsx_json_{int(time.time())}", "📥 Descargar JSON", cleanup=not is_native)
+                                    st.download_button(
+                                        label="📥 Descargar JSON",
+                                        data=json_data,
+                                        file_name=file_name,
+                                        mime="application/json",
+                                        key=f"dl_xlsx_json_{int(time.time())}"
+                                    )
                                 else:
                                     st.error(f"Error: {err}")
                     else:
@@ -983,22 +1005,20 @@ def render(container=None):
                 path_consol = render_path_selector("Carpeta con JSONs", key="path_rips_consol", default_path=st.session_state.get("current_path"), omit_checkbox=True)
                 if st.button("Consolidar", key="btn_consol_rips"):
                     if path_consol:
-                        xlsx_data, msg = worker_consolidar_json_xlsx(path_consol)
-                        
+                        with st.spinner("Consolidando JSONs..."):
+                            xlsx_data, msg = worker_consolidar_json_xlsx(path_consol)
+                            
                         if xlsx_data == b"AGENT_DONE":
                              st.success(msg)
                         elif xlsx_data:
                             st.success(msg)
-                            
-                            session_id = st.session_state.get("session_id", "default")
-                            temp_dir = os.path.join("temp_downloads", f"consol_xlsx_{session_id}_{int(time.time())}")
-                            os.makedirs(temp_dir, exist_ok=True)
-                            out_file = os.path.join(temp_dir, "RIPS_Consolidado.xlsx")
-                            
-                            with open(out_file, "wb") as f:
-                                f.write(xlsx_data)
-                                
-#                             render_download_button(out_file, f"dl_consol_xlsx_{int(time.time())}", "📥 Descargar Consolidado", cleanup=not is_native)
+                            st.download_button(
+                                label="📥 Descargar Excel Consolidado",
+                                data=xlsx_data,
+                                file_name="RIPS_Consolidado.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"dl_consol_xlsx_{int(time.time())}"
+                            )
                         else:
                             st.error(msg)
                     else:
@@ -1051,7 +1071,14 @@ def render(container=None):
                             if ok: 
                                 st.success(msg)
                                 # Generate ZIP from the directory
-#                                 render_download_button(path_desconsol, "dl_desconsol", "📦 Descargar JSONs Generados (ZIP)", cleanup=not is_native)
+                                zip_data = create_zip_from_folder(path_desconsol)
+                                st.download_button(
+                                    label="📦 Descargar JSONs Generados (ZIP)",
+                                    data=zip_data,
+                                    file_name=f"JSONs_Desconsolidados_{timestamp}.zip",
+                                    mime="application/zip",
+                                    key="dl_desconsol"
+                                )
                             else: 
                                 st.error(msg)
                         else:
@@ -1072,8 +1099,14 @@ def render(container=None):
                     st.success(f"Proceso finalizado. Archivos modificados: {count}. Total cambios: {changes}.")
                     
                     if count > 0:
-#                         render_download_button(path_cups, "dl_cups_mass", "📦 Descargar JSONs Actualizados (ZIP)", cleanup=not is_native)
-                        pass
+                        zip_data = create_zip_from_folder(path_cups)
+                        st.download_button(
+                            label="📦 Descargar JSONs Actualizados (ZIP)",
+                            data=zip_data,
+                            file_name=f"CUPS_Actualizados_{int(time.time())}.zip",
+                            mime="application/zip",
+                            key="dl_cups_mass"
+                        )
                         
                     if errors:
                         st.error(f"Errores en {len(errors)} archivos.")
@@ -1099,8 +1132,14 @@ def render(container=None):
                     st.success(f"Proceso finalizado. Archivos modificados: {count}. Total cambios: {changes}.")
                     
                     if count > 0:
-#                         render_download_button(path_notes, "dl_notes_mass", "📦 Descargar JSONs Actualizados (ZIP)", cleanup=not is_native)
-                        pass
+                        zip_data = create_zip_from_folder(path_notes)
+                        st.download_button(
+                            label="📦 Descargar JSONs Actualizados (ZIP)",
+                            data=zip_data,
+                            file_name=f"Notas_Actualizadas_{int(time.time())}.zip",
+                            mime="application/zip",
+                            key="dl_notes_mass"
+                        )
                         
                     if errors:
                         st.error(f"Errores en {len(errors)} archivos.")
@@ -1119,8 +1158,14 @@ def render(container=None):
                     st.success(f"Proceso finalizado. {count} archivos limpiados.")
                     
                     if count > 0:
-#                         render_download_button(path_clean, "dl_clean_json", "📦 Descargar JSONs Limpios (ZIP)", cleanup=not is_native)
-                        pass
+                        zip_data = create_zip_from_folder(path_clean)
+                        st.download_button(
+                            label="📦 Descargar JSONs Limpios (ZIP)",
+                            data=zip_data,
+                            file_name=f"JSONs_Limpios_{int(time.time())}.zip",
+                            mime="application/zip",
+                            key="dl_clean_json"
+                        )
                         
                     if errs:
                         st.error(f"Errores en {len(errs)} archivos.")
