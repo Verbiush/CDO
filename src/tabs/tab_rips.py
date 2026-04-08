@@ -239,6 +239,8 @@ def worker_consolidar_json_xlsx(folder_path):
                     
                     if "error" in res:
                         return None, res["error"]
+                    if res.get("status") == "error":
+                        return None, res.get("error", res.get("message", "Error desconocido en el agente."))
                     
                     # Retornamos un marcador especial para indicar que el agente lo hizo
                     return b"AGENT_DONE", f"Consolidación completada. Archivo generado en: {res.get('file_path', 'Desconocido')}"

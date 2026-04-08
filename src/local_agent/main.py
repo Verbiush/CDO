@@ -1077,9 +1077,74 @@ def process_flat_to_excel(path):
     # Stub implementation to prevent crashes
     return {"status": "error", "message": "Función flat_to_excel no implementada en el Agente Local aún."}
 
+def get_val_ci(data_dict, key):
+    if not isinstance(data_dict, dict): return None
+    for k, v in data_dict.items():
+        if k.lower() == key.lower():
+            return v
+    return None
+
 def process_consolidate_json(path):
-    # Stub implementation to prevent crashes
-    return {"status": "error", "message": "Función consolidate_json no implementada en el Agente Local aún."}
+    try:
+        import os
+        import json
+        import pandas as pd
+        
+        if not path or not os.path.isdir(path):
+            return {"status": "error", "error": "La ruta proporcionada no es una carpeta válida."}
+
+        json_files = [f for f in os.listdir(path) if f.lower().endswith('.json')]
+        
+        if not json_files:
+            return {"status": "error", "error": "No hay archivos JSON en la carpeta."}
+        
+        master_header = []
+        master_users = []
+        master_services = {
+            "Consultas": [], "Procedimientos": [], "Urgencias": [], 
+            "Hospitalizacion": [], "RecienNacidos": [], "Medicamentos": [], "OtrosServicios": []
+        }
+        service_map = {
+            "consultas": "Consultas", "procedimientos": "Procedimientos", "urgencias": "Urgencias",
+            "hospitalizacion": "Hospitalizacion", "recienNacidos": "RecienNacidos",
+            "medicamentos": "Medicamentos", "otrosServicios": "OtrosServicios"
+        }
+        
+        for fname in json_files:
+            with open(os.path.join(path, fname), 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            h_info = {
+                "archivo_origen": fname,
+                "numDocumentoIdObligado": data.get("numDocumentoIdObligado"),
+                "numFactura": data.get("numFactura")
+            }
+            master_header.append(h_info)
+            usuarios = data.get("usuarios", [])
+            for u in usuarios:
+                u_clean = {k: v for k, v in u.items() if k != "servicios"}
+                u_clean["archivo_origen"] = fname
+                master_users.append(u_clean)
+                servicios = u.get("servicios", {})
+                for j_key, s_name in service_map.items():
+                    items = get_val_ci(servicios, j_key)
+                    if items:
+                        for item in items:
+                            item_copy = item.copy()
+                            item_copy["archivo_origen"] = fname
+                            item_copy["consecutivoUsuario"] = u.get("consecutivo")
+                            master_services[s_name].append(item_copy)
+        
+        out_file = os.path.join(path, "RIPS_Consolidado_Agente.xlsx")
+        with pd.ExcelWriter(out_file, engine='openpyxl') as writer:
+            pd.DataFrame(master_header).to_excel(writer, sheet_name="Transaccion", index=False)
+            pd.DataFrame(master_users).to_excel(writer, sheet_name="Usuarios", index=False)
+            for s_name, rows in master_services.items():
+                if rows:
+                    pd.DataFrame(rows).to_excel(writer, sheet_name=s_name, index=False)
+                    
+        return {"status": "success", "file_path": out_file, "message": f"Consolidados {len(json_files)} archivos."}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
 
 def process_desconsolidate_json(file_path, dest_folder):
     # Stub implementation to prevent crashes
