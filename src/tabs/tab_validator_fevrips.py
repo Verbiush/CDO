@@ -143,8 +143,8 @@ def dialog_generar_cuv():
     
     st.success("☁️ Modo Docker AWS (Interno) Activo")
     
-    # Usamos HTTP interno (puerto 5000) apuntando a la IP de red local del host de AWS para que Docker lo resuelva
-    default_url = "http://172.17.0.1:5000/api/Validacion/ValidarArchivo"
+    # Usamos HTTPS interno (puerto 9443) basado en la configuración real del docker-compose.yml de FEVRIPS
+    default_url = "https://172.17.0.1:9443/api/Validacion/ValidarArchivo"
     
     # Permitir editar la URL (útil si el host cambia o si se quiere probar localhost)
     api_url = st.text_input("URL Interna API:", value=default_url, help="URL del servicio FEVRIPS.")
@@ -166,9 +166,7 @@ def dialog_generar_cuv():
         default_auth_url = "https://172.17.0.1:9443/api/Auth/LoginSISPRO"
         if api_url and "/api/" in api_url:
             base_url = api_url.split("/api/")[0]
-            # Si el usuario usa el puerto 5000 para validar, usamos el 9443 (https) para el login como indica el manual
-            if ":5000" in base_url:
-                base_url = base_url.replace("http://", "https://").replace(":5000", ":9443")
+            # En el docker compose solo el 9443 está expuesto para todo
             default_auth_url = f"{base_url}/api/Auth/LoginSISPRO"
             
         # Cargar credenciales guardadas si existen
