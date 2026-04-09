@@ -40,8 +40,8 @@ services:
       - "9443:5100"
     environment:
       - ASPNETCORE_ENVIRONMENT=Docker
-      - ASPNETCORE_URLS=http://0.0.0.0:5000;https://0.0.0.0:5100
-      - ConnectionStrings__DefaultConnection=Server=mssql-apilocal;Database=apilocal;User Id=sa;Password=TuContrasenaSegura123!;TrustServerCertificate=True
+      - "ASPNETCORE_URLS=http://0.0.0.0:5000;https://0.0.0.0:5100"
+      - "ConnectionStrings__DefaultConnection=Server=mssql-apilocal;Database=apilocal;User Id=sa;Password=TuContrasenaSegura123!;TrustServerCertificate=True"
       - RedisConnection=redis-apilocal:6379
     depends_on:
       - mssql-apilocal
@@ -49,11 +49,12 @@ services:
     restart: always
 
   mssql-apilocal:
-    image: mcr.microsoft.com/mssql/server:2019-latest
+    image: mcr.microsoft.com/azure-sql-edge:latest
     container_name: mssql-apilocal
     environment:
       - ACCEPT_EULA=Y
       - SA_PASSWORD=TuContrasenaSegura123!
+      - MSSQL_SA_PASSWORD=TuContrasenaSegura123!
     ports:
       - "1433:1433"
     restart: always
