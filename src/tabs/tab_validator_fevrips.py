@@ -163,9 +163,10 @@ def dialog_generar_cuv():
     st.write("🔐 Autenticación SISPRO (Opcional)")
     with st.expander("Configurar Credenciales de Login", expanded=False):
         # Inferir URL de auth basada en la API configurada
-        default_auth_url = "https://localhost:9443/api/Auth/LoginSISPRO"
+        default_auth_url = "http://localhost:5000/api/Auth/LoginSISPRO"
         if api_url and "/api/" in api_url:
             base_url = api_url.split("/api/")[0]
+            # Si el usuario usa localhost:5000, mantenemos HTTP. Si no, usamos lo que haya.
             default_auth_url = f"{base_url}/api/Auth/LoginSISPRO"
             
         # Cargar credenciales guardadas si existen
