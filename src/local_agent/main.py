@@ -1370,12 +1370,20 @@ def process_download_ovida(base_path, records):
             "download.default_directory": base_path,
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
-            "plugins.always_open_pdf_externally": True
+            "plugins.always_open_pdf_externally": True,
+            "safebrowsing.enabled": True,
+            "profile.default_content_settings.popups": 0,
+            "profile.default_content_setting_values.automatic_downloads": 1,
+            "profile.content_settings.exceptions.automatic_downloads.*.setting": 1
         }
         options.add_experimental_option("prefs", prefs)
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--start-maximized")
+        options.add_argument("--ignore-certificate-errors")
+        options.add_argument("--disable-popup-blocking")
+        options.add_argument("--allow-running-insecure-content")
+        options.add_argument("--disable-web-security")
 
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
@@ -1472,12 +1480,20 @@ def process_download_zeus_adjuntos(base_path, records):
             "download.default_directory": base_path,
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
-            "plugins.always_open_pdf_externally": True
+            "plugins.always_open_pdf_externally": True,
+            "safebrowsing.enabled": True,
+            "profile.default_content_settings.popups": 0,
+            "profile.default_content_setting_values.automatic_downloads": 1,
+            "profile.content_settings.exceptions.automatic_downloads.*.setting": 1
         }
         options.add_experimental_option("prefs", prefs)
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--start-maximized")
+        options.add_argument("--ignore-certificate-errors")
+        options.add_argument("--disable-popup-blocking")
+        options.add_argument("--allow-running-insecure-content")
+        options.add_argument("--disable-web-security")
 
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
