@@ -1413,18 +1413,21 @@ def process_download_ovida(base_path, records):
         descargados = 0
         errores = 0
         conflictos = 0
+        log_errores = []
         
         for record in records:
             try:
                 estudio = str(record.get('nro_estudio', '')).strip()
                 if estudio.endswith(".0"): estudio = estudio[:-2]
                 
-                if not estudio or estudio == "nan":
+                rel_path = record.get('rel_path', 'Sin_Carpeta')
+                
+                if not estudio or estudio == "nan" or estudio.lower() == "none":
                     errores += 1
+                    log_errores.append(f"Carpeta '{rel_path}' -> No tiene estudio (celda vacía)")
                     continue
                     
-                rel_path = record.get('rel_path')
-                if not rel_path:
+                if not rel_path or rel_path == 'Sin_Carpeta':
                     continue 
 
                 dest_dir = os.path.abspath(os.path.join(base_path, rel_path))
@@ -1620,10 +1623,22 @@ def process_download_zeus_adjuntos(base_path, records):
                     descargados += 1
                 else:
                     errores += 1
+                    log_errores.append(f"Estudio '{estudio}' (Carpeta '{rel_path}') -> no tiene estudio / no se pudo descargar el documento")
                     
             except Exception as e:
                 errores += 1
+                log_errores.append(f"Estudio '{estudio}' (Carpeta '{rel_path}') -> Error interno: {str(e)}")
                 
+        if log_errores:
+            try:
+                log_path = os.path.join(base_path, "errores_descarga.txt")
+                with open(log_path, "w", encoding="utf-8") as f:
+                    f.write("REPORTE DE DOCUMENTOS NO DESCARGADOS\n")
+                    f.write("====================================\n\n")
+                    for linea in log_errores:
+                        f.write(linea + "\n")
+            except: pass
+            
         driver.quit()
         return {
             "status": "success", 

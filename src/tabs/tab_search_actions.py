@@ -8,6 +8,19 @@ import pandas as pd
 import zipfile
 import tempfile
 import io
+import uuid
+
+def open_action_dialog(dialog_name):
+    # Generar un ID único para la instancia del diálogo y forzar su reapertura
+    st.session_state["action_dialog_instance_id"] = str(uuid.uuid4())[:8]
+    
+    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up")]
+    for k in keys_to_clear:
+        if k in st.session_state:
+            del st.session_state[k]
+            
+    st.session_state["active_action_dialog"] = dialog_name
+    st.rerun()
 
 def close_action_dialog():
     keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up")]
@@ -1568,12 +1581,10 @@ def render(container):
         with col_btns[1]:
             if st.button("▶️ Ejecutar", use_container_width=True, help="Ejecutar acción seleccionada"):
                 action = st.session_state.get("action_radio")
-                st.session_state.active_action_dialog = action
-                st.rerun()
+                open_action_dialog(action)
 
             if st.button("🗑️ Eliminar", use_container_width=True, help="Eliminar archivos seleccionados"):
-                st.session_state.active_action_dialog = "Eliminar"
-                st.rerun()
+                open_action_dialog("Eliminar")
 
         with col_btns[4]:
             if st.button("↩️ Deshacer", use_container_width=True, help="Revertir la última acción"):
@@ -1585,25 +1596,19 @@ def render(container):
     if active_dialog:
         if active_dialog == "Modificar nombre":
             dialogo_modificar_nombres()
-            st.session_state.active_action_dialog = None
         elif active_dialog == "Editar texto":
             dialogo_editar_texto()
-            st.session_state.active_action_dialog = None
         elif active_dialog == "Copiar a carpeta":
             dialogo_copiar_lista()
-            st.session_state.active_action_dialog = None
         elif active_dialog == "Mover a carpeta":
             dialogo_mover_lista()
-            st.session_state.active_action_dialog = None
         elif active_dialog == "Comprimir en ZIP":
             dialogo_comprimir_zip()
-            st.session_state.active_action_dialog = None
         elif active_dialog == "Comprimir individualmente":
             dialogo_comprimir_individual()
-            st.session_state.active_action_dialog = None
         elif active_dialog == "Eliminar":
             dialogo_confirmar_eliminar()
-            st.session_state.active_action_dialog = None
         else:
             funcion_no_implementada(f"Acción: {active_dialog}")
-            st.session_state.active_action_dialog = None
+            if "active_action_dialog" in st.session_state:
+                del st.session_state["active_action_dialog"]
