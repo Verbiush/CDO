@@ -216,6 +216,7 @@ def dialog_generar_cuv():
                     update_user_config_helper("sispro_creds", creds)
                     
                 try:
+                    verify_ssl = True
                     if auth_url.startswith("https://localhost") or auth_url.startswith("https://127.0.0.1"):
                         verify_ssl = False
                         requests.packages.urllib3.disable_warnings()
