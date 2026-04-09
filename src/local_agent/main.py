@@ -1529,22 +1529,28 @@ def process_download_zeus_adjuntos(base_path, records):
         descargados = 0
         errores = 0
         conflictos = 0
+        log_errores = []
         
         for record in records:
             try:
                 estudio = str(record.get('nro_estudio', '')).strip()
                 if estudio.endswith(".0"): estudio = estudio[:-2]
                 
-                if not estudio or estudio == "nan":
-                    errores += 1
-                    continue
-                    
-                rel_path = record.get('rel_path')
-                if not rel_path:
+                rel_path = record.get('rel_path', 'Sin_Carpeta')
+                if not rel_path or rel_path == 'Sin_Carpeta':
                     continue 
 
                 dest_dir = os.path.abspath(os.path.join(base_path, rel_path))
                 os.makedirs(dest_dir, exist_ok=True)
+                
+                if not estudio or estudio == "nan" or estudio.lower() == "none":
+                    errores += 1
+                    log_errores.append(f"Carpeta '{rel_path}' -> No tiene estudio (celda vacía)")
+                    try:
+                        with open(os.path.join(dest_dir, "error no tiene estudio.txt"), "w", encoding="utf-8") as f_err:
+                            f_err.write("El paciente no tiene número de estudio asociado en el Excel.")
+                    except: pass
+                    continue
                 
                 # Configurar el directorio de descarga para este registro usando CDP
                 driver.execute_cdp_cmd("Page.setDownloadBehavior", {
