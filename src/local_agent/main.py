@@ -1461,6 +1461,131 @@ def process_download_ovida(base_path, records):
         if driver: driver.quit()
         return {"status": "error", "message": str(e)}
 
+def process_download_zeus_adjuntos(base_path, records):
+    if webdriver is None:
+        return {"status": "error", "message": "Selenium no instalado en Agente"}
+        
+    driver = None
+    try:
+        options = webdriver.ChromeOptions()
+        prefs = {
+            "download.default_directory": base_path,
+            "download.prompt_for_download": False,
+            "download.directory_upgrade": True,
+            "plugins.always_open_pdf_externally": True
+        }
+        options.add_experimental_option("prefs", prefs)
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--start-maximized")
+
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+        
+        driver.get("https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
+        
+        # Wait for login
+        timeout = 300 
+        start_time = time.time()
+        logged_in = False
+        
+        while time.time() - start_time < timeout:
+             try:
+                 if "App/Vistas" in driver.current_url:
+                     logged_in = True
+                     break
+             except: pass
+             time.sleep(1)
+            
+        if not logged_in:
+            driver.quit()
+            return {"status": "error", "message": "Tiempo de espera agotado (Login)"}
+
+        descargados = 0
+        errores = 0
+        conflictos = 0
+        
+        for record in records:
+            try:
+                estudio = str(record.get('nro_estudio', '')).strip()
+                if estudio.endswith(".0"): estudio = estudio[:-2]
+                
+                if not estudio or estudio == "nan":
+                    errores += 1
+                    continue
+                    
+                rel_path = record.get('rel_path')
+                if not rel_path:
+                    continue 
+
+                dest_dir = os.path.join(base_path, rel_path)
+                os.makedirs(dest_dir, exist_ok=True)
+                
+                # Configurar el directorio de descarga para este registro usando CDP
+                driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+                    "behavior": "allow",
+                    "downloadPath": dest_dir
+                })
+
+                base_url = "https://ovidazs.siesacloud.com/ZeusSalud/ips/App/Vistas/Hc/Adjuntos.php"
+                full_url = f"{base_url}?estudio={estudio}"
+                
+                driver.get(full_url)
+                time.sleep(3)
+                
+                # Clickear enlaces o imágenes que parezcan adjuntos
+                elements_to_click = driver.find_elements(By.XPATH, "//a | //img")
+                clicked_something = False
+                for el in elements_to_click:
+                    try:
+                        href = el.get_attribute("href") or ""
+                        src = el.get_attribute("src") or ""
+                        text = el.text.lower() if hasattr(el, "text") and el.text else ""
+                        
+                        # Buscamos descargar el archivo: usualmente son .pdf, iconos pdf, javascript download
+                        if "adjuntos.php" not in href and ("pdf" in src.lower() or "archivo" in text or "descargar" in text or "javascript" in href.lower() or "archivo" in src.lower()):
+                            # Si es imagen con on_click o a href javascript, o un href a archivo
+                            if el.tag_name == "img":
+                                # click on parent 'a' if any, or directly on img
+                                try:
+                                    el.find_element(By.XPATH, "..").click()
+                                except:
+                                    el.click()
+                            else:
+                                el.click()
+                                
+                            time.sleep(2)
+                            clicked_something = True
+                    except: pass
+                
+                # Wait for download to finish
+                timeout_dl = 20
+                start_dl = time.time()
+                while time.time() - start_dl < timeout_dl:
+                    if any(f.endswith(".crdownload") or f.endswith(".tmp") for f in os.listdir(dest_dir)):
+                        time.sleep(1)
+                    else:
+                        break
+                
+                if clicked_something:
+                    descargados += 1
+                else:
+                    errores += 1
+                    
+            except Exception as e:
+                errores += 1
+                
+        driver.quit()
+        return {
+            "status": "success", 
+            "message": f"Finalizado. Descargados: {descargados}, Errores: {errores}, Conflictos: {conflictos}",
+            "stats": {"descargados": descargados, "errores": errores, "conflictos": conflictos}
+        }
+
+    except Exception as e:
+        if driver: driver.quit()
+        return {"status": "error", "message": str(e)}
+
 def process_edit_text(items, find_text, replace_text):
     count_modified = 0
     errors = []
@@ -2147,6 +2272,18 @@ class AgentWorker:
                 if base_path and records:
                     self.log(f"Descargando historias de OVIDA ({len(records)} registros)")
                     res = process_download_ovida(base_path, records)
+                    result["result"] = res
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (path o records)"}
+
+            elif command == "download_zeus_adjuntos":
+                base_path = params.get("base_path")
+                records = params.get("records", [])
+                
+                if base_path and records:
+                    self.log(f"Descargando adjuntos de ZeusSalud ({len(records)} registros)")
+                    res = process_download_zeus_adjuntos(base_path, records)
                     result["result"] = res
                 else:
                     result["status"] = "ERROR"

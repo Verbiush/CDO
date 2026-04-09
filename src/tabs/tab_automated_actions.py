@@ -5775,6 +5775,74 @@ def dialog_descargar_firmas():
         close_auto_dialog()
 
 @st.dialog("Descargar Historias OVIDA")
+
+@st.dialog("Descargar Adjuntos ZeusSalud")
+def dialog_descargar_zeus_adjuntos():
+    st.write("Automatización de descargas de adjuntos desde ZeusSalud (Requiere Credenciales).")
+    st.warning("Se abrirá un navegador Chrome. Debe iniciar sesión manualmente cuando se indique.")
+    
+    uploaded = st.file_uploader("Archivo Excel (Pacientes)", type=["xlsx", "xls"], key=get_uploader_key("zeus_up"))
+    
+    sheet_name = "Hoja1"
+    cols = []
+    
+    if uploaded:
+        try:
+            file_bytes = uploaded.getvalue()
+            sheet_names = _get_excel_sheet_names(file_bytes)
+            sheet_name = st.selectbox("Seleccione la Hoja", sheet_names, key="zeus_sheet_sel")
+            df_preview = _get_excel_preview(file_bytes, sheet_name, nrows=1)
+            cols = df_preview.columns.tolist()
+        except Exception as e:
+            st.error(f"Error leyendo Excel: {e}")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        if cols:
+            col_estudio = st.selectbox("Columna Estudio", cols, index=cols.index("estudio") if "estudio" in cols else 0, key="zeus_est_sel")
+        else:
+            col_estudio = st.text_input("Columna Estudio", value="estudio", key="zeus_est")
+            
+    with c2:
+        if cols:
+            col_carpeta = st.selectbox("Columna Carpeta Destino", cols, index=cols.index("carpeta") if "carpeta" in cols else 0, key="zeus_carp_sel")
+        else:
+            col_carpeta = st.text_input("Columna Carpeta Destino", value="carpeta", key="zeus_carp")
+        
+    default_path = st.session_state.get("current_path", os.getcwd())
+    download_path = render_path_selector(
+        key="zeus_path",
+        label="Ruta Descarga Base",
+        default_path=default_path
+    )
+    
+    if st.button("Iniciar Descarga Masiva"):
+        if uploaded and sheet_name and col_estudio and col_carpeta and download_path:
+            uploaded.seek(0)
+            try:
+                with st.spinner("Descargando adjuntos de ZeusSalud..."):
+                    result = worker_descargar_zeus_adjuntos(uploaded, sheet_name, col_estudio, col_carpeta, download_path)
+                    
+                    if isinstance(result, dict):
+                        if "error" in result:
+                            st.error(result["error"])
+                        else:
+                            st.success(result.get("message", "Finalizado con éxito."))
+                            st.session_state["pending_close_zeus"] = True
+                    else:
+                        st.success(result)
+                        st.session_state["pending_close_zeus"] = True
+            except Exception as e:
+                st.error(f"Error: {e}")
+        else:
+            st.error("Complete todos los campos.")
+
+    if st.button("Cerrar", key="btn_close_desc_zeus") or st.session_state.get("pending_close_zeus"):
+        if "pending_close_zeus" in st.session_state:
+            del st.session_state["pending_close_zeus"]
+        close_auto_dialog()
+
+@st.dialog("Descargar Historias OVIDA")
 def dialog_descargar_historias_ovida():
     st.write("Automatización de descargas desde OVIDA (Requiere Credenciales).")
     st.warning("Se abrirá un navegador Chrome. Debe iniciar sesión manualmente cuando se indique.")
@@ -5854,6 +5922,74 @@ def dialog_descargar_historias_ovida():
         if "pending_close_ovida" in st.session_state:
             del st.session_state["pending_close_ovida"]
         close_auto_dialog()
+
+
+def worker_descargar_zeus_adjuntos(uploaded_file, sheet_name, col_estudio, col_carpeta, download_path=None, silent_mode=False):
+    is_temp = False
+    if not download_path:
+        is_temp = True
+        session_id = st.session_state.get("session_id", "default")
+        download_path = os.path.join(os.getcwd(), "temp_downloads", f"zeus_{session_id}_{int(time.time())}")
+    
+    is_native_mode = st.session_state.get('force_native_mode', True)
+    
+    if not is_native_mode:
+        os.makedirs(download_path, exist_ok=True)
+
+    try:
+        if isinstance(uploaded_file, bytes):
+            uploaded_file = io.BytesIO(uploaded_file)
+        df = pd.read_excel(uploaded_file, sheet_name=sheet_name)
+    except Exception as e:
+        return {"error": f"Error leyendo Excel: {e}"}
+
+    if is_native_mode:
+        try:
+            records = []
+            for _, row in df.iterrows():
+                try:
+                    estudio = str(row[col_estudio]).strip() if col_estudio in row else ""
+                    carpeta = str(row[col_carpeta]).strip() if col_carpeta in row else ""
+                    records.append({
+                        "nro_estudio": estudio,
+                        "rel_path": carpeta
+                    })
+                except Exception as row_err:
+                    print(f"Error procesando fila para agente: {row_err}")
+                    continue
+
+            if not records:
+                return {"error": "No se encontraron registros válidos para procesar."}
+
+            if not send_command:
+                 return {"error": "Error: Modo nativo activado pero el cliente del agente no está disponible."}
+            
+            username = st.session_state.get("username", "admin")
+            
+            if not silent_mode:
+                st.info(f"Enviando tarea al agente local para descargar adjuntos de {len(records)} pacientes...")
+                
+            task_id = send_command(username, "download_zeus_adjuntos", {
+                "base_path": download_path,
+                "records": records
+            })
+            
+            if task_id:
+                status_placeholder = st.empty()
+                with st.spinner("Ejecutando en Agente Local..."):
+                    res = wait_for_result(task_id, timeout=3600)
+                status_placeholder.empty()
+                
+                if res and "error" in res:
+                    return {"error": res["error"]}
+                
+                return res
+            else:
+                return {"error": "No se pudo conectar con el Agente Local."}
+        except Exception as e:
+            return {"error": f"Fallo en ejecución de Agente Local: {e}"}
+    else:
+        return {"error": "Esta función solo está disponible con el Agente Local activado."}
 
 def worker_organizar_facturas_por_pdf_avanzado(carpeta_destinos, carpeta_origen, silent_mode=False):
     try:
@@ -8090,8 +8226,13 @@ def render():
             if st.button("⬇️ Descargar Firmas", key="btn_cr_sigs"):
                 open_auto_dialog("descargar_firmas")
                 
+            
             if st.button("⬇️ Descargar Hist. OVIDA", key="btn_cr_ovida"):
                 open_auto_dialog("descargar_ovida")
+                
+            if st.button("⬇️ Descargar Adjuntos Zeus", key="btn_cr_zeus"):
+                open_auto_dialog("descargar_zeus")
+
                 
             if st.button("✒️ Crear Firma Digital", key="btn_cr_dig_sig"):
                 open_auto_dialog("crear_firma")
@@ -8109,8 +8250,12 @@ def render():
             dialog_crear_carpetas_excel()
         elif active_auto_dialog == "descargar_firmas":
             dialog_descargar_firmas()
+        
         elif active_auto_dialog == "descargar_ovida":
             dialog_descargar_historias_ovida()
+        elif active_auto_dialog == "descargar_zeus":
+            dialog_descargar_zeus_adjuntos()
+
         elif active_auto_dialog == "crear_firma":
             dialog_crear_firma()
         elif active_auto_dialog == "distribuir_base":
