@@ -1630,6 +1630,10 @@ def process_download_zeus_adjuntos(base_path, records):
                 else:
                     errores += 1
                     log_errores.append(f"Estudio '{estudio}' (Carpeta '{rel_path}') -> no tiene estudio / no se pudo descargar el documento")
+                    try:
+                        with open(os.path.join(dest_dir, "error no tiene estudio.txt"), "w", encoding="utf-8") as f_err:
+                            f_err.write("No se encontraron archivos adjuntos para descargar en este estudio.")
+                    except: pass
                     
             except Exception as e:
                 errores += 1
