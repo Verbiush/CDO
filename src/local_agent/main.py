@@ -1558,11 +1558,12 @@ def process_download_zeus_adjuntos(base_path, records):
                         src = el.get_attribute("src") or ""
                         text = el.text.lower() if hasattr(el, "text") and el.text else ""
                         
-                        # Buscamos descargar el archivo: usualmente son .pdf, iconos pdf, javascript download
+                        # Buscamos descargar el archivo
                         if "adjuntos.php" not in href and ("pdf" in src.lower() or "archivo" in text or "descargar" in text or "javascript" in href.lower() or "archivo" in src.lower()):
+                            handles_before = driver.window_handles
+                            
                             # Si es imagen con on_click o a href javascript, o un href a archivo
                             if el.tag_name == "img":
-                                # click on parent 'a' if any, or directly on img
                                 try:
                                     el.find_element(By.XPATH, "..").click()
                                 except:
@@ -1572,16 +1573,34 @@ def process_download_zeus_adjuntos(base_path, records):
                                 
                             time.sleep(2)
                             clicked_something = True
+                            
+                            handles_after = driver.window_handles
+                            if len(handles_after) > len(handles_before):
+                                new_window = [h for h in handles_after if h not in handles_before][0]
+                                driver.switch_to.window(new_window)
+                                
+                                # Set CDP behavior for the new window
+                                driver.execute_cdp_cmd("Page.setDownloadBehavior", {
+                                    "behavior": "allow",
+                                    "downloadPath": dest_dir
+                                })
+                                time.sleep(1)
+                                
+                            # Wait for download to finish
+                            timeout_dl = 20
+                            start_dl = time.time()
+                            while time.time() - start_dl < timeout_dl:
+                                if any(f.endswith(".crdownload") or f.endswith(".tmp") for f in os.listdir(dest_dir)):
+                                    time.sleep(1)
+                                else:
+                                    break
+                            
+                            # Cierra la pestaña si se abrió una nueva
+                            if len(driver.window_handles) > len(handles_before):
+                                driver.close()
+                                driver.switch_to.window(handles_before[0])
+                                
                     except: pass
-                
-                # Wait for download to finish
-                timeout_dl = 20
-                start_dl = time.time()
-                while time.time() - start_dl < timeout_dl:
-                    if any(f.endswith(".crdownload") or f.endswith(".tmp") for f in os.listdir(dest_dir)):
-                        time.sleep(1)
-                    else:
-                        break
                 
                 if clicked_something:
                     descargados += 1
