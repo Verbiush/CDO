@@ -36,11 +36,11 @@ services:
     image: fevripsacr.azurecr.io/minsalud.fevrips.apilocal:latest
     container_name: fevrips-api
     ports:
-      - "5000:80"
-      - "9443:443"
+      - "5000:5000"
+      - "9443:5100"
     environment:
       - ASPNETCORE_ENVIRONMENT=Docker
-      - "ASPNETCORE_URLS=http://+:80;https://+:443"
+      - "ASPNETCORE_URLS=http://+:5000;https://+:5100"
       - "ConnectionStrings__DefaultConnection=Server=mssql-apilocal;Database=apilocal;User Id=sa;Password=TuContrasenaSegura123!;TrustServerCertificate=True"
       - RedisConnection=redis-apilocal:6379
     depends_on:

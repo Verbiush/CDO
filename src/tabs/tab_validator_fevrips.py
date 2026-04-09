@@ -143,8 +143,8 @@ def dialog_generar_cuv():
     
     st.success("☁️ Modo Docker AWS (Interno) Activo")
     
-    # Usamos HTTP interno (puerto 80) por defecto para evitar errores SSL (UNEXPECTED_EOF_WHILE_READING)
-    default_url = "http://fevrips-api:80/api/Validacion/ValidarArchivo"
+    # Usamos HTTP interno (puerto 5000) por defecto para evitar errores SSL (UNEXPECTED_EOF_WHILE_READING)
+    default_url = "http://fevrips-api:5000/api/Validacion/ValidarArchivo"
     
     # Permitir editar la URL (útil si el host cambia o si se quiere probar localhost)
     api_url = st.text_input("URL Interna API:", value=default_url, help="URL del servicio FEVRIPS.")
@@ -163,7 +163,7 @@ def dialog_generar_cuv():
     st.write("🔐 Autenticación SISPRO (Opcional)")
     with st.expander("Configurar Credenciales de Login", expanded=False):
         # Inferir URL de auth basada en la API configurada
-        default_auth_url = "http://fevrips-api:80/api/Auth/LoginSISPRO"
+        default_auth_url = "http://fevrips-api:5000/api/Auth/LoginSISPRO"
         if api_url and "/api/" in api_url:
             base_url = api_url.split("/api/")[0]
             # En el docker compose solo el 9443 está expuesto para todo
