@@ -143,8 +143,8 @@ def dialog_generar_cuv():
     
     st.success("☁️ Modo Docker AWS (Interno) Activo")
     
-    # Usamos HTTP interno (puerto 5000) por defecto
-    default_url = "http://fevrips-api:5000/api/Validacion/ValidarArchivo"
+    # Usamos HTTP interno (puerto 5000) por defecto a localhost
+    default_url = "http://localhost:5000/api/Validacion/ValidarArchivo"
     
     # Permitir editar la URL (útil si el host cambia o si se quiere probar localhost)
     api_url = st.text_input("URL Interna API:", value=default_url, help="URL del servicio FEVRIPS.")
@@ -154,8 +154,8 @@ def dialog_generar_cuv():
         try:
             socket.gethostbyname("fevrips-api")
         except socket.gaierror:
-            st.warning("⚠️ No se puede resolver el host 'fevrips-api'.")
-            st.info("💡 Asegúrese de que el servicio 'fevrips-api' esté configurado y corriendo en docker-compose.")
+            st.warning("⚠️ No se puede resolver el host 'fevrips-api'. Intente usar 'localhost' o la IP pública del servidor en su lugar.")
+            st.info("💡 Sugerencia: Cambie 'fevrips-api' por 'localhost' en la caja de texto superior.")
 
     st.markdown("---")
 
