@@ -47,8 +47,11 @@ except ImportError:
         send_command = None
         wait_for_result = None
 
-# Force reload to ensure latest DB logic is used
-importlib.reload(db_gestion)
+try:
+    # Force reload to ensure latest DB logic is used
+    importlib.reload(db_gestion)
+except ImportError:
+    pass
 
 def get_google_font(font_name, size):
     """Download and load a Google Font."""
