@@ -5774,8 +5774,6 @@ def dialog_descargar_firmas():
             del st.session_state["pending_close_firmas"]
         close_auto_dialog()
 
-@st.dialog("Descargar Historias OVIDA")
-
 @st.dialog("Descargar Adjuntos ZeusSalud")
 def dialog_descargar_zeus_adjuntos():
     st.write("Automatización de descargas de adjuntos desde ZeusSalud (Requiere Credenciales).")
