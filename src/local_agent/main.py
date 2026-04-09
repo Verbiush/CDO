@@ -1371,7 +1371,8 @@ def process_download_ovida(base_path, records):
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
             "plugins.always_open_pdf_externally": True,
-            "safebrowsing.enabled": True,
+            "safebrowsing.enabled": False,
+            "safebrowsing.disable_download_protection": True,
             "profile.default_content_settings.popups": 0,
             "profile.default_content_setting_values.automatic_downloads": 1,
             "profile.content_settings.exceptions.automatic_downloads.*.setting": 1
@@ -1384,6 +1385,8 @@ def process_download_ovida(base_path, records):
         options.add_argument("--disable-popup-blocking")
         options.add_argument("--allow-running-insecure-content")
         options.add_argument("--disable-web-security")
+        options.add_argument("--safebrowsing-disable-download-protection")
+        options.add_argument("--safebrowsing-disable-extension-blacklist")
 
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
@@ -1424,7 +1427,7 @@ def process_download_ovida(base_path, records):
                 if not rel_path:
                     continue 
 
-                dest_dir = os.path.join(base_path, rel_path)
+                dest_dir = os.path.abspath(os.path.join(base_path, rel_path))
                 os.makedirs(dest_dir, exist_ok=True)
                 final_path = os.path.join(dest_dir, f"HC_{estudio}.pdf")
                 
@@ -1481,7 +1484,8 @@ def process_download_zeus_adjuntos(base_path, records):
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
             "plugins.always_open_pdf_externally": True,
-            "safebrowsing.enabled": True,
+            "safebrowsing.enabled": False,
+            "safebrowsing.disable_download_protection": True,
             "profile.default_content_settings.popups": 0,
             "profile.default_content_setting_values.automatic_downloads": 1,
             "profile.content_settings.exceptions.automatic_downloads.*.setting": 1
@@ -1494,6 +1498,8 @@ def process_download_zeus_adjuntos(base_path, records):
         options.add_argument("--disable-popup-blocking")
         options.add_argument("--allow-running-insecure-content")
         options.add_argument("--disable-web-security")
+        options.add_argument("--safebrowsing-disable-download-protection")
+        options.add_argument("--safebrowsing-disable-extension-blacklist")
 
         service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=options)
@@ -1534,7 +1540,7 @@ def process_download_zeus_adjuntos(base_path, records):
                 if not rel_path:
                     continue 
 
-                dest_dir = os.path.join(base_path, rel_path)
+                dest_dir = os.path.abspath(os.path.join(base_path, rel_path))
                 os.makedirs(dest_dir, exist_ok=True)
                 
                 # Configurar el directorio de descarga para este registro usando CDP
@@ -1586,7 +1592,14 @@ def process_download_zeus_adjuntos(base_path, records):
                                 })
                                 time.sleep(1)
                                 
-                            # Wait for download to finish
+                            # Esperar primero a que el archivo comience a descargarse
+                            start_dl = time.time()
+                            while time.time() - start_dl < 5:
+                                if any(f.endswith(".crdownload") or f.endswith(".tmp") for f in os.listdir(dest_dir)):
+                                    break
+                                time.sleep(0.5)
+
+                            # Luego, esperar hasta 20s a que termine de descargarse
                             timeout_dl = 20
                             start_dl = time.time()
                             while time.time() - start_dl < timeout_dl:
@@ -1595,7 +1608,8 @@ def process_download_zeus_adjuntos(base_path, records):
                                 else:
                                     break
                             
-                            # Cierra la pestaña si se abrió una nueva
+                            # Cierra la pestaña si se abrió una nueva, dando un tiempo extra
+                            time.sleep(1)
                             if len(driver.window_handles) > len(handles_before):
                                 driver.close()
                                 driver.switch_to.window(handles_before[0])
