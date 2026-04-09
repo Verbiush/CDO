@@ -143,8 +143,8 @@ def dialog_generar_cuv():
     
     st.success("☁️ Modo Docker AWS (Interno) Activo")
     
-    # Usamos HTTP interno (puerto 5000) por defecto a localhost
-    default_url = "http://localhost:5000/api/Validacion/ValidarArchivo"
+    # Usamos HTTP interno (puerto 5000) apuntando a la IP de red local del host de AWS para que Docker lo resuelva
+    default_url = "http://172.17.0.1:5000/api/Validacion/ValidarArchivo"
     
     # Permitir editar la URL (útil si el host cambia o si se quiere probar localhost)
     api_url = st.text_input("URL Interna API:", value=default_url, help="URL del servicio FEVRIPS.")
@@ -163,7 +163,7 @@ def dialog_generar_cuv():
     st.write("🔐 Autenticación SISPRO (Opcional)")
     with st.expander("Configurar Credenciales de Login", expanded=False):
         # Inferir URL de auth basada en la API configurada
-        default_auth_url = "https://localhost:9443/api/Auth/LoginSISPRO"
+        default_auth_url = "https://172.17.0.1:9443/api/Auth/LoginSISPRO"
         if api_url and "/api/" in api_url:
             base_url = api_url.split("/api/")[0]
             # Si el usuario usa el puerto 5000 para validar, usamos el 9443 (https) para el login como indica el manual
@@ -219,7 +219,7 @@ def dialog_generar_cuv():
                     
                 try:
                     verify_ssl = True
-                    if auth_url.startswith("https://localhost") or auth_url.startswith("https://127.0.0.1"):
+                    if auth_url.startswith("https://localhost") or auth_url.startswith("https://127.0.0.1") or auth_url.startswith("https://172.17.0.1"):
                         verify_ssl = False
                         requests.packages.urllib3.disable_warnings()
                         
