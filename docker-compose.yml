@@ -37,8 +37,30 @@ services:
     container_name: fevrips-api
     ports:
       - "5000:5000"
-      - "5100:5100"
+      - "9443:5100"
     environment:
       - ASPNETCORE_ENVIRONMENT=Docker
-      - ASPNETCORE_URLS=http://0.0.0.0:5000
+      - ASPNETCORE_URLS=http://0.0.0.0:5000;https://0.0.0.0:5100
+      - ConnectionStrings__DefaultConnection=Server=mssql-apilocal;Database=apilocal;User Id=sa;Password=TuContrasenaSegura123!;TrustServerCertificate=True
+      - RedisConnection=redis-apilocal:6379
+    depends_on:
+      - mssql-apilocal
+      - redis-apilocal
+    restart: always
+
+  mssql-apilocal:
+    image: mcr.microsoft.com/mssql/server:2019-latest
+    container_name: mssql-apilocal
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=TuContrasenaSegura123!
+    ports:
+      - "1433:1433"
+    restart: always
+
+  redis-apilocal:
+    image: redis:latest
+    container_name: redis-apilocal
+    ports:
+      - "6379:6379"
     restart: always
