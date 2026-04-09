@@ -217,7 +217,10 @@ def dialog_generar_cuv():
                     
                 try:
                     verify_ssl = True
-                    if auth_url.startswith("https://localhost") or auth_url.startswith("https://127.0.0.1") or auth_url.startswith("https://172.17.0.1"):
+                    # Log intent
+                    print(f"Intentando login en: {auth_url}")
+                    
+                    if auth_url.startswith("https://localhost") or auth_url.startswith("https://127.0.0.1") or auth_url.startswith("https://172.17.0.1") or "fevrips-api" in auth_url:
                         verify_ssl = False
                         requests.packages.urllib3.disable_warnings()
                         
@@ -230,6 +233,9 @@ def dialog_generar_cuv():
                     }
                     
                     with st.spinner("Autenticando..."):
+                        # Log intent
+                        print(f"Intentando login en: {auth_url}")
+                        
                         r = requests.post(auth_url, json=payload, verify=verify_ssl, timeout=10)
                         
                         if r.status_code == 200:
@@ -302,7 +308,7 @@ def dialog_generar_cuv():
                     login_url = f"{base_url}/api/Auth/LoginSISPRO"
                     
                 verify_ssl_auto = True
-                if login_url.startswith("https://localhost") or login_url.startswith("https://127.0.0.1") or login_url.startswith("https://172.17.0.1"):
+                if login_url.startswith("https://localhost") or login_url.startswith("https://127.0.0.1") or login_url.startswith("https://172.17.0.1") or "fevrips-api" in login_url:
                     verify_ssl_auto = False
                     requests.packages.urllib3.disable_warnings()
 
