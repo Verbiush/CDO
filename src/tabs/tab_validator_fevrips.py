@@ -294,8 +294,19 @@ def dialog_generar_cuv():
                     "nit": "900438792",
                     "tipoUsuario": "RE"
                 }
+                
+                # Usar la base de la URL de API actual para el auto-login
                 login_url = default_auth_url
-                r = requests.post(login_url, json=login_payload, timeout=10)
+                if api_url and "/api/" in api_url:
+                    base_url = api_url.split("/api/")[0]
+                    login_url = f"{base_url}/api/Auth/LoginSISPRO"
+                    
+                verify_ssl_auto = True
+                if login_url.startswith("https://localhost") or login_url.startswith("https://127.0.0.1") or login_url.startswith("https://172.17.0.1"):
+                    verify_ssl_auto = False
+                    requests.packages.urllib3.disable_warnings()
+
+                r = requests.post(login_url, json=login_payload, verify=verify_ssl_auto, timeout=20)
                 if r.status_code == 200:
                     resp_json = r.json()
                     token = resp_json.get("token") or resp_json.get("Token")
