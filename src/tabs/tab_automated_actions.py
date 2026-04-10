@@ -517,7 +517,7 @@ def worker_consolidar_subcarpetas(root_path, silent_mode=False, return_zip=False
     is_native_mode = False
     if not os.environ.get("CDO_AGENT_MODE") == "1":
         try:
-            is_native_mode = st.session_state.get('force_native_mode', True)
+            is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
         except Exception:
             pass
 
@@ -623,7 +623,7 @@ def worker_consolidar_subcarpetas(root_path, silent_mode=False, return_zip=False
     return {"message": msg}
 
 def worker_firmar_docx_con_imagen_masivo(base_path, docx_filename, signature_filename, silent_mode=False, return_zip=False):
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
     
     try:
         if is_native_mode:
@@ -896,7 +896,7 @@ def worker_crear_carpetas_desde_excel(excel_path, sheet_name, col_idx, target_fo
         
     try:
         is_temp = False
-        is_native_mode = st.session_state.get('force_native_mode', True)
+        is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
 
         if not target_folder:
             is_temp = True
@@ -1838,7 +1838,7 @@ def worker_desconsolidar_xlsx_json(file_obj, dest_folder, silent_mode=False):
 # --- WORKERS: EXCEL / RENAMING ---
 
 def worker_aplicar_renombrado_excel(excel_path, folder_path, silent_mode=False, return_zip=False):
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
 
     try:
         df = pd.read_excel(excel_path)
@@ -2025,7 +2025,7 @@ def worker_anadir_sufijo_excel(excel_path, sheet_name, col_folder, col_suffix, r
         if not data_rows:
             return "No se encontraron datos válidos."
 
-        is_native_mode = st.session_state.get('force_native_mode', True)
+        is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
         
         if is_native_mode:
              if not send_command:
@@ -2321,7 +2321,7 @@ def _create_column_map_from_headers(df):
 
 def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_filter=False, silent_mode=False):
     try:
-        is_native_mode = st.session_state.get('force_native_mode', True)
+        is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
         should_delegate = is_native_mode and not silent_mode and _should_delegate(root_path)
         
         if isinstance(uploaded_file, bytes): uploaded_file = io.BytesIO(uploaded_file)
@@ -2475,7 +2475,7 @@ def worker_modificar_docx_completo(uploaded_file, sheet_name, root_path, use_fil
 def worker_crear_carpetas_excel_avanzado(uploaded_file, sheet_name, col_name, base_path, use_filter=False, silent_mode=False):
     try:
         # --- NATIVE MODE CHECK ---
-        is_native_mode = st.session_state.get('force_native_mode', True)
+        is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
 
         if not is_native_mode and not os.path.isdir(base_path):
             return "La ruta base seleccionada no es válida."
@@ -2646,7 +2646,7 @@ def worker_anadir_sufijo_desde_excel(uploaded_file, sheet_name, col_folder, col_
             uploaded_file.seek(0)
 
         # --- NATIVE MODE CHECK ---
-        is_native_mode = st.session_state.get('force_native_mode', True)
+        is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
 
         if use_filter:
             # Re-read file if seekable, otherwise assuming it's fresh or handled
@@ -2919,7 +2919,7 @@ def worker_txt_a_json_masivo(folder_path, silent_mode=False):
 
 def worker_analisis_carpetas(root_path, silent_mode=False):
     # --- Agent Delegation ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
     if is_native_mode and not silent_mode and _should_delegate(root_path):
         if not silent_mode: st.info(f"Delegando análisis de carpetas al Agente Local...")
         try:
@@ -3248,7 +3248,7 @@ def worker_renombrar_mapeo_excel(uploaded_file, sheet_name, col_src, col_dst, us
             for _, row in df.iterrows():
                 if pd.notna(row[col_src]) and pd.notna(row[col_dst]):
                     data_rows.append((str(row[col_src]).strip(), str(row[col_dst]).strip()))
-        is_native_mode = st.session_state.get('force_native_mode', True)
+        is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
         if is_native_mode:
             if not send_command:
                 return "Error: Modo nativo activado pero cliente agente no disponible."
@@ -3607,7 +3607,7 @@ def worker_descargar_historias_hospitalizacion_ovida(uploaded_file, sheet_name, 
     driver = None
     
     # --- NATIVE MODE CHECK ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
     
     try:
         # Determine output directory
@@ -4108,7 +4108,7 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
     if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis HC al Agente Local...")
         try:
@@ -4234,7 +4234,7 @@ def worker_leer_pdf_retefuente(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
     if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis Retefuente al Agente Local...")
         try:
@@ -4407,7 +4407,7 @@ def worker_analisis_emssanar(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
     if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis Emssanar al Agente Local...")
         try:
@@ -4663,7 +4663,7 @@ def worker_analisis_fomag(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
     if is_native_mode and not silent_mode:
         if not silent_mode: st.info(f"Delegando análisis Fomag al Agente Local...")
         try:
@@ -4977,7 +4977,7 @@ def worker_analisis_sos(file_list, silent_mode=False, use_ai=False, api_key=None
     Soporta modo 'Studio' (Reglas/PDFPlumber) y opcionalmente IA.
     """
     # --- Agent Delegation ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
     if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis SOS al Agente Local...")
         try:
@@ -5133,7 +5133,7 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
     if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis Nueva EPS al Agente Local...")
         try:
@@ -5230,7 +5230,7 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
     if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis de Radicados Nueva EPS al Agente Local...")
         try:
@@ -5369,7 +5369,7 @@ def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
     if is_native_mode and not silent_mode and _should_delegate(file_list):
         if not silent_mode: st.info(f"Delegando análisis Sanitas al Agente Local...")
         try:
@@ -5602,7 +5602,7 @@ def worker_descargar_historias_ovida(uploaded_file, sheet_name, col_estudio, col
         download_path = os.path.join(os.getcwd(), "temp_downloads", f"ovida_{session_id}_{int(time.time())}")
     
     # --- NATIVE MODE CHECK ---
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
     
     if is_native_mode:
         # En modo nativo, download_path debe ser una ruta válida en la máquina del cliente
@@ -6068,7 +6068,7 @@ def worker_descargar_zeus_adjuntos(uploaded_file, sheet_name, col_estudio, col_c
         session_id = st.session_state.get("session_id", "default")
         download_path = os.path.join(os.getcwd(), "temp_downloads", f"zeus_{session_id}_{int(time.time())}")
     
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
     
     if not is_native_mode:
         os.makedirs(download_path, exist_ok=True)
@@ -6381,7 +6381,7 @@ def worker_xlsx_evento_a_json_masivo(archivo_excel, carpeta_destino, silent_mode
 def worker_autorizacion_docx_desde_excel(carpeta_origen, archivo_excel, sheet_name, col_carpeta, col_auth, use_filter=False, silent_mode=False):
     if not carpeta_origen or not archivo_excel: return "Rutas inválidas."
     
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
     
     try:
         if isinstance(archivo_excel, bytes): archivo_excel = io.BytesIO(archivo_excel)
@@ -6525,7 +6525,7 @@ def worker_autorizacion_docx_desde_excel(carpeta_origen, archivo_excel, sheet_na
 def worker_regimen_docx_desde_excel(carpeta_origen, archivo_excel, sheet_name, col_carpeta, col_regimen, use_filter=False, silent_mode=False):
     if not carpeta_origen or not archivo_excel: return "Rutas inválidas."
     
-    is_native_mode = st.session_state.get('force_native_mode', True)
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
     
     try:
         if isinstance(archivo_excel, bytes): archivo_excel = io.BytesIO(archivo_excel)
@@ -7662,7 +7662,7 @@ def dialog_exportar_renombrado():
     if st.button("Generar Excel"):
         if folder and dest_path:
             try:
-                is_native_mode = st.session_state.get('force_native_mode', True)
+                is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
                 
                 data = []
                 
@@ -8207,7 +8207,7 @@ def render():
             default_path=default_path
         )
         
-        is_native_mode = st.session_state.get('force_native_mode', True)
+        is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
         
         # Obtener lista de PDFs para análisis (Recursivo)
         files_pdf = []
