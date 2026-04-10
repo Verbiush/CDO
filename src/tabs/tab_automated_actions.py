@@ -5249,10 +5249,11 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
                     row[key] = ""
             data_res.append(row)
         except Exception as e:
+            print(f"ERROR procesando archivo {os.path.basename(file_path)}: {e}")
             if not silent_mode and _st and hasattr(_st, "warning"): _st.warning(f"Error en {os.path.basename(file_path)}: {e}")
             data_res.append({'Archivo': os.path.basename(file_path), 'Error': str(e)})
 
-    if data_res:
+    print(f"DEBUG: Finalizado análisis de archivos. Encontrados {len(data_res)} registros. Generando Excel...")
         # Define column order as in original
         column_order = ['Archivo', 'Afiliado', 'N° Autorización', 'Autorizada el', 'Descripción Servicio', 'Info de Pago']
         # Ensure all columns exist
@@ -5329,7 +5330,9 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
     if not silent_mode and _st and hasattr(_st, "progress"):
         progress_bar = _st.progress(0, text="Analizando Radicados Nueva EPS...")
 
+    print(f"DEBUG: Iniciando iteración de {len(file_list)} archivos de Radicados Nueva EPS.")
     for i, file_path in enumerate(file_list):
+        print(f"DEBUG: Analizando archivo {i+1}/{len(file_list)}: {os.path.basename(file_path)}")
         if not silent_mode and progress_bar:
             progress_bar.progress((i + 1) / len(file_list), text=f"Procesando: {os.path.basename(file_path)}")
 
@@ -5367,6 +5370,8 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
             match = re.search(r"Usuario radica\s+([^\n]+)", full_text, re.IGNORECASE)
             if match: header_info["Usuario radica"] = match.group(1).strip()
 
+            print(f"DEBUG: Cabecera extraída de {os.path.basename(file_path)}")
+
             lines = full_text.split('\n')
             in_table = False
             found_rows = False
@@ -5396,6 +5401,7 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
                         found_rows = True
                         
             if not found_rows and any(v for k,v in header_info.items() if k != "Archivo"):
+                print(f"DEBUG: No se hallaron filas en tabla, pero sí cabecera. ({os.path.basename(file_path)})")
                 row = header_info.copy()
                 row["N. Radicado"] = ""
                 row["N. Factura"] = ""
@@ -5403,9 +5409,11 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
                 row["Valor Radicado Factura"] = ""
                 data_res.append(row)
             elif not found_rows:
+                print(f"DEBUG: No se halló cabecera ni filas. ({os.path.basename(file_path)})")
                 data_res.append({"Archivo": os.path.basename(file_path), "Error": "No se encontró información de radicación."})
 
         except Exception as e:
+            print(f"ERROR en archivo {os.path.basename(file_path)}: {e}")
             if not silent_mode and _st and hasattr(_st, "warning"): _st.warning(f"Error en {os.path.basename(file_path)}: {e}")
             data_res.append({'Archivo': os.path.basename(file_path), 'Error': str(e)})
 
@@ -5424,6 +5432,9 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False)
+            
+        print(f"DEBUG: Generado Excel en memoria para Radicados Nueva EPS")
+        
         return {
             "files": [{
                 "name": "Analisis_Radicados_NuevaEPS.xlsx",
@@ -5432,6 +5443,8 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
             }],
             "message": f"Procesados: {len(data_res)} registros extraídos."
         }
+        
+    print("DEBUG: Terminó el análisis pero data_res estaba vacío.")
     return None
 
 def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
