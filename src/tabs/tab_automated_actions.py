@@ -5254,6 +5254,7 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
             data_res.append({'Archivo': os.path.basename(file_path), 'Error': str(e)})
 
     print(f"DEBUG: Finalizado análisis de archivos. Encontrados {len(data_res)} registros. Generando Excel...")
+    if data_res:
         # Define column order as in original
         column_order = ['Archivo', 'Afiliado', 'N° Autorización', 'Autorizada el', 'Descripción Servicio', 'Info de Pago']
         # Ensure all columns exist
