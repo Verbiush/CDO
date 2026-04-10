@@ -4108,9 +4108,15 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
+    is_native_mode = False
+    try:
+        if not silent_mode and hasattr(st, "session_state"):
+            is_native_mode = st.session_state.get('force_native_mode', True)
+    except Exception:
+        pass
+
     if is_native_mode and not silent_mode and _should_delegate(file_list):
-        if not silent_mode: st.info(f"Delegando análisis HC al Agente Local...")
+        if hasattr(st, "info"): st.info(f"Delegando análisis HC al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
             username = st.session_state.get("username", "admin")
@@ -4234,9 +4240,15 @@ def worker_leer_pdf_retefuente(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
+    is_native_mode = False
+    try:
+        if not silent_mode and hasattr(st, "session_state"):
+            is_native_mode = st.session_state.get('force_native_mode', True)
+    except Exception:
+        pass
+
     if is_native_mode and not silent_mode and _should_delegate(file_list):
-        if not silent_mode: st.info(f"Delegando análisis Retefuente al Agente Local...")
+        if hasattr(st, "info"): st.info(f"Delegando análisis Retefuente al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
             username = st.session_state.get("username", "admin")
@@ -4407,9 +4419,15 @@ def worker_analisis_emssanar(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
+    is_native_mode = False
+    try:
+        if not silent_mode and hasattr(st, "session_state"):
+            is_native_mode = st.session_state.get('force_native_mode', True)
+    except Exception:
+        pass
+
     if is_native_mode and not silent_mode and _should_delegate(file_list):
-        if not silent_mode: st.info(f"Delegando análisis Emssanar al Agente Local...")
+        if hasattr(st, "info"): st.info(f"Delegando análisis Emssanar al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
             username = st.session_state.get("username", "admin")
@@ -4663,9 +4681,15 @@ def worker_analisis_fomag(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
+    is_native_mode = False
+    try:
+        if not silent_mode and hasattr(st, "session_state"):
+            is_native_mode = st.session_state.get('force_native_mode', True)
+    except Exception:
+        pass
+
     if is_native_mode and not silent_mode:
-        if not silent_mode: st.info(f"Delegando análisis Fomag al Agente Local...")
+        if hasattr(st, "info"): st.info(f"Delegando análisis Fomag al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
             username = st.session_state.get("username", "admin")
@@ -5230,9 +5254,15 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
+    is_native_mode = False
+    try:
+        if not silent_mode and hasattr(st, "session_state"):
+            is_native_mode = st.session_state.get('force_native_mode', True)
+    except Exception:
+        pass
+        
     if is_native_mode and not silent_mode and _should_delegate(file_list):
-        if not silent_mode and hasattr(st, "info"): st.info(f"Delegando análisis de Radicados Nueva EPS al Agente Local...")
+        if hasattr(st, "info"): st.info(f"Delegando análisis de Radicados Nueva EPS al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
             username = st.session_state.get("username", "admin")
@@ -5369,9 +5399,15 @@ def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
     Retorna bytes de Excel.
     """
     # --- Agent Delegation ---
-    is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
+    is_native_mode = False
+    try:
+        if not silent_mode and hasattr(st, "session_state"):
+            is_native_mode = st.session_state.get('force_native_mode', True)
+    except Exception:
+        pass
+
     if is_native_mode and not silent_mode and _should_delegate(file_list):
-        if not silent_mode: st.info(f"Delegando análisis Sanitas al Agente Local...")
+        if hasattr(st, "info"): st.info(f"Delegando análisis Sanitas al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
             username = st.session_state.get("username", "admin")
