@@ -6,14 +6,12 @@ import pandas as pd
 import json
 
 
-@st.cache_data(show_spinner=False, max_entries=5)
 def _get_excel_sheet_names(file_bytes):
     import pandas as pd
     import io
     xls = pd.ExcelFile(io.BytesIO(file_bytes))
     return xls.sheet_names
 
-@st.cache_data(show_spinner=False, max_entries=10)
 def _get_excel_preview(file_bytes, sheet_name, nrows=5):
     import pandas as pd
     import io
@@ -180,7 +178,10 @@ try:
 except ImportError:
     pyperclip = None
 
-import google.generativeai as genai
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
 
 # --- Agent Delegation Helpers ---
 def is_streamlit_available():
