@@ -5278,11 +5278,12 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
         except Exception:
             pass
             
+    # Solo delegar si no estamos ya en el backend (silent_mode)
     if is_native_mode and not silent_mode and _should_delegate(file_list):
         if _st and hasattr(_st, "info"): _st.info(f"Delegando análisis de Radicados Nueva EPS al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
-            username = st.session_state.get("username", "admin")
+            username = _st.session_state.get("username", "admin")
             task_id = send_command(username, "analisis_radicado_neps", {"file_list": file_list})
             if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
             
