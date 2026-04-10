@@ -76,6 +76,12 @@ except ImportError:
     Paragraph = None
     qn = None
 
+# We need to make sure pdfplumber is available in local agent namespace to avoid crashes
+try:
+    import pdfplumber
+except ImportError:
+    pdfplumber = None
+
 # Add parent directory to path to allow imports from src (if running from source)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)

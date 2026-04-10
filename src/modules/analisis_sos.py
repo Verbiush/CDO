@@ -48,7 +48,12 @@ TESSERACT_PATH = find_tesseract()
 
 def extract_text_pdfplumber(pdf_path):
     """Extraction using pdfplumber (robust layout/encoding)"""
-    if not pdfplumber: return ""
+    global pdfplumber
+    if not pdfplumber:
+        try:
+            import pdfplumber
+        except ImportError:
+            return ""
     try:
         text = ""
         with pdfplumber.open(pdf_path) as pdf:
@@ -255,7 +260,12 @@ def extract_sos_data_studio(pdf_path):
     Uses pdfplumber with specific regex and table structure.
     MODIFIED: Captures ALL rows (no break), raw extraction (no type conversion).
     """
-    if not pdfplumber: return {}
+    global pdfplumber
+    if not pdfplumber:
+        try:
+            import pdfplumber
+        except ImportError:
+            return {}
     
     datos_extraidos = {"valid_extraction": False}
     

@@ -5050,7 +5050,11 @@ def worker_analisis_sos(file_list, silent_mode=False, use_ai=False, api_key=None
     
     # Helper for SOS extraction (Studio Logic)
     def extract_sos_studio(pdf_path):
-        if not pdfplumber: return {}
+        if not pdfplumber:
+            try:
+                import pdfplumber
+            except ImportError:
+                return {}
         data_res = {"valid_extraction": False}
         try:
             with pdfplumber.open(pdf_path) as pdf:
@@ -5192,8 +5196,11 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
     # ------------------------
 
     if not fitz:
-        if not silent_mode: st.error("Librería 'fitz' (PyMuPDF) no instalada.")
-        return None
+        try:
+            import fitz
+        except ImportError:
+            if not silent_mode: st.error("Librería 'fitz' (PyMuPDF) no instalada.")
+            return None
 
     data_res = []
     
@@ -5298,8 +5305,12 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
     # ------------------------
 
     if not pdfplumber:
-        if not silent_mode and _st and hasattr(_st, "error"): _st.error("Librería 'pdfplumber' no instalada.")
-        return None
+        # Intentar importarlo directamente por si no se cargó globalmente en el agente
+        try:
+            import pdfplumber
+        except ImportError:
+            if not silent_mode and _st and hasattr(_st, "error"): _st.error("Librería 'pdfplumber' no instalada.")
+            return None
 
     data_res = []
     
@@ -5443,8 +5454,11 @@ def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
     # ------------------------
 
     if not fitz:
-        if not silent_mode: st.error("Librería 'fitz' (PyMuPDF) no instalada.")
-        return None
+        try:
+            import fitz
+        except ImportError:
+            if not silent_mode: st.error("Librería 'fitz' (PyMuPDF) no instalada.")
+            return None
 
     data_res = []
     
