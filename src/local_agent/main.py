@@ -2663,6 +2663,23 @@ class AgentWorker:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
 
+            elif command == "analisis_radicado_neps":
+                files_param = params.get("file_list", params.get("files", []))
+                files = _expand_file_list(files_param)
+                if files:
+                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    try:
+                        from src.tabs.tab_automated_actions import worker_analisis_radicado_nueva_eps
+                        res = worker_analisis_radicado_nueva_eps(files, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        self.log(f"Error importando worker Radicado NEPS: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Falta parámetro (files)"}
+
             elif command == "analisis_sanitas":
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)

@@ -5224,6 +5224,145 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
         }
     return None
 
+def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
+    """
+    Analiza archivos PDF de Certificados de Radicación Nueva EPS usando pdfplumber.
+    Retorna bytes de Excel.
+    """
+    # --- Agent Delegation ---
+    is_native_mode = st.session_state.get('force_native_mode', True)
+    if is_native_mode and not silent_mode and _should_delegate(file_list):
+        if not silent_mode: st.info(f"Delegando análisis de Radicados Nueva EPS al Agente Local...")
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "admin")
+            task_id = send_command(username, "analisis_radicado_neps", {"file_list": file_list})
+            if not task_id: return {"error": "No se pudo enviar la tarea al agente."}
+            
+            res = wait_for_result(task_id, timeout=300)
+            if res and "error" not in res:
+                return res
+            else:
+                return {"error": f"Error en agente: {res.get('error') if res else 'Sin respuesta'}"}
+        except Exception as e:
+            return {"error": f"Fallo en delegación a agente: {e}"}
+    # ------------------------
+
+    if not pdfplumber:
+        if not silent_mode: st.error("Librería 'pdfplumber' no instalada.")
+        return None
+
+    data_res = []
+    
+    progress_bar = None
+    if not silent_mode:
+        progress_bar = st.progress(0, text="Analizando Radicados Nueva EPS...")
+
+    for i, file_path in enumerate(file_list):
+        if not silent_mode and progress_bar:
+            progress_bar.progress((i + 1) / len(file_list), text=f"Procesando: {os.path.basename(file_path)}")
+
+        try:
+            with pdfplumber.open(file_path) as pdf:
+                full_text = ""
+                for page in pdf.pages:
+                    full_text += page.extract_text() + "\n"
+            
+            header_info = {
+                "Archivo": os.path.basename(file_path),
+                "Lote radicación": "",
+                "Código de habilitación": "",
+                "Fecha radicación": "",
+                "Cantidad de facturas": "",
+                "Total Radicado": "",
+                "Usuario radica": ""
+            }
+            
+            match = re.search(r"Lote radicación\s+(\d+)", full_text, re.IGNORECASE)
+            if match: header_info["Lote radicación"] = match.group(1)
+            
+            match = re.search(r"Código de habilitación\s+(\d+)", full_text, re.IGNORECASE)
+            if match: header_info["Código de habilitación"] = match.group(1)
+            
+            match = re.search(r"Fecha radicación\s+([\d/:\sAMPM]+)", full_text, re.IGNORECASE)
+            if match: header_info["Fecha radicación"] = match.group(1).strip()
+            
+            match = re.search(r"Cantidad de facturas\s+(\d+)", full_text, re.IGNORECASE)
+            if match: header_info["Cantidad de facturas"] = match.group(1)
+            
+            match = re.search(r"Total Radicado\s+([\$\s\d,\.]+)", full_text, re.IGNORECASE)
+            if match: header_info["Total Radicado"] = match.group(1).strip()
+            
+            match = re.search(r"Usuario radica\s+([^\n]+)", full_text, re.IGNORECASE)
+            if match: header_info["Usuario radica"] = match.group(1).strip()
+
+            lines = full_text.split('\n')
+            in_table = False
+            found_rows = False
+            for line in lines:
+                line = line.strip()
+                if "N. Radicado" in line and ("Factrura" in line or "Factura" in line):
+                    in_table = True
+                    continue
+                
+                if in_table:
+                    # Terminar si vemos una línea en blanco o que empiece con $
+                    if not line or line.startswith("$"):
+                        # A veces hay saltos de línea entre facturas, pero si ya encontramos totales terminamos.
+                        # Mejor seguimos hasta que termine la página
+                        if line.startswith("$"): continue
+                        continue
+                        
+                    # Ej: FMED1631768    FEOV49032      OPORTUNIDAD DE VIDA S.A.S.     $6,851,098.00
+                    match_row = re.search(r"^([A-Z0-9]+)\s+([A-Z0-9]+)\s+(.+?)\s+([\$\s]?[\d,\.]+)$", line)
+                    if match_row:
+                        row = header_info.copy()
+                        row["N. Radicado"] = match_row.group(1)
+                        row["N. Factura"] = match_row.group(2)
+                        row["Razón social"] = match_row.group(3).strip()
+                        row["Valor Radicado Factura"] = match_row.group(4)
+                        data_res.append(row)
+                        found_rows = True
+                        
+            if not found_rows and any(v for k,v in header_info.items() if k != "Archivo"):
+                row = header_info.copy()
+                row["N. Radicado"] = ""
+                row["N. Factura"] = ""
+                row["Razón social"] = ""
+                row["Valor Radicado Factura"] = ""
+                data_res.append(row)
+            elif not found_rows:
+                data_res.append({"Archivo": os.path.basename(file_path), "Error": "No se encontró información de radicación."})
+
+        except Exception as e:
+            if not silent_mode: st.warning(f"Error en {os.path.basename(file_path)}: {e}")
+            data_res.append({'Archivo': os.path.basename(file_path), 'Error': str(e)})
+
+    if data_res:
+        column_order = [
+            'Archivo', 'Lote radicación', 'Código de habilitación', 'Fecha radicación', 
+            'Cantidad de facturas', 'Total Radicado', 'Usuario radica', 
+            'N. Radicado', 'N. Factura', 'Razón social', 'Valor Radicado Factura', 'Error'
+        ]
+        
+        df = pd.DataFrame(data_res)
+        existing_cols = [c for c in column_order if c in df.columns]
+        other_cols = [c for c in df.columns if c not in column_order]
+        df = df[existing_cols + other_cols]
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False)
+        return {
+            "files": [{
+                "name": "Analisis_Radicados_NuevaEPS.xlsx",
+                "data": output.getvalue(),
+                "label": "Descargar Radicados Nueva EPS"
+            }],
+            "message": f"Procesados: {len(data_res)} registros extraídos."
+        }
+    return None
+
 def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
     """
     Analiza archivos PDF de Cargue Sanitas (FEOV) usando PyMuPDF (fitz).
@@ -8182,6 +8321,13 @@ def render():
                 else:
                     st.warning("No se encontraron PDFs.")
             render_analysis_results("an_neps")
+
+            if st.button("📊 Análisis Radicado Nueva EPS", key="btn_an_radicado_neps"):
+                if files_pdf:
+                    run_analysis_sync(worker_analisis_radicado_nueva_eps, [files_pdf], "an_radicado_neps")
+                else:
+                    st.warning("No se encontraron PDFs.")
+            render_analysis_results("an_radicado_neps")
 
             if st.button("📊 Análisis Cargue Sanitas", key="btn_an_sanitas"):
                  if files_pdf:
