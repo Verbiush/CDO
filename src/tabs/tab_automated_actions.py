@@ -5050,11 +5050,14 @@ def worker_analisis_sos(file_list, silent_mode=False, use_ai=False, api_key=None
     
     # Helper for SOS extraction (Studio Logic)
     def extract_sos_studio(pdf_path):
-        if not pdfplumber:
-            try:
-                import pdfplumber
-            except ImportError:
-                return {}
+        import_ok = True
+        try:
+            import pdfplumber
+        except ImportError:
+            import_ok = False
+            
+        if not import_ok:
+            return {}
         data_res = {"valid_extraction": False}
         try:
             with pdfplumber.open(pdf_path) as pdf:
@@ -5195,12 +5198,15 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
             return {"error": f"Fallo en delegación a agente: {e}"}
     # ------------------------
 
-    if not fitz:
-        try:
-            import fitz
-        except ImportError:
-            if not silent_mode: st.error("Librería 'fitz' (PyMuPDF) no instalada.")
-            return None
+    import_ok = True
+    try:
+        import fitz
+    except ImportError:
+        import_ok = False
+        
+    if not import_ok:
+        if not silent_mode and _st and hasattr(_st, "error"): _st.error("Librería 'fitz' (PyMuPDF) no instalada.")
+        return None
 
     data_res = []
     
@@ -5304,13 +5310,15 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
             return {"error": f"Fallo en delegación a agente: {e}"}
     # ------------------------
 
-    if not pdfplumber:
-        # Intentar importarlo directamente por si no se cargó globalmente en el agente
-        try:
-            import pdfplumber
-        except ImportError:
-            if not silent_mode and _st and hasattr(_st, "error"): _st.error("Librería 'pdfplumber' no instalada.")
-            return None
+    import_ok = True
+    try:
+        import pdfplumber
+    except ImportError:
+        import_ok = False
+        
+    if not import_ok:
+        if not silent_mode and _st and hasattr(_st, "error"): _st.error("Librería 'pdfplumber' no instalada.")
+        return None
 
     data_res = []
     
@@ -5453,12 +5461,15 @@ def worker_analisis_cargue_sanitas(file_list, silent_mode=False):
             return {"error": f"Fallo en delegación a agente: {e}"}
     # ------------------------
 
-    if not fitz:
-        try:
-            import fitz
-        except ImportError:
-            if not silent_mode: st.error("Librería 'fitz' (PyMuPDF) no instalada.")
-            return None
+    import_ok = True
+    try:
+        import fitz
+    except ImportError:
+        import_ok = False
+        
+    if not import_ok:
+        if not silent_mode and _st and hasattr(_st, "error"): _st.error("Librería 'fitz' (PyMuPDF) no instalada.")
+        return None
 
     data_res = []
     
