@@ -5193,7 +5193,7 @@ def worker_analisis_autorizacion_nueva_eps(file_list, silent_mode=False):
                     row[key] = ""
             data_res.append(row)
         except Exception as e:
-            if not silent_mode: st.warning(f"Error en {os.path.basename(file_path)}: {e}")
+            if not silent_mode and hasattr(st, "warning"): st.warning(f"Error en {os.path.basename(file_path)}: {e}")
             data_res.append({'Archivo': os.path.basename(file_path), 'Error': str(e)})
 
     if data_res:
@@ -5232,7 +5232,7 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
     # --- Agent Delegation ---
     is_native_mode = getattr(st, "session_state", {}).get('force_native_mode', True) if hasattr(st, "session_state") else False
     if is_native_mode and not silent_mode and _should_delegate(file_list):
-        if not silent_mode: st.info(f"Delegando análisis de Radicados Nueva EPS al Agente Local...")
+        if not silent_mode and hasattr(st, "info"): st.info(f"Delegando análisis de Radicados Nueva EPS al Agente Local...")
         try:
             from src.agent_client import send_command, wait_for_result
             username = st.session_state.get("username", "admin")
@@ -5249,13 +5249,13 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
     # ------------------------
 
     if not pdfplumber:
-        if not silent_mode: st.error("Librería 'pdfplumber' no instalada.")
+        if not silent_mode and hasattr(st, "error"): st.error("Librería 'pdfplumber' no instalada.")
         return None
 
     data_res = []
     
     progress_bar = None
-    if not silent_mode:
+    if not silent_mode and hasattr(st, "progress"):
         progress_bar = st.progress(0, text="Analizando Radicados Nueva EPS...")
 
     for i, file_path in enumerate(file_list):
@@ -5335,7 +5335,7 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
                 data_res.append({"Archivo": os.path.basename(file_path), "Error": "No se encontró información de radicación."})
 
         except Exception as e:
-            if not silent_mode: st.warning(f"Error en {os.path.basename(file_path)}: {e}")
+            if not silent_mode and hasattr(st, "warning"): st.warning(f"Error en {os.path.basename(file_path)}: {e}")
             data_res.append({'Archivo': os.path.basename(file_path), 'Error': str(e)})
 
     if data_res:
