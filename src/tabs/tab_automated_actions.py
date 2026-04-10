@@ -178,10 +178,13 @@ try:
 except ImportError:
     pyperclip = None
 
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
+import warnings
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        genai = None
 
 # --- Agent Delegation Helpers ---
 def is_streamlit_available():
