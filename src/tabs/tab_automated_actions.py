@@ -4184,7 +4184,10 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
         'Acompañante': re.compile(r"Acompañante:?\s*(.*?)(?=\s+Tel\. Acompañante:|\n|$)", re.IGNORECASE),
         # 'Tel. Acompañante': re.compile(r"Tel\. Acompañante:?\s*(.*?)(?=\n|$)", re.IGNORECASE),
         'Discapacidad': re.compile(r"DISCAPACIDAD\s*(.*?)(?=\s+DESCRIPCION|\n\n|$)", re.IGNORECASE | re.DOTALL),
-        'Motivo Consulta': re.compile(r"MOTIVO DE CONSULTA\s*(.*?)(?=\s+ENFERMEDAD ACTUAL|\s+ANTECEDENTES|\s+REVISION POR SISTEMAS|$)", re.IGNORECASE | re.DOTALL)
+        'Motivo Consulta': re.compile(r"MOTIVO DE CONSULTA\s*(.*?)(?=\s+ENFERMEDAD ACTUAL|\s+ANTECEDENTES|\s+REVISION POR SISTEMAS|$)", re.IGNORECASE | re.DOTALL),
+        'Datos Historia Clínica': re.compile(r"DATOS HISTORIA CL[IÍ]NICA\s*\n\s*([^\n]+)", re.IGNORECASE),
+        'Nota Clínica': re.compile(r"((?:NOTA|EVOLUCI[OÓ]N|ANAMNESIS)[^\n]*\n.*?)(?=\n\s*IMPRESI[OÓ]N CL[IÍ]NICA|\n\s*DIAGN[OÓ]STICO|$)", re.IGNORECASE | re.DOTALL),
+        'Diagnóstico Principal': re.compile(r"Diagn[oó]stico Principal:?\s*([^\n]+)", re.IGNORECASE)
     }
 
     extracted_data = []
@@ -4231,7 +4234,8 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
             'Fecha Atencion', 'Fecha Cierre HC', 'Fecha Naci', 'Edad', 'Sexo', 
             'Nro.Historia', 'Tipo Usuario', 'Telefono', 'Estrato', 'Municipio', 
             'Dirección', 'Estado Civil', 'Empresa', 'Contrato', 
-            'Acompañante', 'Discapacidad', 'Motivo Consulta'
+            'Acompañante', 'Discapacidad', 'Motivo Consulta',
+            'Datos Historia Clínica', 'Nota Clínica', 'Diagnóstico Principal'
         ]
         df = pd.DataFrame(extracted_data)
         # Reorder if columns exist
