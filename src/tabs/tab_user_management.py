@@ -115,7 +115,6 @@ def render(*args, **kwargs):
                 "🔄 Conversión de Archivos",
                 "📄 Visor (JSON/XML)",
                 "RIPS",
-                "✅ Validador FevRips",
                 "📂 Gestión Documental",
                 "👤 Validación Usuario",
                 "🤖 Asistente IA (Gemini)",

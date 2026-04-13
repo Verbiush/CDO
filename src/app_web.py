@@ -61,12 +61,12 @@ except ImportError:
 
 try:
     from tabs import tab_bot_zeus, tab_ai_assistant, tab_search_actions, tab_automated_actions
-    from tabs import tab_conversion, tab_visor, tab_rips, tab_validator_fevrips, tab_user_validation, tab_gestion_documental, tab_admin, tab_user_management
+    from tabs import tab_conversion, tab_visor, tab_rips, tab_user_validation, tab_gestion_documental, tab_admin, tab_user_management
 except ImportError as e:
     # Only fallback if the error is about finding 'tabs' module itself
     if e.name == 'tabs' or "No module named 'tabs'" in str(e):
         from src.tabs import tab_bot_zeus, tab_ai_assistant, tab_search_actions, tab_automated_actions
-        from src.tabs import tab_conversion, tab_visor, tab_rips, tab_validator_fevrips, tab_user_validation, tab_gestion_documental, tab_admin, tab_user_management
+        from src.tabs import tab_conversion, tab_visor, tab_rips, tab_user_validation, tab_gestion_documental, tab_admin, tab_user_management
     else:
         raise e
 
@@ -616,7 +616,6 @@ else:
         ("🔄 Conversión de Archivos", tab_conversion.render if 'tab_conversion' in globals() else None),
         ("📄 Visor (JSON/XML)", tab_visor.render if 'tab_visor' in globals() else None),
         ("RIPS", tab_rips.render if 'tab_rips' in globals() else None),
-        ("✅ Validador FevRips", tab_validator_fevrips.render if 'tab_validator_fevrips' in globals() else None),
         ("📂 Gestión Documental", tab_gestion_documental.render if 'tab_gestion_documental' in globals() else None),
         ("👤 Validación Usuario", tab_user_validation.render if 'tab_user_validation' in globals() else None),
         ("🤖 Bot Zeus Salud", tab_bot_zeus.render if 'tab_bot_zeus' in globals() else None),

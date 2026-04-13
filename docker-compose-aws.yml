@@ -24,20 +24,6 @@ services:
       - ./data:/data
     restart: always
 
-  fevrips-api:
-    image: fevripsacr.azurecr.io/minsalud.fevrips.apilocal:latest
-    container_name: fevrips-api
-    ports:
-      - "9443:5100"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Docker
-      - ASPNETCORE_URLS=https://+:5100;http://+:5000
-      - ASPNETCORE_Kestrel__Certificates__Default__Password=fevrips2024*
-      - ASPNETCORE_Kestrel__Certificates__Default__Path=/certificates/server.pfx
-    volumes:
-      - ./certificates:/certificates
-    restart: always
-
   # Backend API integrado en 'app' (ya no es un servicio separado)
   # Se ejecuta mediante start_aws.sh en el contenedor principal
 
