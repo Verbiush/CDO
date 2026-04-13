@@ -7458,6 +7458,107 @@ def dialog_crear_carpetas_excel():
     if st.button("Cerrar", key="btn_close_cr_fold"):
         close_auto_dialog()
 
+@st.dialog("Cruzar / Unir Excels (VLOOKUP)", width="large")
+def dialog_cruzar_excels():
+    st.write("Sube dos archivos Excel. Construye un nuevo Excel agregando las columnas del segundo archivo al primero, relacionándolos por una columna en común (Ej: No. Factura).")
+    
+    st.write("### 1. Archivos")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.caption("**Archivo Base:** Al que se le agregarán datos")
+        up_base = st.file_uploader("Cargar Base (XLSX)", type=["xlsx", "xls"], key=get_uploader_key("up_excel_base"))
+        
+    with col2:
+        st.caption("**Archivo Referencia:** El que contiene los datos adicionales")
+        up_ref = st.file_uploader("Cargar Referencia (XLSX)", type=["xlsx", "xls"], key=get_uploader_key("up_excel_ref"))
+        
+    if up_base and up_ref:
+        try:
+            # Leer archivos
+            df_base = pd.read_excel(io.BytesIO(up_base.getvalue()))
+            df_ref = pd.read_excel(io.BytesIO(up_ref.getvalue()))
+            
+            st.divider()
+            st.write("### 2. Configurar Relación")
+            
+            col_k1, col_k2 = st.columns(2)
+            with col_k1:
+                key_base = st.selectbox("Columna Relación en Base", df_base.columns, key="cruce_key_base")
+            with col_k2:
+                key_ref = st.selectbox("Columna Relación en Referencia", df_ref.columns, key="cruce_key_ref")
+                
+            st.write("### 3. Columnas a Traer")
+            # Mostrar columnas de referencia excluyendo la llave
+            available_cols = [c for c in df_ref.columns if c != key_ref]
+            cols_to_bring = st.multiselect(
+                "Selecciona las columnas de Referencia a agregar a la Base", 
+                available_cols, 
+                default=available_cols,
+                key="cruce_cols"
+            )
+            
+            st.divider()
+            
+            # Botón de proceso
+            if st.button("🚀 Procesar Cruce", use_container_width=True):
+                with st.spinner("Cruzando datos..."):
+                    # Copias para no afectar los originales en memoria
+                    df_b_proc = df_base.copy()
+                    df_r_proc = df_ref.copy()
+                    
+                    # Convertir a texto y limpiar espacios para evitar que no crucen números como '123' vs '123.0'
+                    df_b_proc['_temp_key_base'] = df_b_proc[key_base].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                    df_r_proc['_temp_key_ref'] = df_r_proc[key_ref].astype(str).str.strip().str.replace(r'\.0$', '', regex=True)
+                    
+                    # Subconjunto de referencia
+                    cols_subset = ['_temp_key_ref'] + cols_to_bring
+                    df_r_proc = df_r_proc[cols_subset].copy()
+                    
+                    # Eliminar duplicados en referencia para no multiplicar filas en la base
+                    df_r_proc = df_r_proc.drop_duplicates(subset=['_temp_key_ref'])
+                    
+                    # Cruce (Left Join)
+                    df_merged = pd.merge(
+                        df_b_proc, 
+                        df_r_proc, 
+                        left_on='_temp_key_base', 
+                        right_on='_temp_key_ref', 
+                        how="left"
+                    )
+                    
+                    # Limpiar columnas temporales
+                    df_merged = df_merged.drop(columns=['_temp_key_base', '_temp_key_ref'], errors='ignore')
+                        
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                        df_merged.to_excel(writer, index=False)
+                        
+                    st.session_state["excel_cruzado_bytes"] = output.getvalue()
+                    st.session_state["excel_cruzado_len"] = len(df_merged)
+                    st.session_state["excel_cruzado_cols"] = len(df_merged.columns)
+                    
+            if "excel_cruzado_bytes" in st.session_state:
+                st.success(f"¡Cruce exitoso! Se generaron {st.session_state['excel_cruzado_len']} filas con {st.session_state['excel_cruzado_cols']} columnas.")
+                
+                st.download_button(
+                    label="⬇️ Descargar Nuevo Excel",
+                    data=st.session_state["excel_cruzado_bytes"],
+                    file_name="Excel_Cruzado.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+                
+        except Exception as e:
+            st.error(f"Error al procesar los archivos: {e}")
+
+    st.divider()
+    if st.button("Cerrar", key="btn_close_cruce"):
+        # Limpiar variables de sesión del cruce
+        for k in ["excel_cruzado_bytes", "excel_cruzado_len", "excel_cruzado_cols"]:
+            if k in st.session_state:
+                del st.session_state[k]
+        close_auto_dialog()
+
 def worker_copiar_archivo_a_subcarpetas(archivo_a_copiar, carpeta_destino_base, silent_mode=False):
     # Agent integration
     is_native = st.session_state.get("force_native_mode", True)
@@ -8483,6 +8584,9 @@ def render():
             
             if st.button("📂 Distribuir Base", key="btn_dist_base"):
                 open_auto_dialog("distribuir_base")
+                
+            if st.button("🔀 Cruzar Excels (VLOOKUP)", key="btn_cruzar_excels"):
+                open_auto_dialog("cruzar_excels")
 
     # Move dialog triggers to the root scope to avoid "Only one dialog" exception
     active_auto_dialog = st.session_state.get("active_auto_dialog")
@@ -8501,6 +8605,8 @@ def render():
             dialog_crear_firma()
         elif active_auto_dialog == "distribuir_base":
             dialog_distribuir_base()
+        elif active_auto_dialog == "cruzar_excels":
+            dialog_cruzar_excels()
         elif active_auto_dialog == "organizar_feov":
             dialog_organizar_feov()
         elif active_auto_dialog == "mover_coincidencia":
