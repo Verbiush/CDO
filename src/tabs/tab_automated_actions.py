@@ -7534,7 +7534,7 @@ def dialog_cruzar_excels():
                     df_merged = df_merged.drop(columns=['_temp_key_base', '_temp_key_ref'], errors='ignore')
                         
                     output = io.BytesIO()
-                    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
                         df_merged.to_excel(writer, index=False)
                         
                     st.session_state["excel_cruzado_bytes"] = output.getvalue()
