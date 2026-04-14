@@ -23,7 +23,21 @@ def open_auto_dialog(dialog_name):
     st.session_state["dialog_instance_id"] = str(uuid.uuid4())[:8]
     
     # Clear all uploader keys before opening a new dialog to prevent "infinite spinner" issues
-    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up") or k in ("excel_firma", "dist_base_excel", "dist_base_file_up", "copy_sub_file", "col1_pdf_man", "col1_split_man", "firmas_up", "ovida_up", "auth_up", "reg_up", "create_fold_up", "copy_map_up", "copy_root_up", "rips_json_ind", "rips_xlsx_consol", "tech_json_ind")]
+    keys_to_clear = [k for k in st.session_state.keys() if 
+        k.startswith("up_") or 
+        "uploader" in k or 
+        k.endswith("_up") or 
+        k.startswith("dist_base_") or
+        k.startswith("ovida_up") or
+        k.startswith("excel_firma") or
+        k.startswith("copy_map_up") or
+        k.startswith("copy_root_up") or
+        k.startswith("create_fold_up") or
+        k.startswith("auth_up") or
+        k.startswith("reg_up") or
+        k.startswith("firmas_up") or
+        k.startswith("zeus_up") or
+        k in ("copy_sub_file", "col1_pdf_man", "col1_split_man", "rips_json_ind", "rips_xlsx_consol", "tech_json_ind")]
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
@@ -37,7 +51,21 @@ def get_uploader_key(base_key):
 
 def close_auto_dialog():
     # Only clear uploaders starting with "up_" or specific known keys to avoid breaking session
-    keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up") or k in ("excel_firma", "dist_base_excel", "dist_base_file_up", "copy_sub_file", "col1_pdf_man", "col1_split_man", "firmas_up", "ovida_up", "auth_up", "reg_up", "create_fold_up", "copy_map_up", "copy_root_up", "rips_json_ind", "rips_xlsx_consol", "tech_json_ind")]
+    keys_to_clear = [k for k in st.session_state.keys() if 
+        k.startswith("up_") or 
+        "uploader" in k or 
+        k.endswith("_up") or 
+        k.startswith("dist_base_") or
+        k.startswith("ovida_up") or
+        k.startswith("excel_firma") or
+        k.startswith("copy_map_up") or
+        k.startswith("copy_root_up") or
+        k.startswith("create_fold_up") or
+        k.startswith("auth_up") or
+        k.startswith("reg_up") or
+        k.startswith("firmas_up") or
+        k.startswith("zeus_up") or
+        k in ("copy_sub_file", "col1_pdf_man", "col1_split_man", "rips_json_ind", "rips_xlsx_consol", "tech_json_ind")]
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
@@ -6150,7 +6178,7 @@ def dialog_descargar_historias_ovida():
     st.write("Automatización de descargas desde OVIDA (Requiere Credenciales).")
     st.warning("Se abrirá un navegador Chrome. Debe iniciar sesión manualmente cuando se indique.")
     
-    uploaded = st.file_uploader("Archivo Excel (Pacientes)", type=["xlsx", "xls"], key="ovida_up")
+    uploaded = st.file_uploader("Archivo Excel (Pacientes)", type=["xlsx", "xls"], key=get_uploader_key("ovida_up"))
     
     sheet_name = "Hoja1"
     cols = []
@@ -7409,7 +7437,7 @@ def dialog_distribuir_base():
     st.write("Copia un archivo a múltiples carpetas definidas en un Excel.")
     
     # 1. Excel Base
-    uploaded_excel = st.file_uploader("Cargar Base (Excel)", type=["xlsx", "xls"], key="dist_base_excel")
+    uploaded_excel = st.file_uploader("Cargar Base (Excel)", type=["xlsx", "xls"], key=get_uploader_key("dist_base_excel"))
     
     sheet = None
     col_folder = None
