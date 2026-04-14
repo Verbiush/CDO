@@ -2836,52 +2836,112 @@ def save_config(config):
 class AgentGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Agente Local - Organizador Archivos")
-        self.root.geometry("500x400")
+        self.root.title("CDO - Agente Local")
+        self.root.geometry("600x550")
+        self.root.minsize(500, 450)
         
+        # Estilos modernos
+        bg_color = "#f8f9fa"
+        primary_color = "#0066cc"
+        text_color = "#212529"
+        
+        self.root.configure(bg=bg_color)
+        
+        style = ttk.Style()
+        # Intentar usar un tema más limpio si está disponible
+        if 'clam' in style.theme_names():
+            style.theme_use('clam')
+            
+        style.configure('Main.TFrame', background=bg_color)
+        style.configure('Card.TFrame', background="white", relief="flat")
+        style.configure('TLabel', background="white", foreground=text_color, font=('Segoe UI', 10))
+        style.configure('Header.TLabel', background=bg_color, font=('Segoe UI', 16, 'bold'), foreground=primary_color)
+        style.configure('Status.TLabel', background=bg_color, font=('Segoe UI', 10, 'bold'), foreground="#6c757d")
+        
+        style.configure('Action.TButton', font=('Segoe UI', 10, 'bold'), padding=8)
+        style.map('Action.TButton',
+            background=[('active', '#0052a3'), ('!disabled', primary_color)],
+            foreground=[('!disabled', 'white')]
+        )
+        
+        style.configure('Stop.TButton', font=('Segoe UI', 10, 'bold'), padding=8)
+        style.map('Stop.TButton',
+            background=[('active', '#c82333'), ('!disabled', '#dc3545')],
+            foreground=[('!disabled', 'white')]
+        )
+
         self.config = load_config()
         self.worker = None
         
-        # UI Elements
-        frame = ttk.Frame(root, padding="10")
-        frame.pack(fill=tk.BOTH, expand=True)
+        # Main Container
+        main_frame = ttk.Frame(root, padding="20 20 20 20", style='Main.TFrame')
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(frame, text="Usuario:").grid(row=0, column=0, sticky=tk.W)
+        # Header
+        header_frame = ttk.Frame(main_frame, style='Main.TFrame')
+        header_frame.pack(fill=tk.X, pady=(0, 15))
+        
+        ttk.Label(header_frame, text="⚡ Agente de Ejecución Local", style='Header.TLabel').pack(side=tk.LEFT)
+        self.lbl_status = ttk.Label(header_frame, text="⚫ Desconectado", style='Status.TLabel')
+        self.lbl_status.pack(side=tk.RIGHT, pady=5)
+        
+        # Card container for settings
+        card_frame = tk.Frame(main_frame, bg="white", padx=20, pady=20, relief=tk.GROOVE, bd=1)
+        card_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        # Grid layout for inputs
+        ttk.Label(card_frame, text="Usuario:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0,10))
         self.user_var = tk.StringVar(value=self.config.get("username", ""))
-        ttk.Entry(frame, textvariable=self.user_var).grid(row=0, column=1, sticky=tk.EW)
+        ent_user = ttk.Entry(card_frame, textvariable=self.user_var, font=('Segoe UI', 10), width=40)
+        ent_user.grid(row=0, column=1, sticky=tk.EW, pady=5)
         
-        ttk.Label(frame, text="Contraseña:").grid(row=1, column=0, sticky=tk.W)
+        ttk.Label(card_frame, text="Contraseña:").grid(row=1, column=0, sticky=tk.W, pady=5, padx=(0,10))
         self.pass_var = tk.StringVar(value=self.config.get("password", ""))
-        ttk.Entry(frame, textvariable=self.pass_var, show="*").grid(row=1, column=1, sticky=tk.EW)
+        ent_pass = ttk.Entry(card_frame, textvariable=self.pass_var, show="•", font=('Segoe UI', 10))
+        ent_pass.grid(row=1, column=1, sticky=tk.EW, pady=5)
 
-        ttk.Label(frame, text="URL Tareas:").grid(row=2, column=0, sticky=tk.W)
-        # Fix: Use correct AWS endpoint (port 8000, /tasks/poll)
+        ttk.Label(card_frame, text="URL Tareas:").grid(row=2, column=0, sticky=tk.W, pady=5, padx=(0,10))
         default_task_url = "http://3.138.135.181:8000/tasks/poll"
-        # Heuristic: if loaded config has "localhost" or "8501" or "/api/", replace with correct default
         loaded_task_url = self.config.get("task_url", default_task_url)
-        if "localhost" in loaded_task_url or "8501" in loaded_task_url or "/api/" in loaded_task_url or "3.142.164.128" in loaded_task_url or "3.15.237.186" in loaded_task_url or "18.118.37.215" in loaded_task_url:
+        if any(x in loaded_task_url for x in ["localhost", "8501", "/api/", "3.142.164.128", "3.15.237.186", "18.118.37.215"]):
              loaded_task_url = default_task_url
              
         self.url_task_var = tk.StringVar(value=loaded_task_url)
-        ttk.Entry(frame, textvariable=self.url_task_var).grid(row=2, column=1, sticky=tk.EW)
+        ent_task = ttk.Entry(card_frame, textvariable=self.url_task_var, font=('Segoe UI', 10))
+        ent_task.grid(row=2, column=1, sticky=tk.EW, pady=5)
         
-        ttk.Label(frame, text="URL Resultados:").grid(row=3, column=0, sticky=tk.W)
+        ttk.Label(card_frame, text="URL Resultados:").grid(row=3, column=0, sticky=tk.W, pady=5, padx=(0,10))
         default_res_url = "http://3.138.135.181:8000/tasks"
         loaded_res_url = self.config.get("result_url", default_res_url)
-        if "localhost" in loaded_res_url or "8501" in loaded_res_url or "/api/" in loaded_res_url or "3.142.164.128" in loaded_res_url or "3.15.237.186" in loaded_res_url or "18.118.37.215" in loaded_res_url:
+        if any(x in loaded_res_url for x in ["localhost", "8501", "/api/", "3.142.164.128", "3.15.237.186", "18.118.37.215"]):
              loaded_res_url = default_res_url
              
         self.url_res_var = tk.StringVar(value=loaded_res_url)
-        ttk.Entry(frame, textvariable=self.url_res_var).grid(row=3, column=1, sticky=tk.EW)
+        ent_res = ttk.Entry(card_frame, textvariable=self.url_res_var, font=('Segoe UI', 10))
+        ent_res.grid(row=3, column=1, sticky=tk.EW, pady=5)
         
-        self.btn_start = ttk.Button(frame, text="Iniciar Agente", command=self.toggle_agent)
-        self.btn_start.grid(row=4, column=0, columnspan=2, pady=10)
+        card_frame.columnconfigure(1, weight=1)
         
-        self.log_area = scrolledtext.ScrolledText(frame, height=15)
-        self.log_area.grid(row=5, column=0, columnspan=2, sticky=tk.NSEW)
+        # Action Button
+        self.btn_start = ttk.Button(main_frame, text="▶ Iniciar Agente", style='Action.TButton', command=self.toggle_agent, cursor="hand2")
+        self.btn_start.pack(fill=tk.X, pady=(0, 15))
         
-        frame.columnconfigure(1, weight=1)
-        frame.rowconfigure(5, weight=1)
+        # Console / Logs
+        ttk.Label(main_frame, text="Registro de Actividad:", style='Main.TLabel', font=('Segoe UI', 9, 'bold')).pack(anchor=tk.W, pady=(0,5))
+        
+        # Text widget for logs with custom styling
+        self.log_area = scrolledtext.ScrolledText(
+            main_frame, 
+            height=12, 
+            font=('Consolas', 9),
+            bg="#1e1e1e", 
+            fg="#00ff00",
+            insertbackground="white",
+            relief=tk.FLAT,
+            padx=10,
+            pady=10
+        )
+        self.log_area.pack(fill=tk.BOTH, expand=True)
 
     def log(self, msg):
         def _log():
@@ -2915,7 +2975,8 @@ class AgentGUI:
     def toggle_agent(self):
         if self.worker and self.worker.running:
             self.worker.stop()
-            self.btn_start.config(text="Iniciar Agente")
+            self.btn_start.config(text="▶ Iniciar Agente", style='Action.TButton')
+            self.lbl_status.config(text="⚫ Desconectado", foreground="#6c757d")
             self.log("Agente detenido manualmente.")
         else:
             user = self.user_var.get()
@@ -2937,7 +2998,8 @@ class AgentGUI:
             self.worker.log_callback = self.log
             self.worker.gui_invoker = self.invoke_on_gui
             self.worker.start()
-            self.btn_start.config(text="Detener Agente")
+            self.btn_start.config(text="⏹ Detener Agente", style='Stop.TButton')
+            self.lbl_status.config(text="🟢 En ejecución", foreground="#28a745")
 
 if __name__ == "__main__":
     root = tk.Tk()
