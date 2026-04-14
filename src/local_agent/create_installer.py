@@ -96,8 +96,8 @@ def build_installer():
         "--exclude-module=streamlit"
     ]
     
-    # Add parent directory (src) to paths so bot_zeus.py can be found
-    src_path = os.path.dirname(current_dir)
+    # Add project root directory to paths so 'src' package can be found
+    project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
     
     cmd_agent = [
         sys.executable, "-m", "PyInstaller",
@@ -105,7 +105,7 @@ def build_installer():
         "--onefile",
         "--name=CDO_Agente",
         "--clean",
-        f"--paths={src_path}",
+        f"--paths={project_root}",
         os.path.join(current_dir, "main.py")
     ] + hidden_imports
     

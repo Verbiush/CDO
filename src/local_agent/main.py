@@ -96,8 +96,9 @@ except ImportError:
 # Add parent directory to path to allow imports from src (if running from source)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+if not getattr(sys, 'frozen', False):
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
 
 # Find config file location
 def find_config_file():
@@ -2525,7 +2526,8 @@ class AgentWorker:
                 root_path = params.get("root_path")
                 if root_path:
                     # Ensure src can be imported
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_consolidar_subcarpetas
                         # Force local execution mode within agent
@@ -2544,7 +2546,8 @@ class AgentWorker:
                 output_name = params.get("output_name", "Unificado")
                 if base_path:
                     # Ensure src can be imported
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_unificar_por_carpeta
                         res = worker_unificar_por_carpeta(base_path, output_name, silent_mode=True)
@@ -2562,7 +2565,8 @@ class AgentWorker:
                 img_type = params.get("img_type", "JPG")
                 if base_path:
                     # Ensure src can be imported
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_unificar_imagenes_por_carpeta_rec
                         res = worker_unificar_imagenes_por_carpeta_rec(base_path, output_name, img_type, silent_mode=True)
@@ -2579,7 +2583,8 @@ class AgentWorker:
                 output_name = params.get("output_name", "Unificado")
                 if base_path:
                     # Ensure src can be imported
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_unificar_docx_por_carpeta
                         res = worker_unificar_docx_por_carpeta(base_path, output_name, silent_mode=True)
@@ -2595,7 +2600,8 @@ class AgentWorker:
                 base_path = params.get("base_path")
                 if base_path:
                     # Ensure src can be imported
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_dividir_pdfs_masivamente
                         res = worker_dividir_pdfs_masivamente(base_path, silent_mode=True)
@@ -2613,7 +2619,8 @@ class AgentWorker:
                 out_folder = params.get("output_folder")
                 sep = params.get("sep", ",")
                 if file_path and ctype:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         os.environ["CDO_AGENT_MODE"] = "1"
                         from src.tabs.tab_conversion import worker_convertir_archivo
@@ -2633,7 +2640,8 @@ class AgentWorker:
                 sep = params.get("sep", ",")
                 save_in_same_dir = params.get("save_in_same_dir", False)
                 if folder_path and ctype:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         os.environ["CDO_AGENT_MODE"] = "1"
                         from src.tabs.tab_conversion import worker_convertir_masivo
@@ -2657,7 +2665,8 @@ class AgentWorker:
                 path = params.get("path")
                 if path:
                     # Ensure src can be imported
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_carpetas
@@ -2676,7 +2685,8 @@ class AgentWorker:
                 files = _expand_file_list(files_param)
                 use_ai = params.get("use_ai", False)
                 if files:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.modules.analisis_sos import worker_analisis_sos
                         res = worker_analisis_sos(files, use_ai=use_ai, silent_mode=True)
@@ -2706,7 +2716,8 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_historia_clinica
                         res = worker_analisis_historia_clinica(files, silent_mode=True)
@@ -2723,7 +2734,8 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_autorizacion_nueva_eps
                         res = worker_analisis_autorizacion_nueva_eps(files, silent_mode=True)
@@ -2740,7 +2752,8 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_radicado_nueva_eps
                         res = worker_analisis_radicado_nueva_eps(files, silent_mode=True)
@@ -2757,7 +2770,8 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_cargue_sanitas
                         res = worker_analisis_cargue_sanitas(files, silent_mode=True)
@@ -2774,7 +2788,8 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_leer_pdf_retefuente
                         res = worker_leer_pdf_retefuente(files, silent_mode=True)
@@ -2791,7 +2806,8 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_emssanar
                         res = worker_analisis_emssanar(files, silent_mode=True)
@@ -2808,7 +2824,8 @@ class AgentWorker:
                 files_param = params.get("file_list", params.get("files", []))
                 files = _expand_file_list(files_param)
                 if files:
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     try:
                         from src.tabs.tab_automated_actions import worker_analisis_fomag
                         res = worker_analisis_fomag(files, silent_mode=True)
@@ -2825,7 +2842,8 @@ class AgentWorker:
                 url = params.get("url", "https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
                 try:
                     # Ensure bot_zeus can be imported and launch asynchronously
-                    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
                     
                     def _open_browser():
                         try:
