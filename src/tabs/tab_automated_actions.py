@@ -4191,6 +4191,7 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
     }
 
     extracted_data = []
+    details = []
     
     progress_bar = None
     if not silent_mode:
@@ -4213,16 +4214,17 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
                 match = pattern.search(full_text)
                 if match:
                     val = match.group(1).strip()
-                    # Clean up common issues
                     val = val.replace('\n', ' ').strip()
                     record[key] = val
                 else:
                     record[key] = ""
 
             extracted_data.append(record)
+            details.append({"file": os.path.basename(pdf_path), "status": "success"})
 
         except Exception as e:
             if not silent_mode: st.error(f"Error procesando {os.path.basename(pdf_path)}: {e}")
+            details.append({"file": os.path.basename(pdf_path), "status": "error", "message": str(e)})
 
     if not extracted_data:
         if not silent_mode: st.warning("No se extrajeron datos.")
@@ -4251,7 +4253,8 @@ def worker_analisis_historia_clinica(file_list, silent_mode=False):
                 "data": output.getvalue(),
                 "label": "Descargar Análisis HC"
             }],
-            "message": f"Procesados: {len(extracted_data)} registros."
+            "message": f"Procesados: {len(extracted_data)} registros.",
+            "details": details
         }
     except Exception as e:
         if not silent_mode: st.error(f"Error generando Excel: {e}")
@@ -5330,6 +5333,7 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
         return None
 
     data_res = []
+    details = []
     
     progress_bar = None
     if not silent_mode and _st and hasattr(_st, "progress"):
@@ -5416,11 +5420,16 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
             elif not found_rows:
                 print(f"DEBUG: No se halló cabecera ni filas. ({os.path.basename(file_path)})")
                 data_res.append({"Archivo": os.path.basename(file_path), "Error": "No se encontró información de radicación."})
+                details.append({"file": os.path.basename(file_path), "status": "error", "message": "No se encontró información."})
+                continue
+                
+            details.append({"file": os.path.basename(file_path), "status": "success"})
 
         except Exception as e:
             print(f"ERROR en archivo {os.path.basename(file_path)}: {e}")
             if not silent_mode and _st and hasattr(_st, "warning"): _st.warning(f"Error en {os.path.basename(file_path)}: {e}")
             data_res.append({'Archivo': os.path.basename(file_path), 'Error': str(e)})
+            details.append({"file": os.path.basename(file_path), "status": "error", "message": str(e)})
 
     if data_res:
         column_order = [
@@ -5446,7 +5455,8 @@ def worker_analisis_radicado_nueva_eps(file_list, silent_mode=False):
                 "data": output.getvalue(),
                 "label": "Descargar Radicados Nueva EPS"
             }],
-            "message": f"Procesados: {len(data_res)} registros extraídos."
+            "message": f"Procesados: {len(data_res)} registros extraídos.",
+            "details": details
         }
         
     print("DEBUG: Terminó el análisis pero data_res estaba vacío.")
@@ -8436,13 +8446,12 @@ def render():
 
         def run_analysis_sync(func, args, key_prefix):
             try:
-                # Prevent multiple immediate clicks from firing multiple identical requests
-                is_running_key = f"running_{key_prefix}"
-                if st.session_state.get(is_running_key, False):
-                    st.warning("El análisis ya se está ejecutando. Por favor espere.")
+                # Bloqueo global: no permitir múltiples procesos a la vez
+                if st.session_state.get("global_is_processing", False):
+                    st.warning("⏳ Hay otro proceso ejecutándose. Por favor espere a que termine para iniciar uno nuevo.")
                     return
                 
-                st.session_state[is_running_key] = True
+                st.session_state["global_is_processing"] = True
                 
                 with st.spinner("Procesando..."):
                     result = func(*args)
@@ -8462,7 +8471,7 @@ def render():
             except Exception as e:
                 st.error(f"Error: {e}")
             finally:
-                st.session_state[is_running_key] = False
+                st.session_state["global_is_processing"] = False
 
         # Renderizar resultados guardados en session_state
         def render_analysis_results(key_prefix):
@@ -8470,7 +8479,15 @@ def render():
             if state_key in st.session_state:
                 result = st.session_state[state_key]
                 st.success(result.get("message", "Análisis completado."))
-                for i, f in enumerate(result["files"]):
+                
+                if "details" in result and isinstance(result["details"], list):
+                    with st.expander("Ver estado de cada archivo", expanded=True):
+                        for detail in result["details"]:
+                            icon = "✅" if detail.get("status") == "success" else "❌"
+                            msg = f" - {detail.get('message', '')}" if detail.get("message") else ""
+                            st.write(f"{icon} **{detail.get('file', 'Archivo')}**{msg}")
+                            
+                for i, f in enumerate(result.get("files", [])):
                     data = f["data"]
                     if hasattr(data, "getvalue"): 
                         data = data.getvalue()

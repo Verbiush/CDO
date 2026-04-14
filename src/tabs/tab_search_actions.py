@@ -1163,43 +1163,59 @@ def worker_comprimir_individual(file_list, silent_mode=False):
 
 @st.dialog("Modificar Nombres - Opciones Avanzadas")
 def dialogo_modificar_nombres():
-    st.write("Configura las opciones de renombrado:")
+    st.write("Configura la opción de renombrado (Solo puedes elegir un proceso a la vez):")
     
-    # 1. Renombrado completo
-    with st.container(border=True):
-        st.markdown("**📝 Renombrado completo (ignora las demás opciones)**")
-        activar_full = st.checkbox("Activar renombrado completo", key="chk_full")
-        nuevo_nombre = st.text_input("Nuevo nombre (sin extensión)", disabled=not activar_full, key="txt_full")
+    opciones = [
+        "📝 Renombrado completo",
+        "🔄 Sustituir texto",
+        "🧹 Limpieza Especial (FEOV)",
+        "⬅️ Añadir prefijo",
+        "➡️ Añadir sufijo",
+        "🔢 Numeración Consecutiva"
+    ]
     
-    # 2. Sustituir texto
+    opcion_elegida = st.radio("Selecciona la acción a realizar:", opciones, index=0)
+    
+    # Inicializar todas las variables en False/vacío
+    activar_full = (opcion_elegida == opciones[0])
+    activar_sust = (opcion_elegida == opciones[1])
+    eliminar_id = (opcion_elegida == opciones[2])
+    activar_pre = (opcion_elegida == opciones[3])
+    activar_suf = (opcion_elegida == opciones[4])
+    activar_num = (opcion_elegida == opciones[5])
+    
+    nuevo_nombre = ""
+    buscar_txt = ""
+    reemplazar_txt = ""
+    prefijo = ""
+    sufijo = ""
+    inicio_num = 1
+    
     with st.container(border=True):
-        st.markdown("**🔄 Sustituir texto**")
-        activar_sust = st.checkbox("Activar sustitución", key="chk_sust")
-        buscar_txt = st.text_input("Buscar:", disabled=not activar_sust, key="txt_find")
-        reemplazar_txt = st.text_input("Reemplazar con:", disabled=not activar_sust, key="txt_repl")
+        if activar_full:
+            st.markdown("**📝 Renombrado completo**")
+            nuevo_nombre = st.text_input("Nuevo nombre (sin extensión)", key="txt_full")
+        
+        elif activar_sust:
+            st.markdown("**🔄 Sustituir texto**")
+            buscar_txt = st.text_input("Buscar:", key="txt_find")
+            reemplazar_txt = st.text_input("Reemplazar con:", key="txt_repl")
 
-    # 3. Limpieza Especial
-    with st.container(border=True):
-        st.markdown("**🧹 Limpieza Especial (FEOV)**")
-        eliminar_id = st.checkbox("Eliminar '_ID<números>_A' del nombre", key="chk_feov")
+        elif eliminar_id:
+            st.markdown("**🧹 Limpieza Especial (FEOV)**")
+            st.info("Se eliminará '_ID<números>_A' del nombre en todos los archivos seleccionados.")
 
-    # 4. Añadir al inicio
-    with st.container(border=True):
-        st.markdown("**⬅️ Añadir al inicio**")
-        activar_pre = st.checkbox("Añadir prefijo", key="chk_pre")
-        prefijo = st.text_input("Texto prefijo:", disabled=not activar_pre, key="txt_pre")
+        elif activar_pre:
+            st.markdown("**⬅️ Añadir al inicio**")
+            prefijo = st.text_input("Texto prefijo:", key="txt_pre")
 
-    # 5. Añadir al final
-    with st.container(border=True):
-        st.markdown("**➡️ Añadir al final (antes de extensión)**")
-        activar_suf = st.checkbox("Añadir sufijo", key="chk_suf")
-        sufijo = st.text_input("Texto sufijo:", disabled=not activar_suf, key="txt_suf")
+        elif activar_suf:
+            st.markdown("**➡️ Añadir al final (antes de extensión)**")
+            sufijo = st.text_input("Texto sufijo:", key="txt_suf")
 
-    # 6. Numeración Consecutiva
-    with st.container(border=True):
-        st.markdown("**🔢 Numeración Consecutiva**")
-        activar_num = st.checkbox("Añadir numeración consecutiva al final", key="chk_num")
-        inicio_num = st.number_input("Iniciar desde:", min_value=1, value=1, disabled=not activar_num, key="num_inicio")
+        elif activar_num:
+            st.markdown("**🔢 Numeración Consecutiva**")
+            inicio_num = st.number_input("Iniciar desde:", min_value=1, value=1, key="num_inicio")
 
     st.markdown("---")
     col_cancel, col_ok = st.columns([1, 1])
