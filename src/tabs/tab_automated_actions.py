@@ -464,6 +464,23 @@ def _crear_firma_estilizada(texto):
 # --- WORKERS: ORGANIZATION ---
 
 def worker_mover_por_coincidencia(root_path, silent_mode=False, return_zip=False):
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
+    if is_native_mode:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "default")
+            if not silent_mode: st.info("Enviando tarea al Agente Local...")
+            task_id = send_command(username, "mover_por_coincidencia", {"root_path": root_path})
+            if task_id:
+                res = wait_for_result(task_id, timeout=300)
+                if isinstance(res, dict):
+                    if "error" in res: return {"error": f"Error del Agente: {res['error']}"}
+                    return {"message": res.get("message", "Operación completada por el agente.")}
+                return {"error": "Respuesta inesperada del agente."}
+            return {"error": "No se pudo conectar con el Agente Local."}
+        except Exception as e:
+            return {"error": f"Error comunicando con el agente: {e}"}
+
     if not silent_mode: st.info(f"Iniciando movimiento por coincidencia en: {root_path}")
     
     try:
@@ -806,8 +823,22 @@ def worker_txt_a_json_individual(file_list, silent_mode=False, return_zip_from_f
     return {"message": msg}
 
 def worker_organizar_facturas_feov(root_path, target_path, silent_mode=False, return_zip=False):
-    if not root_path or not target_path:
-        return {"error": "Error: Rutas de origen o destino no válidas."}
+    if not root_path or not target_path: return {"error": "Error: Rutas no válidas."}
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
+    if is_native_mode:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            username = st.session_state.get("username", "default")
+            if not silent_mode: st.info("Enviando tarea al Agente Local...")
+            task_id = send_command(username, "organizar_feov", {"root_path": root_path, "target_path": target_path})
+            if task_id:
+                res = wait_for_result(task_id, timeout=300)
+                if isinstance(res, dict):
+                    if "error" in res: return {"error": f"Error del Agente: {res['error']}"}
+                    return {"message": res.get("message", "Operación completada por el agente.")}
+                return {"error": "Respuesta inesperada del agente."}
+            return {"error": "No se pudo conectar con el Agente Local."}
+        except Exception as e: return {"error": f"Error comunicando con el agente: {e}"}
 
     if not silent_mode: st.info("Iniciando organización de facturas FEOV...")
     
@@ -3321,6 +3352,35 @@ def worker_renombrar_mapeo_excel(uploaded_file, sheet_name, col_src, col_dst, us
 
 
 def worker_copiar_mapeo_subcarpetas(uploaded_file, sheet_name, col_src, col_dst, path_src_base, path_dst_base, use_filter=False, silent_mode=False):
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
+    if is_native_mode:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            import base64
+            username = st.session_state.get("username", "default")
+            if not silent_mode: st.info("Enviando tarea al Agente Local...")
+            if hasattr(uploaded_file, "seek"): uploaded_file.seek(0)
+            file_bytes = uploaded_file if isinstance(uploaded_file, bytes) else uploaded_file.getvalue()
+            b64_file = base64.b64encode(file_bytes).decode('utf-8')
+            
+            task_id = send_command(username, "copiar_mapeo_subcarpetas", {
+                "file_bytes_b64": b64_file,
+                "sheet_name": sheet_name,
+                "col_src": col_src,
+                "col_dst": col_dst,
+                "path_src_base": path_src_base,
+                "path_dst_base": path_dst_base,
+                "use_filter": use_filter
+            })
+            if task_id:
+                res = wait_for_result(task_id, timeout=300)
+                if isinstance(res, dict):
+                    if "error" in res: return f"Error del Agente: {res['error']}"
+                    return res.get("message", "Operación completada por el agente.")
+                return "Respuesta inesperada del agente."
+            return "No se pudo conectar con el Agente Local."
+        except Exception as e: return f"Error comunicando con el agente: {e}"
+
     try:
         if isinstance(uploaded_file, bytes): uploaded_file = io.BytesIO(uploaded_file)
         uploaded_file.seek(0)
@@ -3514,6 +3574,35 @@ def worker_consolidar_archivos_subcarpetas(base_path, silent_mode=False):
     return f"Copiados: {copiados}. Conflictos: {conflictos}. Errores: {errores}."
 
 def worker_copiar_archivos_desde_raiz_mapeo(uploaded_file, sheet_name, col_id, col_folder, root_src, root_dst, use_filter=False, silent_mode=False):
+    is_native_mode = getattr(st, 'session_state', {}).get('force_native_mode', True) if hasattr(st, 'session_state') else False
+    if is_native_mode:
+        try:
+            from src.agent_client import send_command, wait_for_result
+            import base64
+            username = st.session_state.get("username", "default")
+            if not silent_mode: st.info("Enviando tarea al Agente Local...")
+            if hasattr(uploaded_file, "seek"): uploaded_file.seek(0)
+            file_bytes = uploaded_file if isinstance(uploaded_file, bytes) else uploaded_file.getvalue()
+            b64_file = base64.b64encode(file_bytes).decode('utf-8')
+            
+            task_id = send_command(username, "copiar_archivos_desde_raiz_mapeo", {
+                "file_bytes_b64": b64_file,
+                "sheet_name": sheet_name,
+                "col_id": col_id,
+                "col_folder": col_folder,
+                "root_src": root_src,
+                "root_dst": root_dst,
+                "use_filter": use_filter
+            })
+            if task_id:
+                res = wait_for_result(task_id, timeout=300)
+                if isinstance(res, dict):
+                    if "error" in res: return f"Error del Agente: {res['error']}"
+                    return res.get("message", "Operación completada por el agente.")
+                return "Respuesta inesperada del agente."
+            return "No se pudo conectar con el Agente Local."
+        except Exception as e: return f"Error comunicando con el agente: {e}"
+
     try:
         if isinstance(uploaded_file, bytes): uploaded_file = io.BytesIO(uploaded_file)
         uploaded_file.seek(0)
@@ -3880,7 +3969,6 @@ def dialog_importar_excel():
                     uploaded.seek(0)
                     result = worker_aplicar_renombrado_excel(uploaded, folder)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(folder, "dl_ren_excel", "📦 Descargar Carpeta Modificada (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -3924,7 +4012,6 @@ def dialog_sufijo():
                         # Run synchronously
                         result = worker_anadir_sufijo_excel(uploaded, sheet, col_folder, col_suffix, folder, use_filter)
                         st.success(result)
-                        close_auto_dialog()
 #                         render_download_button(folder, "dl_sufijo", "📦 Descargar Resultados (ZIP)")
                         # time.sleep(2)
                         # st.rerun()
@@ -3978,7 +4065,6 @@ def dialog_renombrar_mapeo_excel():
                         uploaded.seek(0)
                     result = worker_renombrar_mapeo_excel(uploaded, sheet, col_src, col_dst, use_filter, folder)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(folder, "dl_ren_map", "📦 Descargar Carpeta Modificada (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -4022,7 +4108,6 @@ def dialog_modif_docx_completo():
                     uploaded.seek(0)
                     result = worker_modificar_docx_completo(uploaded, sheet, folder, use_filter)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(folder, "dl_mod_docx_full", "📦 Descargar Carpeta Modificada (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -4057,7 +4142,6 @@ def dialog_insertar_firma_docx():
                 with st.spinner("Insertando firmas..."):
                     result = worker_firmar_docx_con_imagen_masivo(base_path, docx_name, sig_name)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(base_path, "dl_sign_docx", "📦 Descargar Destino (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -7029,7 +7113,6 @@ def dialog_crear_firma():
                     with st.spinner("Generando firmas..."):
                         result = worker_crear_firma_nombre(current_path, font_path, size, humanize)
                         st.success(result)
-                        close_auto_dialog()
                         # render_download_button(current_path, "dl_firma_folder", "📦 Descargar Firmas (ZIP)")
                 except Exception as e:
                     st.error(f"Error: {e}")
@@ -7063,7 +7146,6 @@ def dialog_crear_firma():
                             with st.spinner("Generando firmas..."):
                                 result = worker_crear_firma_excel(current_path, font_path, size, file_bytes, sheet, col_folder, col_full_name, humanize)
                                 st.success(result)
-                                close_auto_dialog()
                                 # render_download_button(current_path, "dl_firma_excel", "📦 Descargar Resultados (ZIP)")
                             # st.rerun()
                         except Exception as e:
@@ -7104,7 +7186,6 @@ def dialog_organizar_feov_avanzado():
                 with st.spinner("Organizando facturas..."):
                     result = worker_organizar_facturas_por_pdf_avanzado(path_dest, path_orig)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(path_dest, "dl_feov_adv", "📦 Descargar Destino (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -7157,7 +7238,6 @@ def dialog_autorizacion_docx():
                 with st.spinner("Modificando DOCX..."):
                     result = worker_autorizacion_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_auth, use_filter)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(base_path, "dl_auth_docx", "📦 Descargar DOCX Modificados (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -7208,7 +7288,6 @@ def dialog_regimen_docx():
                 with st.spinner("Modificando Régimen..."):
                     result = worker_regimen_docx_desde_excel(base_path, file_bytes, sheet, col_folder, col_reg, use_filter)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(base_path, "dl_reg_docx", "📦 Descargar DOCX Modificados (ZIP)")
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -7382,7 +7461,6 @@ def dialog_distribuir_base():
                         base_dest_path
                     )
                     st.success(result)
-                    close_auto_dialog()
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
@@ -7433,7 +7511,6 @@ def dialog_crear_carpetas_excel():
                 with st.spinner("Creando carpetas..."):
                     result = worker_crear_carpetas_excel_avanzado(file_bytes, sheet, col_name, base_path, use_filter)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(base_path, "dl_create_fold_excel", "📦 Descargar Estructura (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -7592,7 +7669,6 @@ def dialog_copiar_mapeo():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_mapeo_subcarpetas(file_bytes, sheet, col_src, col_dst, src_base, dst_base, use_filter)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(dst_base, "dl_copy_map_sub", "📦 Descargar Destino (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -7655,7 +7731,6 @@ def dialog_copiar_raiz():
                 with st.spinner("Copiando archivos..."):
                     result = worker_copiar_archivos_desde_raiz_mapeo(file_bytes, sheet, col_id, col_folder, root_src, root_dst, use_filter)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(root_dst, "dl_copy_root_map", "📦 Descargar Destino (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
@@ -7850,7 +7925,6 @@ def dialog_aplicar_renombrado():
                 with st.spinner("Renombrando archivos..."):
                     result = worker_aplicar_renombrado_excel(excel_file, folder)
                     st.success(result)
-                    close_auto_dialog()
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
@@ -7888,7 +7962,6 @@ def dialog_organizar_feov():
                 with st.spinner("Organizando facturas..."):
                     result = worker_organizar_facturas_feov(source_path, target_path)
                     st.success(result)
-                    close_auto_dialog()
 #                     render_download_button(target_path, "dl_feov", "📦 Descargar Facturas Organizadas (ZIP)")
                     # time.sleep(2)
                     # st.rerun()
