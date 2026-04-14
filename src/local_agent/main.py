@@ -2903,8 +2903,8 @@ class AgentGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("CDO - Agente Local")
-        self.root.geometry("600x550")
-        self.root.minsize(500, 450)
+        self.root.geometry("600x700")
+        self.root.minsize(500, 650)
         
         # Estilos modernos
         bg_color = "#f8f9fa"
@@ -2914,59 +2914,90 @@ class AgentGUI:
         self.root.configure(bg=bg_color)
         
         style = ttk.Style()
-        # Intentar usar un tema más limpio si está disponible
         if 'clam' in style.theme_names():
             style.theme_use('clam')
             
         style.configure('Main.TFrame', background=bg_color)
         style.configure('Card.TFrame', background="white", relief="flat")
         style.configure('TLabel', background="white", foreground=text_color, font=('Segoe UI', 10))
-        style.configure('Header.TLabel', background=bg_color, font=('Segoe UI', 16, 'bold'), foreground=primary_color)
-        style.configure('Status.TLabel', background=bg_color, font=('Segoe UI', 10, 'bold'), foreground="#6c757d")
+        style.configure('Header.TLabel', background=bg_color, font=('Segoe UI', 16, 'bold'), foreground=text_color)
+        style.configure('SubHeader.TLabel', background=bg_color, font=('Segoe UI', 10), foreground="#6c757d")
+        style.configure('StatusPill.TLabel', background="#e8f5e9", font=('Segoe UI', 10), foreground="#2e7d32", padding=(10, 2))
+        style.configure('StatusPillOff.TLabel', background="#f1f3f5", font=('Segoe UI', 10), foreground="#868e96", padding=(10, 2))
         
-        style.configure('Action.TButton', font=('Segoe UI', 10, 'bold'), padding=8)
+        style.configure('Action.TButton', font=('Segoe UI', 11), padding=10)
         style.map('Action.TButton',
-            background=[('active', '#0052a3'), ('!disabled', primary_color)],
-            foreground=[('!disabled', 'white')]
+            background=[('active', '#e9ecef'), ('!disabled', '#f8f9fa')],
+            foreground=[('!disabled', '#212529')]
         )
         
-        style.configure('Stop.TButton', font=('Segoe UI', 10, 'bold'), padding=8)
+        style.configure('Stop.TButton', font=('Segoe UI', 11), padding=10)
         style.map('Stop.TButton',
-            background=[('active', '#c82333'), ('!disabled', '#dc3545')],
-            foreground=[('!disabled', 'white')]
+            background=[('active', '#ffe3e3'), ('!disabled', '#fff5f5')],
+            foreground=[('!disabled', '#c92a2a')]
         )
+
+        style.configure('LogHeader.TLabel', background=bg_color, font=('Segoe UI', 10), foreground=text_color)
+        style.configure('EventCount.TLabel', background="#e9ecef", font=('Segoe UI', 9), foreground="#495057", padding=(8, 2))
+
+        style.configure('StatCard.TFrame', background="#f1f3f5")
+        style.configure('StatTitle.TLabel', background="#f1f3f5", font=('Segoe UI', 9), foreground="#868e96")
+        style.configure('StatValue.TLabel', background="#f1f3f5", font=('Segoe UI', 14, 'bold'), foreground=text_color)
+        style.configure('StatValueOK.TLabel', background="#f1f3f5", font=('Segoe UI', 12, 'bold'), foreground="#2b8a3e")
 
         self.config = load_config()
         self.worker = None
+        self.event_count = 0
+        self.tasks_processed = 0
+        self.start_time = None
+        self.timer_running = False
         
         # Main Container
         main_frame = ttk.Frame(root, padding="20 20 20 20", style='Main.TFrame')
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Header
-        header_frame = ttk.Frame(main_frame, style='Main.TFrame')
-        header_frame.pack(fill=tk.X, pady=(0, 15))
+        # Header Area
+        header_container = ttk.Frame(main_frame, style='Main.TFrame')
+        header_container.pack(fill=tk.X, pady=(0, 15))
         
-        ttk.Label(header_frame, text="⚡ Agente de Ejecución Local", style='Header.TLabel').pack(side=tk.LEFT)
-        self.lbl_status = ttk.Label(header_frame, text="⚫ Desconectado", style='Status.TLabel')
-        self.lbl_status.pack(side=tk.RIGHT, pady=5)
+        # Left header side
+        header_left = ttk.Frame(header_container, style='Main.TFrame')
+        header_left.pack(side=tk.LEFT)
+        
+        # Icon + Title
+        title_frame = ttk.Frame(header_left, style='Main.TFrame')
+        title_frame.pack(anchor=tk.W)
+        
+        icon_lbl = tk.Label(title_frame, text="⚡", font=('Segoe UI', 16), bg="#e7f5ff", fg="#1864ab", width=2, height=1)
+        icon_lbl.pack(side=tk.LEFT, padx=(0, 10))
+        # Rounded corners illusion for icon could be done with images, but text is fine.
+        
+        title_lbl = ttk.Label(title_frame, text="Agente de ejecución local", style='Header.TLabel')
+        title_lbl.pack(side=tk.LEFT)
+        
+        # Subtitle
+        ttk.Label(header_left, text="CDO · v1.0", style='SubHeader.TLabel').pack(anchor=tk.W, padx=(40, 0))
+        
+        # Right header side (Status Pill)
+        self.lbl_status = ttk.Label(header_container, text="⚫ Desconectado", style='StatusPillOff.TLabel')
+        self.lbl_status.pack(side=tk.RIGHT, anchor=tk.N, pady=5)
         
         # Card container for settings
-        card_frame = tk.Frame(main_frame, bg="white", padx=20, pady=20, relief=tk.GROOVE, bd=1)
+        card_frame = tk.Frame(main_frame, bg="white", padx=20, pady=20, highlightbackground="#dee2e6", highlightthickness=1)
         card_frame.pack(fill=tk.X, pady=(0, 20))
         
         # Grid layout for inputs
-        ttk.Label(card_frame, text="Usuario:").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0,10))
+        ttk.Label(card_frame, text="Usuario").grid(row=0, column=0, sticky=tk.W, pady=5, padx=(0,20))
         self.user_var = tk.StringVar(value=self.config.get("username", ""))
-        ent_user = ttk.Entry(card_frame, textvariable=self.user_var, font=('Segoe UI', 10), width=40)
+        ent_user = ttk.Entry(card_frame, textvariable=self.user_var, font=('Segoe UI', 10))
         ent_user.grid(row=0, column=1, sticky=tk.EW, pady=5)
         
-        ttk.Label(card_frame, text="Contraseña:").grid(row=1, column=0, sticky=tk.W, pady=5, padx=(0,10))
+        ttk.Label(card_frame, text="Contraseña").grid(row=1, column=0, sticky=tk.W, pady=5, padx=(0,20))
         self.pass_var = tk.StringVar(value=self.config.get("password", ""))
         ent_pass = ttk.Entry(card_frame, textvariable=self.pass_var, show="•", font=('Segoe UI', 10))
         ent_pass.grid(row=1, column=1, sticky=tk.EW, pady=5)
 
-        ttk.Label(card_frame, text="URL Tareas:").grid(row=2, column=0, sticky=tk.W, pady=5, padx=(0,10))
+        ttk.Label(card_frame, text="URL tareas").grid(row=2, column=0, sticky=tk.W, pady=5, padx=(0,20))
         default_task_url = "http://3.138.135.181:8000/tasks/poll"
         loaded_task_url = self.config.get("task_url", default_task_url)
         if any(x in loaded_task_url for x in ["localhost", "8501", "/api/", "3.142.164.128", "3.15.237.186", "18.118.37.215"]):
@@ -2976,7 +3007,7 @@ class AgentGUI:
         ent_task = ttk.Entry(card_frame, textvariable=self.url_task_var, font=('Segoe UI', 10))
         ent_task.grid(row=2, column=1, sticky=tk.EW, pady=5)
         
-        ttk.Label(card_frame, text="URL Resultados:").grid(row=3, column=0, sticky=tk.W, pady=5, padx=(0,10))
+        ttk.Label(card_frame, text="URL resultados").grid(row=3, column=0, sticky=tk.W, pady=5, padx=(0,20))
         default_res_url = "http://3.138.135.181:8000/tasks"
         loaded_res_url = self.config.get("result_url", default_res_url)
         if any(x in loaded_res_url for x in ["localhost", "8501", "/api/", "3.142.164.128", "3.15.237.186", "18.118.37.215"]):
@@ -2989,29 +3020,104 @@ class AgentGUI:
         card_frame.columnconfigure(1, weight=1)
         
         # Action Button
-        self.btn_start = ttk.Button(main_frame, text="▶ Iniciar Agente", style='Action.TButton', command=self.toggle_agent, cursor="hand2")
-        self.btn_start.pack(fill=tk.X, pady=(0, 15))
+        btn_frame = tk.Frame(main_frame, bg="white", highlightbackground="#dee2e6", highlightthickness=1)
+        btn_frame.pack(fill=tk.X, pady=(0, 20))
+        self.btn_start = ttk.Button(btn_frame, text="▶ Iniciar Agente", style='Action.TButton', command=self.toggle_agent, cursor="hand2")
+        self.btn_start.pack(fill=tk.X, padx=2, pady=2)
+        
+        # Log Header
+        log_header_frame = ttk.Frame(main_frame, style='Main.TFrame')
+        log_header_frame.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(log_header_frame, text="Registro de actividad", style='LogHeader.TLabel').pack(side=tk.LEFT)
+        self.lbl_events = ttk.Label(log_header_frame, text="0 eventos", style='EventCount.TLabel')
+        self.lbl_events.pack(side=tk.RIGHT)
         
         # Console / Logs
-        ttk.Label(main_frame, text="Registro de Actividad:", style='Main.TLabel', font=('Segoe UI', 9, 'bold')).pack(anchor=tk.W, pady=(0,5))
+        log_container = tk.Frame(main_frame, bg="#1e1e1e", highlightbackground="#dee2e6", highlightthickness=1, bd=0)
+        log_container.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
         
-        # Text widget for logs with custom styling
         self.log_area = scrolledtext.ScrolledText(
-            main_frame, 
-            height=12, 
+            log_container, 
+            height=10, 
             font=('Consolas', 9),
-            bg="#1e1e1e", 
-            fg="#00ff00",
+            bg="#171717", 
+            fg="#cccccc",
             insertbackground="white",
             relief=tk.FLAT,
             padx=10,
-            pady=10
+            pady=10,
+            highlightthickness=0,
+            borderwidth=0
         )
-        self.log_area.pack(fill=tk.BOTH, expand=True)
+        self.log_area.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+        
+        # Configure log tags
+        self.log_area.tag_config("timestamp", foreground="#5c5c5c")
+        self.log_area.tag_config("success", foreground="#4caf50")
+        self.log_area.tag_config("info", foreground="#ffb300")
+        self.log_area.tag_config("processing", foreground="#8a8a8a")
+        self.log_area.tag_config("error", foreground="#f44336")
+        self.log_area.tag_config("default", foreground="#cccccc")
+        
+        # Stats Cards Bottom
+        stats_container = ttk.Frame(main_frame, style='Main.TFrame')
+        stats_container.pack(fill=tk.X)
+        stats_container.columnconfigure((0, 1, 2), weight=1)
+        
+        def create_stat_card(parent, title, value, col, val_style='StatValue.TLabel'):
+            card = tk.Frame(parent, bg="#f1f3f5", padx=10, pady=10, highlightbackground="#e9ecef", highlightthickness=1)
+            card.grid(row=0, column=col, sticky=tk.EW, padx=(0 if col==0 else 5, 0 if col==2 else 5))
+            ttk.Label(card, text=title, style='StatTitle.TLabel', anchor=tk.CENTER).pack(fill=tk.X)
+            lbl_val = ttk.Label(card, text=value, style=val_style, anchor=tk.CENTER)
+            lbl_val.pack(fill=tk.X, pady=(5, 0))
+            return lbl_val
+
+        self.lbl_stat_tasks = create_stat_card(stats_container, "Tareas procesadas", "0", 0)
+        self.lbl_stat_time = create_stat_card(stats_container, "Tiempo activo", "00:00", 1)
+        self.lbl_stat_status = create_stat_card(stats_container, "Estado", "Inactivo", 2, 'StatValue.TLabel')
+
+        self.update_timer()
+
+    def update_timer(self):
+        if self.timer_running and self.start_time:
+            delta = int(time.time() - self.start_time)
+            mins, secs = divmod(delta, 60)
+            hours, mins = divmod(mins, 60)
+            if hours > 0:
+                time_str = f"{hours:02d}:{mins:02d}:{secs:02d}"
+            else:
+                time_str = f"{mins:02d}:{secs:02d}"
+            self.lbl_stat_time.config(text=time_str)
+        self.root.after(1000, self.update_timer)
+
+    def update_event_count(self):
+        self.event_count += 1
+        self.lbl_events.config(text=f"{self.event_count} evento{'s' if self.event_count != 1 else ''}")
 
     def log(self, msg):
         def _log():
-            self.log_area.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] {msg}\n")
+            self.update_event_count()
+            
+            # Determine tag based on content
+            msg_lower = msg.lower()
+            tag = "default"
+            if "error" in msg_lower or "excepción" in msg_lower:
+                tag = "error"
+            elif "iniciado" in msg_lower or "resultado enviado" in msg_lower or "éxito" in msg_lower:
+                tag = "success"
+            elif "procesando" in msg_lower or "path=" in msg_lower:
+                tag = "processing"
+            elif "abriendo" in msg_lower or "advertencia" in msg_lower:
+                tag = "info"
+                
+            # Check if it's task processed
+            if "procesando tarea" in msg_lower:
+                self.tasks_processed += 1
+                self.lbl_stat_tasks.config(text=str(self.tasks_processed))
+                
+            timestamp = f"[{datetime.now().strftime('%H:%M:%S')}] "
+            self.log_area.insert(tk.END, timestamp, "timestamp")
+            self.log_area.insert(tk.END, f"{msg}\n", tag)
             self.log_area.see(tk.END)
         self.root.after(0, _log)
 
@@ -3042,7 +3148,9 @@ class AgentGUI:
         if self.worker and self.worker.running:
             self.worker.stop()
             self.btn_start.config(text="▶ Iniciar Agente", style='Action.TButton')
-            self.lbl_status.config(text="⚫ Desconectado", foreground="#6c757d")
+            self.lbl_status.config(text="⚫ Desconectado", style='StatusPillOff.TLabel')
+            self.lbl_stat_status.config(text="Inactivo", foreground="#868e96")
+            self.timer_running = False
             self.log("Agente detenido manualmente.")
         else:
             user = self.user_var.get()
@@ -3064,9 +3172,17 @@ class AgentGUI:
             self.worker.log_callback = self.log
             self.worker.gui_invoker = self.invoke_on_gui
             self.worker.start()
-            self.btn_start.config(text="⏹ Detener Agente", style='Stop.TButton')
-            self.lbl_status.config(text="🟢 En ejecución", foreground="#28a745")
-
+            
+            self.btn_start.config(text="⏹ Detener agente", style='Stop.TButton')
+            self.lbl_status.config(text="🟢 En ejecución", style='StatusPill.TLabel')
+            self.lbl_stat_status.config(text="OK", style='StatValueOK.TLabel')
+            
+            # Reset stats
+            self.tasks_processed = 0
+            self.lbl_stat_tasks.config(text="0")
+            self.start_time = time.time()
+            self.timer_running = True
+            
 if __name__ == "__main__":
     root = tk.Tk()
     app = AgentGUI(root)
