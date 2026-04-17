@@ -19,8 +19,8 @@ def open_action_dialog(dialog_name):
         if k in st.session_state:
             del st.session_state[k]
             
-    st.session_state["active_action_dialog"] = dialog_name
-    st.rerun()
+    if callable(dialog_name):
+        dialog_name()
 
 def close_action_dialog():
     keys_to_clear = [k for k in st.session_state.keys() if k.startswith("up_") or "uploader" in k or k.endswith("_up")]
@@ -1608,23 +1608,3 @@ def render(container):
 
     # Move dialog handling outside the column block to prevent multiple dialogs 
     # from being triggered simultaneously by different parts of the UI
-    active_dialog = st.session_state.get("active_action_dialog")
-    if active_dialog:
-        if active_dialog == "Modificar nombre":
-            dialogo_modificar_nombres()
-        elif active_dialog == "Editar texto":
-            dialogo_editar_texto()
-        elif active_dialog == "Copiar a carpeta":
-            dialogo_copiar_lista()
-        elif active_dialog == "Mover a carpeta":
-            dialogo_mover_lista()
-        elif active_dialog == "Comprimir en ZIP":
-            dialogo_comprimir_zip()
-        elif active_dialog == "Comprimir individualmente":
-            dialogo_comprimir_individual()
-        elif active_dialog == "Eliminar":
-            dialogo_confirmar_eliminar()
-        else:
-            funcion_no_implementada(f"Acción: {active_dialog}")
-            if "active_action_dialog" in st.session_state:
-                del st.session_state["active_action_dialog"]

@@ -1968,7 +1968,7 @@ class AgentWorker:
             try:
                 # Poll for tasks with increased timeout
                 auth = (self.username, self.password) if self.password else None
-                resp = requests.get(f"{self.task_url}?username={self.username}", auth=auth, timeout=15)
+                resp = requests.get(f"{self.task_url}?username={self.username}", auth=auth, timeout=120)
                 if resp.status_code == 200:
                     data = resp.json()
                     if data.get("tasks"):

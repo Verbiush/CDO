@@ -41,8 +41,9 @@ def open_auto_dialog(dialog_name):
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
-    st.session_state["active_auto_dialog"] = dialog_name
-    st.rerun()
+    
+    if callable(dialog_name):
+        dialog_name()
 
 def get_uploader_key(base_key):
     """Returns a unique key for the uploader using the current dialog instance ID to prevent state locking."""
@@ -8285,7 +8286,7 @@ def render():
         col_o1, col_o2 = st.columns(2)
         with col_o1:
             if st.button("📥 Organizar Facturas (FEOV)", key="btn_org_feov_new"):
-                open_auto_dialog("organizar_feov")
+                open_auto_dialog(dialog_organizar_feov)
                 
             if st.button("📂➡️📁 Mover por Coincidencia", key="btn_org_move"):
                 if path_org:
@@ -8301,10 +8302,10 @@ def render():
 
         with col_o2:
             if st.button("🗺️ Copiar Archivos (Mapeo Sub)", key="btn_org_map_sub_new"):
-                open_auto_dialog("copiar_mapeo_subcarpetas")
+                open_auto_dialog(dialog_copiar_mapeo)
                 
             if st.button("📜 Copiar Archivos Raíz (Mapeo)", key="btn_org_map_root_new"):
-                open_auto_dialog("copiar_mapeo_raiz")
+                open_auto_dialog(dialog_copiar_raiz)
                 
             if st.button("📤 Consolidar Subcarpetas", key="btn_org_consol"):
                 if path_org:
@@ -8323,23 +8324,23 @@ def render():
         col_m1, col_m2 = st.columns(2)
         with col_m1:
             if st.button("📤 Exportar para renombrar", key="btn_mod_exp_new"):
-                open_auto_dialog("exportar_nombres")
+                open_auto_dialog(dialog_exportar_renombrado)
                 
             if st.button("📥 Aplicar renombrado Excel", key="btn_mod_app_new"):
-                open_auto_dialog("aplicar_nombres")
+                open_auto_dialog(dialog_aplicar_renombrado)
                 
             if st.button("🏷️ Añadir Sufijo desde Excel", key="btn_mod_suf_new"):
-                open_auto_dialog("sufijo_archivos")
+                open_auto_dialog(dialog_sufijo)
 
             if st.button("📝 Renombrar Masivo por Mapeo Excel", key="btn_mod_map_new"):
-                open_auto_dialog("renombrar_excel")
+                open_auto_dialog(dialog_renombrar_mapeo_excel)
                 
         with col_m2:
             if st.button("✍️ Modif. DOCX Completo", key="btn_mod_full_new"):
-                open_auto_dialog("modif_docx")
+                open_auto_dialog(dialog_modif_docx_completo)
                 
             if st.button("🖋️ Firmar DOCX con Imagen", key="btn_mod_sign_new"):
-                open_auto_dialog("insertar_firma_docx")
+                open_auto_dialog(dialog_insertar_firma_docx)
 
     # --- TAB 4: Análisis ---
     with tab_an:
@@ -8517,76 +8518,28 @@ def render():
         with col_c1:
             st.subheader("Creación")
             if st.button("📂 Crear Carpetas (Excel)", key="btn_cr_folders"):
-                open_auto_dialog("crear_carpetas")
+                open_auto_dialog(dialog_crear_carpetas_excel)
                 
             if st.button("⬇️ Descargar Firmas", key="btn_cr_sigs"):
-                open_auto_dialog("descargar_firmas")
+                open_auto_dialog(dialog_descargar_firmas)
                 
             
             if st.button("⬇️ Descargar Hist. OVIDA", key="btn_cr_ovida"):
-                open_auto_dialog("descargar_ovida")
+                open_auto_dialog(dialog_descargar_historias_ovida)
                 
             if st.button("⬇️ Descargar Adjuntos Zeus", key="btn_cr_zeus"):
-                open_auto_dialog("descargar_zeus")
+                open_auto_dialog(dialog_descargar_zeus_adjuntos)
 
                 
             if st.button("✒️ Crear Firma Digital", key="btn_cr_dig_sig"):
-                open_auto_dialog("crear_firma")
+                open_auto_dialog(dialog_crear_firma)
 
         with col_c2:
             st.subheader("Distribución / Otros")
             
             if st.button("📂 Distribuir Base", key="btn_dist_base"):
-                open_auto_dialog("distribuir_base")
+                open_auto_dialog(dialog_distribuir_base)
                 
             if st.button("🔀 Cruzar Excels (VLOOKUP)", key="btn_cruzar_excels"):
-                open_auto_dialog("cruzar_excels")
-
-    # Move dialog triggers to the root scope to avoid "Only one dialog" exception
-    active_auto_dialog = st.session_state.get("active_auto_dialog")
-    if active_auto_dialog:
-        if active_auto_dialog == "crear_carpetas":
-            dialog_crear_carpetas_excel()
-        elif active_auto_dialog == "descargar_firmas":
-            dialog_descargar_firmas()
-        
-        elif active_auto_dialog == "descargar_ovida":
-            dialog_descargar_historias_ovida()
-        elif active_auto_dialog == "descargar_zeus":
-            dialog_descargar_zeus_adjuntos()
-
-        elif active_auto_dialog == "crear_firma":
-            dialog_crear_firma()
-        elif active_auto_dialog == "distribuir_base":
-            dialog_distribuir_base()
-        elif active_auto_dialog == "cruzar_excels":
-            dialog_cruzar_excels()
-        elif active_auto_dialog == "organizar_feov":
-            dialog_organizar_feov()
-        elif active_auto_dialog == "mover_coincidencia":
-            dialog_organizar_feov_avanzado()
-        elif active_auto_dialog == "copiar_mapeo_subcarpetas":
-            dialog_copiar_mapeo()
-        elif active_auto_dialog == "copiar_mapeo_raiz":
-            dialog_copiar_raiz()
-        elif active_auto_dialog == "autorizacion_docx":
-            dialog_autorizacion_docx()
-        elif active_auto_dialog == "regimen_docx":
-            dialog_regimen_docx()
-        elif active_auto_dialog == "sufijo_archivos":
-            dialog_sufijo()
-        elif active_auto_dialog == "renombrar_excel":
-            dialog_renombrar_mapeo_excel()
-        elif active_auto_dialog == "exportar_nombres":
-            dialog_exportar_renombrado()
-        elif active_auto_dialog == "aplicar_nombres":
-            dialog_aplicar_renombrado()
-        elif active_auto_dialog == "modif_docx":
-            dialog_modif_docx_completo()
-        elif active_auto_dialog == "insertar_firma_docx":
-            dialog_insertar_firma_docx()
-        else:
-            if "active_auto_dialog" in st.session_state:
-                del st.session_state["active_auto_dialog"]
-
+                open_auto_dialog(dialog_cruzar_excels)
 
