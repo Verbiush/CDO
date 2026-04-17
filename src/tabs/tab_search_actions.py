@@ -1597,10 +1597,21 @@ def render(container):
         with col_btns[1]:
             if st.button("▶️ Ejecutar", use_container_width=True, help="Ejecutar acción seleccionada"):
                 action = st.session_state.get("action_radio")
-                open_action_dialog(action)
+                if action == "Modificar nombre":
+                    open_action_dialog(dialog_renombrar)
+                elif action == "Editar texto":
+                    open_action_dialog(dialog_editar_texto)
+                elif action == "Copiar a carpeta":
+                    open_action_dialog(dialog_copiar)
+                elif action == "Mover a carpeta":
+                    open_action_dialog(dialog_mover)
+                elif action == "Comprimir en ZIP":
+                    open_action_dialog(dialog_comprimir)
+                elif action == "Comprimir individualmente":
+                    open_action_dialog(dialog_comprimir_individual)
 
             if st.button("🗑️ Eliminar", use_container_width=True, help="Eliminar archivos seleccionados"):
-                open_action_dialog("Eliminar")
+                open_action_dialog(dialog_eliminar)
 
         with col_btns[4]:
             if st.button("↩️ Deshacer", use_container_width=True, help="Revertir la última acción"):
