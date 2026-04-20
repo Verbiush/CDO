@@ -1598,7 +1598,7 @@ def render(container):
             if st.button("▶️ Ejecutar", use_container_width=True, help="Ejecutar acción seleccionada"):
                 action = st.session_state.get("action_radio")
                 if action == "Modificar nombre":
-                    open_action_dialog(dialogo_renombrar)
+                    open_action_dialog(dialogo_modificar_nombres)
                 elif action == "Editar texto":
                     open_action_dialog(dialogo_editar_texto)
                 elif action == "Copiar a carpeta":
