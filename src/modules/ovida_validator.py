@@ -17,15 +17,23 @@ class OvidaValidator:
         if self.driver:
             return self.driver
             
+        import sys
+        from webdriver_manager.core.os_manager import ChromeType
+        
         options = webdriver.ChromeOptions()
         options.add_argument('--kiosk-printing')
-        if self.headless:
+        if self.headless or sys.platform.startswith('linux'):
              options.add_argument('--headless=new')
         options.add_argument('--no-sandbox')
         options.add_argument('--disable-dev-shm-usage')
         options.add_argument('--disable-gpu')
         
-        self.service = Service(ChromeDriverManager().install())
+        if sys.platform.startswith('linux'):
+            options.binary_location = "/usr/bin/chromium"
+            self.service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
+        else:
+            self.service = Service(ChromeDriverManager().install())
+            
         self.driver = webdriver.Chrome(service=self.service, options=options)
         return self.driver
 

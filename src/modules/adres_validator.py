@@ -141,7 +141,15 @@ class ValidatorAdresWeb:
             
             from selenium.webdriver.chrome.service import Service
             from webdriver_manager.chrome import ChromeDriverManager
-            service = Service(ChromeDriverManager().install())
+            from webdriver_manager.core.os_manager import ChromeType
+            
+            # If on Linux, use Chromium type to avoid version mismatch with installed Chromium
+            if sys.platform.startswith('linux'):
+                options.binary_location = "/usr/bin/chromium"
+                service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
+            else:
+                service = Service(ChromeDriverManager().install())
+                
             self.driver = webdriver.Chrome(service=service, options=options)
 
     def close_driver(self):

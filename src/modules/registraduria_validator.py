@@ -17,14 +17,23 @@ class ValidatorRegistraduria:
 
     def start_driver(self):
         try:
-            service = Service(ChromeDriverManager().install())
+            import sys
+            from webdriver_manager.core.os_manager import ChromeType
+            
             options = webdriver.ChromeOptions()
-            if self.headless:
+            if self.headless or sys.platform.startswith('linux'):
                 options.add_argument("--headless=new")
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
             options.add_argument("--window-size=1920,1080")
+            
+            if sys.platform.startswith('linux'):
+                options.binary_location = "/usr/bin/chromium"
+                service = Service(ChromeDriverManager(chrome_type=ChromeType.CHROMIUM).install())
+            else:
+                service = Service(ChromeDriverManager().install())
+                
             self.driver = webdriver.Chrome(service=service, options=options)
         except Exception as e:
             print(f"Error starting Chrome: {e}. Trying Edge...")
