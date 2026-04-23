@@ -2838,6 +2838,32 @@ class AgentWorker:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
                     
+            elif command == "adres_web_massive":
+                # Nuevo comando para delegar el validador web masivo al agente local
+                file_data_b64 = params.get("file_data")
+                col_cedula = params.get("col_cedula")
+                col_tipo_doc = params.get("col_tipo_doc")
+                if file_data_b64 and col_cedula:
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    try:
+                        import base64
+                        import io
+                        import pandas as pd
+                        from src.tabs.tab_automated_actions import worker_adres_web_massive
+                        
+                        file_data = base64.b64decode(file_data_b64)
+                        df = pd.read_excel(io.BytesIO(file_data))
+                        res = worker_adres_web_massive(df, col_cedula, col_tipo_doc=col_tipo_doc, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        self.log(f"Error procesando ADRES masivo local: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (file_data, col_cedula)"}
+                    
             elif command == "launch_browser":
                 url = params.get("url", "https://ovidazs.siesacloud.com/ZeusSalud/ips/iniciando.php")
                 try:

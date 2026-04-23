@@ -126,15 +126,47 @@ def render(container=None):
                             except Exception as e:
                                 st.error(f"Excepción: {e}")
                     elif tipo_masivo == "ADRES (Web)":
-                        with st.spinner("Procesando validación masiva ADRES (Web)..."):
+                        with st.spinner("Enviando validación masiva ADRES (Web) al Agente Local..."):
                             try:
-                                result = worker_adres_web_massive(df, col_cedula, col_tipo_doc=tipo_doc_column, silent_mode=False)
-                                if "error" in result:
-                                    st.error(f"Error: {result['error']}")
+                                import base64
+                                import io
+                                import time
+                                from src import agent_client
+                                
+                                output = io.BytesIO()
+                                df.to_excel(output, index=False)
+                                file_data_b64 = base64.b64encode(output.getvalue()).decode("utf-8")
+                                
+                                username = st.session_state.get("username", "admin")
+                                if not agent_client.is_agent_active(username):
+                                    st.error("⚠️ El Agente Local no está activo. Ejecute la aplicación localmente e inicie sesión.")
+                                    st.stop()
+                                
+                                task_id = agent_client.send_command(username, "adres_web_massive", {
+                                    "file_data": file_data_b64,
+                                    "col_cedula": col_cedula,
+                                    "col_tipo_doc": tipo_doc_column
+                                })
+                                
+                                if task_id:
+                                    st.info(f"Tarea enviada al agente (ID: {task_id}). Esperando resultado (esto puede tardar varios minutos)...")
+                                    result = agent_client.wait_for_result(task_id, timeout=600) # 10 minutes timeout for massive tasks
+                                    
+                                    if result and "error" not in result:
+                                        if "files" in result and result["files"]:
+                                            file_info = result["files"][0]
+                                            # Agent might return base64 string for file data
+                                            file_data = base64.b64decode(file_info["data"]) if isinstance(file_info["data"], str) else file_info["data"]
+                                            st.success("Validación masiva completada por el Agente Local.")
+                                            st.download_button("Descargar Resultados", file_data, file_name=f"Resultados_ADRES_WEB_{int(time.time())}.xlsx")
+                                        else:
+                                            st.warning("El agente terminó la tarea pero no devolvió un archivo.")
+                                    else:
+                                        err_msg = result.get("error", "Error desconocido") if result else "No se obtuvo respuesta"
+                                        st.error(f"Error del Agente: {err_msg}")
                                 else:
-                                    file_info = result["files"][0]
-                                    st.success(f"Validación completada. {result['message']}")
-                                    st.download_button("Descargar Resultados", file_info["data"], file_name=file_info["name"])
+                                    st.error("No se pudo crear la tarea en el servidor.")
+                                    
                             except Exception as e:
                                 st.error(f"Excepción: {e}")
 
