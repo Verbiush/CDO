@@ -34,7 +34,7 @@ def render(container=None):
             
             with col_in:
                 st.subheader("Consulta")
-                tipo_validacion = st.radio("Tipo de Validación", ["ADRES (Web)", "Registraduría (Defunción)"])
+                tipo_validacion = st.radio("Tipo de Validación", ["ADRES (API/Web)", "Registraduría (Defunción)"])
                 cedula = st.text_input("Número de Documento", key="val_ind_cedula")
                 
                 if st.button("🔍 Consultar Individual", type="primary"):
@@ -43,12 +43,10 @@ def render(container=None):
                     else:
                         with st.spinner("Consultando..."):
                             try:
-                                if tipo_validacion == "ADRES (Web)":
-                                    st.info("Iniciando navegador para CAPTCHA manual...")
-                                    val = ValidatorAdresWeb(headless=False)
+                                if tipo_validacion == "ADRES (API/Web)":
+                                    val = ValidatorAdres()
                                     res = val.validate_cedula(cedula)
                                     st.session_state.val_result = res
-                                    val.close_driver()
                                 elif tipo_validacion == "Registraduría (Defunción)":
                                     val = ValidatorRegistraduria(headless=True)
                                     res = val.validate_cedula(cedula)
@@ -109,11 +107,11 @@ def render(container=None):
                             except Exception as e:
                                 st.error(f"Excepción: {e}")
                     else:
-                        # ADRES (Default to Web as per original intent, but could be API if specified)
+                        # ADRES (Default to API as it does not require Chrome/Selenium on the server)
                         # Pass tipo_doc_column to the worker
-                        with st.spinner("Procesando validación masiva ADRES..."):
+                        with st.spinner("Procesando validación masiva ADRES (API)..."):
                             try:
-                                result = worker_adres_web_massive(df, col_cedula, col_tipo_doc=tipo_doc_column, silent_mode=False)
+                                result = worker_adres_api_masiva(df, col_cedula, col_tipo_doc=tipo_doc_column, silent_mode=False)
                                 if "error" in result:
                                     st.error(f"Error: {result['error']}")
                                 else:
