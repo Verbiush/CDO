@@ -124,8 +124,12 @@ class ValidatorAdresWeb:
     def start_driver(self):
         if not self.driver:
             options = webdriver.ChromeOptions()
-            if self.headless:
+            
+            import sys
+            # Forzar headless en servidores Linux (AWS) porque no tienen pantalla
+            if self.headless or sys.platform.startswith('linux'):
                 options.add_argument("--headless=new")
+                
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
