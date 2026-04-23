@@ -3921,7 +3921,7 @@ def worker_registraduria_masiva(df, col_cedula, headless=True, update_progress=N
     try:
         df_results = validator.process_massive(df, col_cedula, progress_callback=cb)
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_results.to_excel(writer, index=False)
         
         return {
@@ -3944,7 +3944,7 @@ def worker_adres_api_masiva(df, col_cedula, col_tipo_doc=None, default_tipo_doc=
     try:
         df_results = validator.process_massive(df, col_cedula, tipo_doc_col=col_tipo_doc, default_tipo_doc=default_tipo_doc, progress_callback=cb)
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_results.to_excel(writer, index=False)
             
         return {
@@ -3967,7 +3967,7 @@ def worker_adres_web_massive(df, col_cedula, col_tipo_doc=None, default_tipo_doc
     try:
         df_results = validator.process_massive(df, col_cedula, tipo_doc_col=col_tipo_doc, default_tipo_doc=default_tipo_doc, progress_callback=cb)
         output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_results.to_excel(writer, index=False)
             
         return {
