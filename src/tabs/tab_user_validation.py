@@ -34,7 +34,7 @@ def render(container=None):
             
             with col_in:
                 st.subheader("Consulta")
-                tipo_validacion = st.radio("Tipo de Validación", ["ADRES (API/Web)", "Registraduría (Defunción)"])
+                tipo_validacion = st.radio("Tipo de Validación", ["ADRES (API)", "ADRES (Web)", "Registraduría (Defunción)"])
                 cedula = st.text_input("Número de Documento", key="val_ind_cedula")
                 
                 if st.button("🔍 Consultar Individual", type="primary"):
@@ -43,10 +43,15 @@ def render(container=None):
                     else:
                         with st.spinner("Consultando..."):
                             try:
-                                if tipo_validacion == "ADRES (API/Web)":
+                                if tipo_validacion == "ADRES (API)":
                                     val = ValidatorAdres()
                                     res = val.validate_cedula(cedula)
                                     st.session_state.val_result = res
+                                elif tipo_validacion == "ADRES (Web)":
+                                    val = ValidatorAdresWeb(headless=False)
+                                    res = val.validate_cedula(cedula)
+                                    st.session_state.val_result = res
+                                    val.close_driver()
                                 elif tipo_validacion == "Registraduría (Defunción)":
                                     val = ValidatorRegistraduria(headless=True)
                                     res = val.validate_cedula(cedula)
@@ -85,7 +90,7 @@ def render(container=None):
                 col_tipo_doc = st.selectbox("Seleccione columna de Tipo de Documento (Opcional)", ["Ninguna"] + cols)
                 tipo_doc_column = None if col_tipo_doc == "Ninguna" else col_tipo_doc
                 
-                tipo_masivo = st.radio("Servicio Masivo", ["ADRES (API/Web)", "Registraduría"], horizontal=True)
+                tipo_masivo = st.radio("Servicio Masivo", ["ADRES (API)", "ADRES (Web)", "Registraduría"], horizontal=True)
                 
                 if st.button("🚀 Iniciar Procesamiento Masivo"):
                     # Wrapper functions for task manager
@@ -106,12 +111,24 @@ def render(container=None):
                                     st.download_button("Descargar Resultados", file_info["data"], file_name=file_info["name"])
                             except Exception as e:
                                 st.error(f"Excepción: {e}")
-                    else:
-                        # ADRES (Default to API as it does not require Chrome/Selenium on the server)
+                    elif tipo_masivo == "ADRES (API)":
+                        # ADRES (API as it does not require Chrome/Selenium on the server)
                         # Pass tipo_doc_column to the worker
                         with st.spinner("Procesando validación masiva ADRES (API)..."):
                             try:
                                 result = worker_adres_api_masiva(df, col_cedula, col_tipo_doc=tipo_doc_column, silent_mode=False)
+                                if "error" in result:
+                                    st.error(f"Error: {result['error']}")
+                                else:
+                                    file_info = result["files"][0]
+                                    st.success(f"Validación completada. {result['message']}")
+                                    st.download_button("Descargar Resultados", file_info["data"], file_name=file_info["name"])
+                            except Exception as e:
+                                st.error(f"Excepción: {e}")
+                    elif tipo_masivo == "ADRES (Web)":
+                        with st.spinner("Procesando validación masiva ADRES (Web)..."):
+                            try:
+                                result = worker_adres_web_massive(df, col_cedula, col_tipo_doc=tipo_doc_column, silent_mode=False)
                                 if "error" in result:
                                     st.error(f"Error: {result['error']}")
                                 else:
