@@ -99,12 +99,13 @@ def render(container=None):
                     if tipo_masivo == "Registraduría":
                         with st.spinner("Procesando validación masiva Registraduría..."):
                             try:
-                                res_bytes, msg = worker_registraduria_masiva(df, col_cedula, headless=True, silent_mode=False)
-                                if res_bytes:
-                                    st.success(f"Validación completada. {msg}")
-                                    st.download_button("Descargar Resultados", res_bytes, file_name="validacion_registraduria.xlsx")
+                                result = worker_registraduria_masiva(df, col_cedula, headless=True, silent_mode=False)
+                                if "error" in result:
+                                    st.error(f"Error: {result['error']}")
                                 else:
-                                    st.error(f"Error: {msg}")
+                                    file_info = result["files"][0]
+                                    st.success(f"Validación completada. {result['message']}")
+                                    st.download_button("Descargar Resultados", file_info["data"], file_name=file_info["name"])
                             except Exception as e:
                                 st.error(f"Excepción: {e}")
                     else:
@@ -112,12 +113,13 @@ def render(container=None):
                         # Pass tipo_doc_column to the worker
                         with st.spinner("Procesando validación masiva ADRES..."):
                             try:
-                                res_bytes, msg = worker_adres_web_massive(df, col_cedula, col_tipo_doc=tipo_doc_column, silent_mode=False)
-                                if res_bytes:
-                                    st.success(f"Validación completada. {msg}")
-                                    st.download_button("Descargar Resultados", res_bytes, file_name="validacion_adres.xlsx")
+                                result = worker_adres_web_massive(df, col_cedula, col_tipo_doc=tipo_doc_column, silent_mode=False)
+                                if "error" in result:
+                                    st.error(f"Error: {result['error']}")
                                 else:
-                                    st.error(f"Error: {msg}")
+                                    file_info = result["files"][0]
+                                    st.success(f"Validación completada. {result['message']}")
+                                    st.download_button("Descargar Resultados", file_info["data"], file_name=file_info["name"])
                             except Exception as e:
                                 st.error(f"Excepción: {e}")
 
