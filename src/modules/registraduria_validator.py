@@ -20,10 +20,11 @@ class ValidatorRegistraduria:
             service = Service(ChromeDriverManager().install())
             options = webdriver.ChromeOptions()
             if self.headless:
-                options.add_argument("--headless")
+                options.add_argument("--headless=new")
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--start-maximized")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--window-size=1920,1080")
             self.driver = webdriver.Chrome(service=service, options=options)
         except Exception as e:
             print(f"Error starting Chrome: {e}. Trying Edge...")
