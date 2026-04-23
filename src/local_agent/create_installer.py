@@ -92,6 +92,7 @@ def build_installer():
         "--hidden-import=src.modules.adres_validator",
         "--hidden-import=src.modules.registraduria_validator",
         "--hidden-import=src.modules.ovida_validator",
+        "--hidden-import=src.modules.fomag_validator",
         "--hidden-import=src.gui_utils",
         "--exclude-module=streamlit"
     ]

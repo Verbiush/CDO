@@ -90,7 +90,7 @@ def render(container=None):
                 col_tipo_doc = st.selectbox("Seleccione columna de Tipo de Documento (Opcional)", ["Ninguna"] + cols)
                 tipo_doc_column = None if col_tipo_doc == "Ninguna" else col_tipo_doc
                 
-                tipo_masivo = st.radio("Servicio Masivo", ["ADRES (API)", "ADRES (Web)", "Registraduría"], horizontal=True)
+                tipo_masivo = st.radio("Servicio Masivo", ["ADRES (API)", "ADRES (Web)", "Registraduría", "FOMAG (Certificados)"], horizontal=True)
                 
                 if st.button("🚀 Iniciar Procesamiento Masivo"):
                     # Wrapper functions for task manager
@@ -163,6 +163,48 @@ def render(container=None):
                                             st.warning("El agente terminó la tarea pero no devolvió un archivo.")
                                     else:
                                         err_msg = result.get("error", "Error desconocido") if result else "No se obtuvo respuesta"
+                                        st.error(f"Error del Agente: {err_msg}")
+                                else:
+                                    st.error("No se pudo crear la tarea en el servidor.")
+                                    
+                            except Exception as e:
+                                st.error(f"Excepción: {e}")
+                    elif tipo_masivo == "FOMAG (Certificados)":
+                        with st.spinner("Enviando tarea de FOMAG al Agente Local..."):
+                            try:
+                                import base64
+                                import io
+                                import time
+                                from src import agent_client
+                                
+                                output = io.BytesIO()
+                                df.to_excel(output, index=False)
+                                file_data_b64 = base64.b64encode(output.getvalue()).decode("utf-8")
+                                
+                                username = st.session_state.get("username", "admin")
+                                if not agent_client.is_agent_active(username):
+                                    st.error("⚠️ El Agente Local no está activo. Ejecute la aplicación localmente e inicie sesión.")
+                                    st.stop()
+                                
+                                task_id = agent_client.send_command(username, "fomag_cert_massive", {
+                                    "file_data": file_data_b64,
+                                    "col_cedula": col_cedula
+                                })
+                                
+                                if task_id:
+                                    st.info(f"Tarea enviada al agente (ID: {task_id}). Se abrirá Chrome en su PC. Por favor INICIE SESIÓN manualmente, el agente descargará los certificados después.")
+                                    result = agent_client.wait_for_result(task_id, timeout=3600) # 1 hora de timeout (login + proceso)
+                                    
+                                    if result and "error" not in result:
+                                        if "files" in result and result["files"]:
+                                            file_info = result["files"][0]
+                                            file_data = base64.b64decode(file_info["data"]) if isinstance(file_info["data"], str) else file_info["data"]
+                                            st.success("Descarga de certificados FOMAG completada por el Agente Local.")
+                                            st.download_button("Descargar ZIP con Certificados", file_data, file_name=f"Certificados_FOMAG_{int(time.time())}.zip", mime="application/zip")
+                                        else:
+                                            st.warning("El agente terminó la tarea pero no devolvió un archivo ZIP.")
+                                    else:
+                                        err_msg = result.get("error", "Error desconocido") if result else "No se obtuvo respuesta del Agente (Tiempo agotado)."
                                         st.error(f"Error del Agente: {err_msg}")
                                 else:
                                     st.error("No se pudo crear la tarea en el servidor.")

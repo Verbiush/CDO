@@ -2838,6 +2838,32 @@ class AgentWorker:
                     result["status"] = "ERROR"
                     result["result"] = {"error": "Falta parámetro (files)"}
                     
+            elif command == "fomag_cert_massive":
+                # Nuevo comando para delegar descarga de certificados FOMAG al agente local
+                file_data_b64 = params.get("file_data")
+                col_cedula = params.get("col_cedula")
+                if file_data_b64 and col_cedula:
+                    if not getattr(sys, "frozen", False):
+                        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+                    try:
+                        import base64
+                        import io
+                        import pandas as pd
+                        from src.modules.fomag_validator import worker_fomag_massive
+                        
+                        file_data = base64.b64decode(file_data_b64)
+                        df = pd.read_excel(io.BytesIO(file_data))
+                        self.log("Iniciando descarga masiva FOMAG. Por favor, inicie sesión en el navegador emergente...")
+                        res = worker_fomag_massive(df, col_cedula, silent_mode=True)
+                        result["result"] = _serialize_analysis_result(res)
+                    except Exception as e:
+                        self.log(f"Error procesando FOMAG masivo local: {e}\n{traceback.format_exc()}")
+                        result["status"] = "ERROR"
+                        result["result"] = {"error": f"Error interno: {e}"}
+                else:
+                    result["status"] = "ERROR"
+                    result["result"] = {"error": "Faltan parámetros (file_data, col_cedula)"}
+                    
             elif command == "adres_web_massive":
                 # Nuevo comando para delegar el validador web masivo al agente local
                 file_data_b64 = params.get("file_data")
