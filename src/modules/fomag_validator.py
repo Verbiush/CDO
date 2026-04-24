@@ -75,27 +75,40 @@ def worker_fomag_massive(df, col_cedula, silent_mode=False):
                 # 1. Encontrar el input de número de documento
                 search_input = None
                 try:
-                    # Intento 1: Buscar estrictamente por placeholder o nombre exacto
-                    search_input = WebDriverWait(driver, 3).until(
-                        EC.presence_of_element_located((By.XPATH, "//input[@placeholder='Número documento' or @placeholder='Número de documento' or @formcontrolname='numeroDocumento' or @name='numeroDocumento']"))
-                    )
+                    # Intento 1: Buscar estrictamente por formcontrolname o name
+                    search_input = driver.find_element(By.XPATH, "//input[@formcontrolname='numeroDocumento' or @name='numeroDocumento']")
                 except:
-                    # Intento 2: Buscar todos los inputs visibles. El primero suele ser el tipo de documento (dropdown), el segundo es el número real.
-                    inputs = driver.find_elements(By.XPATH, "//input[not(@type='hidden') and not(@type='checkbox') and not(@type='radio')]")
-                    visible_inputs = [inp for inp in inputs if inp.is_displayed() and inp.is_enabled()]
-                    
-                    # Filtrar inputs que sean dropdowns (combobox) o readonly
-                    text_inputs = [inp for inp in visible_inputs if inp.get_attribute("role") != "combobox" and not inp.get_attribute("readonly")]
-                    
-                    if len(text_inputs) >= 1:
-                        search_input = text_inputs[0] # El primer campo de texto real
-                    elif len(visible_inputs) >= 2:
-                        search_input = visible_inputs[1] # Por descarte, el segundo input general
-                    elif visible_inputs:
-                        search_input = visible_inputs[0]
+                    pass
+                
+                if not search_input:
+                    try:
+                        # Intento 2: Buscar todos los inputs visibles
+                        inputs = driver.find_elements(By.XPATH, "//input[not(@type='hidden') and not(@type='checkbox') and not(@type='radio')]")
+                        visible_inputs = [inp for inp in inputs if inp.is_displayed() and inp.is_enabled()]
+                        
+                        # Descartar inputs que parezcan ser dropdowns
+                        text_inputs = []
+                        for inp in visible_inputs:
+                            role = inp.get_attribute("role")
+                            classes = inp.get_attribute("class") or ""
+                            if role == "combobox" or "select" in classes.lower():
+                                continue
+                            text_inputs.append(inp)
+                            
+                        if len(text_inputs) > 0:
+                            search_input = text_inputs[0]
+                        elif len(visible_inputs) >= 2:
+                            search_input = visible_inputs[1] # Por descarte, asumir el segundo input visible
+                        elif visible_inputs:
+                            search_input = visible_inputs[0]
+                    except:
+                        pass
                 
                 if not search_input:
                     if not silent_mode: print(f"No se encontró input para la cédula {cedula}")
+                    # Crear archivo txt
+                    with open(os.path.join(results_dir, f"{cedula}.txt"), "w") as f:
+                        f.write(f"Error: No se encontró la casilla para escribir el documento {cedula}")
                     continue
 
                 # Escribir la cédula
@@ -142,13 +155,22 @@ def worker_fomag_massive(df, col_cedula, silent_mode=False):
                         if not silent_mode: print(f"Certificado guardado: {cedula}.pdf")
                     else:
                         if not silent_mode: print(f"No se descargó ningún PDF para {cedula}")
+                        # Crear archivo txt indicando que no se descargó o encontró
+                        with open(os.path.join(results_dir, f"{cedula}.txt"), "w") as f:
+                            f.write(f"No se encontró certificado o no se pudo descargar para el documento: {cedula}")
 
                 except Exception as e:
                     if not silent_mode: print(f"No se encontró botón de certificado para {cedula} (puede que no exista): {e}")
+                    # Crear archivo txt indicando que no se encontró
+                    with open(os.path.join(results_dir, f"{cedula}.txt"), "w") as f:
+                        f.write(f"No se encontró certificado o no tiene afiliación en FOMAG para el documento: {cedula}")
                     pass # Pasamos al siguiente registro
 
             except Exception as e:
                 if not silent_mode: print(f"Error procesando documento {cedula}: {e}")
+                # Crear archivo txt de error general para esa cédula
+                with open(os.path.join(results_dir, f"{cedula}.txt"), "w") as f:
+                    f.write(f"Error procesando el documento {cedula}: {str(e)}")
                 continue
 
         # Al terminar todas las cédulas, empaquetar resultados en un ZIP
