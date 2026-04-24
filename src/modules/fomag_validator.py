@@ -75,16 +75,24 @@ def worker_fomag_massive(df, col_cedula, silent_mode=False):
                 # 1. Encontrar el input de número de documento
                 search_input = None
                 try:
-                    # Intento 1: Por placeholder
-                    search_input = WebDriverWait(driver, 5).until(
-                        EC.presence_of_element_located((By.XPATH, "//input[@placeholder='Número documento'] | //input[contains(@class, 'form-control') and not(@type='hidden')]"))
+                    # Intento 1: Buscar estrictamente por placeholder o nombre exacto
+                    search_input = WebDriverWait(driver, 3).until(
+                        EC.presence_of_element_located((By.XPATH, "//input[@placeholder='Número documento' or @placeholder='Número de documento' or @formcontrolname='numeroDocumento' or @name='numeroDocumento']"))
                     )
                 except:
-                    # Intento 2: Buscar todos los inputs visibles y tomar el primero que permita texto
-                    inputs = driver.find_elements(By.XPATH, "//input[not(@type='hidden')]")
+                    # Intento 2: Buscar todos los inputs visibles. El primero suele ser el tipo de documento (dropdown), el segundo es el número real.
+                    inputs = driver.find_elements(By.XPATH, "//input[not(@type='hidden') and not(@type='checkbox') and not(@type='radio')]")
                     visible_inputs = [inp for inp in inputs if inp.is_displayed() and inp.is_enabled()]
-                    if visible_inputs:
-                        search_input = visible_inputs[0] # Asumimos que es el primero o único
+                    
+                    # Filtrar inputs que sean dropdowns (combobox) o readonly
+                    text_inputs = [inp for inp in visible_inputs if inp.get_attribute("role") != "combobox" and not inp.get_attribute("readonly")]
+                    
+                    if len(text_inputs) >= 1:
+                        search_input = text_inputs[0] # El primer campo de texto real
+                    elif len(visible_inputs) >= 2:
+                        search_input = visible_inputs[1] # Por descarte, el segundo input general
+                    elif visible_inputs:
+                        search_input = visible_inputs[0]
                 
                 if not search_input:
                     if not silent_mode: print(f"No se encontró input para la cédula {cedula}")
