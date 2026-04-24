@@ -86,20 +86,11 @@ def worker_fomag_massive(df, col_cedula, silent_mode=False):
                         inputs = driver.find_elements(By.XPATH, "//input[not(@type='hidden') and not(@type='checkbox') and not(@type='radio')]")
                         visible_inputs = [inp for inp in inputs if inp.is_displayed() and inp.is_enabled()]
                         
-                        # Descartar inputs que parezcan ser dropdowns
-                        text_inputs = []
-                        for inp in visible_inputs:
-                            role = inp.get_attribute("role")
-                            classes = inp.get_attribute("class") or ""
-                            if role == "combobox" or "select" in classes.lower():
-                                continue
-                            text_inputs.append(inp)
-                            
-                        if len(text_inputs) > 0:
-                            search_input = text_inputs[0]
-                        elif len(visible_inputs) >= 2:
-                            search_input = visible_inputs[1] # Por descarte, asumir el segundo input visible
-                        elif visible_inputs:
+                        # En la estructura de FOMAG, la primera casilla visible SIEMPRE es el dropdown "Tipo de documento" (falso input)
+                        # La SEGUNDA casilla es el "Número documento" real.
+                        if len(visible_inputs) >= 2:
+                            search_input = visible_inputs[1] # Forzamos a elegir la segunda casilla
+                        elif len(visible_inputs) == 1:
                             search_input = visible_inputs[0]
                     except:
                         pass
