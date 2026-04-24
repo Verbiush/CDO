@@ -109,15 +109,37 @@ def worker_fomag_massive(df, col_cedula, silent_mode=False):
                 if type_input:
                     try:
                         type_input.click()
-                        time.sleep(0.2)
-                        type_input.send_keys(Keys.CONTROL, 'a')
-                        type_input.send_keys(Keys.DELETE)
-                        type_input.send_keys("Cedula ciudadania")
-                        time.sleep(0.2)
-                        type_input.send_keys(Keys.ENTER)
-                        time.sleep(0.2)
-                    except:
-                        pass
+                        time.sleep(1)
+                        
+                        # Intento 1: Buscar en el panel desplegable (Angular/PrimeNG suele ponerlos al final del body)
+                        # Buscamos elementos que contengan la palabra "cedula" o "ciudadania" sin importar mayúsculas
+                        xpath_opciones = "//*[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚ', 'abcdefghijklmnopqrstuvwxyzaeiou'), 'cedula') or contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZÁÉÍÓÚ', 'abcdefghijklmnopqrstuvwxyzaeiou'), 'ciudadania')]"
+                        opciones = driver.find_elements(By.XPATH, xpath_opciones)
+                        
+                        click_exitoso = False
+                        for op in opciones:
+                            if op.is_displayed() and op.tag_name not in ['label', 'h1', 'h2', 'h3', 'title']:
+                                try:
+                                    # Forzar click con JavaScript para evitar intercepciones
+                                    driver.execute_script("arguments[0].scrollIntoView(true); arguments[0].click();", op)
+                                    click_exitoso = True
+                                    break
+                                except:
+                                    pass
+                        
+                        time.sleep(0.5)
+                        
+                        # Intento 2: Si no funcionó, usar teclado simulado global
+                        if not click_exitoso:
+                            from selenium.webdriver.common.action_chains import ActionChains
+                            actions = ActionChains(driver)
+                            actions.move_to_element(type_input).click().pause(0.5)
+                            # Bajar un par de veces para seleccionar la opción (a veces es la primera o segunda)
+                            actions.send_keys(Keys.ARROW_DOWN).pause(0.2).send_keys(Keys.ENTER).perform()
+                            time.sleep(0.5)
+                            
+                    except Exception as e:
+                        if not silent_mode: print(f"Advertencia: Problema al seleccionar tipo de documento: {e}")
 
                 # Escribir la cédula limpiando el campo completamente (por problemas de Angular)
                 try:
