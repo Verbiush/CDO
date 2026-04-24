@@ -12,6 +12,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
 
 def worker_fomag_massive(df, col_cedula, silent_mode=False):
@@ -74,6 +75,7 @@ def worker_fomag_massive(df, col_cedula, silent_mode=False):
             try:
                 # 1. Encontrar el input de número de documento
                 search_input = None
+                type_input = None
                 try:
                     # Intento 1: Buscar estrictamente por formcontrolname o name
                     search_input = driver.find_element(By.XPATH, "//input[@formcontrolname='numeroDocumento' or @name='numeroDocumento']")
@@ -89,6 +91,7 @@ def worker_fomag_massive(df, col_cedula, silent_mode=False):
                         # En la estructura de FOMAG, la primera casilla visible SIEMPRE es el dropdown "Tipo de documento" (falso input)
                         # La SEGUNDA casilla es el "Número documento" real.
                         if len(visible_inputs) >= 2:
+                            type_input = visible_inputs[0]
                             search_input = visible_inputs[1] # Forzamos a elegir la segunda casilla
                         elif len(visible_inputs) == 1:
                             search_input = visible_inputs[0]
@@ -102,7 +105,28 @@ def worker_fomag_massive(df, col_cedula, silent_mode=False):
                         f.write(f"Error: No se encontró la casilla para escribir el documento {cedula}")
                     continue
 
-                # Escribir la cédula
+                # Opcional: Seleccionar 'Cedula ciudadania' en el primer campo
+                if type_input:
+                    try:
+                        type_input.click()
+                        time.sleep(0.2)
+                        type_input.send_keys(Keys.CONTROL, 'a')
+                        type_input.send_keys(Keys.DELETE)
+                        type_input.send_keys("Cedula ciudadania")
+                        time.sleep(0.2)
+                        type_input.send_keys(Keys.ENTER)
+                        time.sleep(0.2)
+                    except:
+                        pass
+
+                # Escribir la cédula limpiando el campo completamente (por problemas de Angular)
+                try:
+                    search_input.click()
+                    time.sleep(0.1)
+                except:
+                    pass
+                search_input.send_keys(Keys.CONTROL, 'a')
+                search_input.send_keys(Keys.DELETE)
                 search_input.clear()
                 time.sleep(0.2)
                 search_input.send_keys(cedula)
